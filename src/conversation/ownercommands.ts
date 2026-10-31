@@ -114,7 +114,7 @@ export interface CommandDeps {
 type QuietConv = Pick<Conversation, "kind" | "key" | "convId"> & { readonly tenantId?: string };
 const real: CommandDeps = {
   today: (conv, now) => todayText(conv.logFile, { now: now.getTime(), zone: zoneOf(conv) }),
-  tasks: (conv, now) => tasksText(conv.key, now.getTime(), zoneOf(conv)),
+  tasks: (conv, now) => tasksText(conv.key, now.getTime(), zoneOf(conv), { link: allows(conv, "login") ? settings.tasksPageUrl : undefined }), // (the page is the owner's: the `login` capability)
   now: () => new Date(),
   stop: stopRuns,
   dropQueued: () => 0,

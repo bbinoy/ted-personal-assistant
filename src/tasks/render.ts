@@ -1,5 +1,5 @@
 import { addedByLooks, counts, dueClass, effectiveStatus, listItems, type Item } from "./store.ts";
-import { parseLocal, showInstant, showLocal, todayIn } from "./when.ts";
+import { addDays, parseLocal, showInstant, showLocal, todayIn } from "./when.ts";
 
 // How tasks are SHOWN, always in the conversation's own clock: one item as a compact line (the tool replies and lists), and the phone-sized /tasks answer. Pure over the store's reads.
 
@@ -41,40 +41,62 @@ export function echoLines(it: Item, now: number, zone: string): string {
 }
 
 const SECTION_MAX = 8;
+const PEEK = 3; // titles shown on a collapsed bucket's line
+const PEEK_CHARS = 20;
+const WEEK = 7; // "this week" = up to 7 days after today
 
-// A line of the phone list: "• Call Sam · Fri 24 Oct · Sam ↻" (no number: people name an item by what it is; the number is the tools').
-function bullet(it: Item, now: number, zone: string, o: { due?: boolean } = {}): string {
+export type Bucket = "Today" | "This week" | "Later" | "No date";
+export const BUCKETS: readonly Bucket[] = ["Today", "This week", "Later", "No date"];
+
+function bucketOf(it: Item, now: number, zone: string): Bucket {
+  const c = dueClass(it, now, zone);
+  if (c === "overdue" || c === "today") return "Today"; // (overdue rows come first inside it)
+  if (c === "none") return "No date";
+  return parseLocal(it.due)!.date <= addDays(todayIn(now, zone), WEEK) ? "This week" : "Later";
+}
+
+/** THE grouping of open items, shared by the task page and /tasks: Today (overdue first, then due today), This week (up to 7 days on), Later, No date. */
+export function groupOpen(open: readonly Item[], now: number, zone: string): Record<Bucket, Item[]> {
+  const late = (i: Item): boolean => dueClass(i, now, zone) === "overdue";
+  const out: Record<Bucket, Item[]> = { Today: [], "This week": [], Later: [], "No date": [] };
+  for (const i of open) out[bucketOf(i, now, zone)].push(i);
+  out.Today = [...out.Today.filter(late), ...out.Today.filter((i) => !late(i))];
+  return out;
+}
+
+// A line of the phone list: "- Call Sam . Fri 24 Oct . Sam . overdue" (no number: people name an item by what it is; the number is the tools').
+function bullet(it: Item, now: number, zone: string): string {
   const bits = [it.title];
-  const due = o.due === false ? "" : dueText(it, now, zone, true);
+  const due = dueText(it, now, zone, true);
   if (due) bits.push(due);
-  if (it.person && it.kind !== "task") bits.push(it.person);
+  if (it.person && it.kind !== "task") bits.push(`${KIND_TAG[it.kind]} ${it.person}`);
+  if (dueClass(it, now, zone) === "overdue") bits.push("overdue");
+  if (it.urgent) bits.push("urgent");
   return `• ${bits.join(" · ")}${it.repeat ? " ↻" : ""}`;
 }
 
-function section(title: string, items: readonly Item[], now: number, zone: string, o: { due?: boolean; tag?: boolean } = {}): string[] {
-  if (!items.length) return [];
-  const shown = items.slice(0, SECTION_MAX).map((it) => `${bullet(it, now, zone, o)}${o.tag && it.kind !== "task" ? ` (${KIND_TAG[it.kind]})` : ""}`);
-  return ["", `${title} (${items.length})`, ...shown, ...(items.length > SECTION_MAX ? [`… and ${items.length - SECTION_MAX} more`] : [])];
-}
+const cut = (t: string): string => (t.length > PEEK_CHARS ? `${t.slice(0, PEEK_CHARS - 1).trimEnd()}…` : t);
 
-/** "/tasks": the open items grouped Overdue / Today / Upcoming / No date / Waiting on / I owe. */
-export function tasksText(key: string, now: number, zone: string): string {
+/** "/tasks": the same buckets as the task page. Today in full (overdue first, marked), the others one line each with a count and the first few titles. `link`: the task page's address, owner only. */
+export function tasksText(key: string, now: number, zone: string, o: { link?: string } = {}): string {
   const open = listItems(key, { status: "open", limit: 200 }, now, zone);
   const c = counts(key, now, zone);
   if (!open.length) return ["Nothing open.", ...(c.snoozed ? [`${c.snoozed} snoozed.`] : []), "Tell me what to add."].join("\n");
-  const cls = (it: Item) => dueClass(it, now, zone);
-  const overdue = open.filter((i) => cls(i) === "overdue");
-  const rest = open.filter((i) => cls(i) !== "overdue");
-  const tasks = rest.filter((i) => i.kind === "task");
+  const g = groupOpen(open, now, zone);
+  const today = g.Today;
+  const peek = (b: Bucket): string[] => {
+    const xs = g[b];
+    if (!xs.length) return [];
+    const names = xs.slice(0, PEEK).map((i) => cut(i.title)).join(", ");
+    return [`${b} (${xs.length}): ${names}${xs.length > PEEK ? ` +${xs.length - PEEK}` : ""}`];
+  };
+  const rest = (["This week", "Later", "No date"] as const).flatMap(peek);
   return [
     `Tasks: ${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""}`,
-    ...section("Overdue", overdue, now, zone, { tag: true }),
-    ...section("Today", tasks.filter((i) => cls(i) === "today"), now, zone),
-    ...section("Upcoming", tasks.filter((i) => cls(i) === "upcoming"), now, zone),
-    ...section("No date", tasks.filter((i) => cls(i) === "none"), now, zone, { due: false }),
-    ...section("Waiting on", rest.filter((i) => i.kind === "owed_to_me"), now, zone),
-    ...section("I owe", rest.filter((i) => i.kind === "i_owe"), now, zone),
+    ...(today.length ? ["", `Today (${today.length})`, ...today.slice(0, SECTION_MAX).map((i) => bullet(i, now, zone)), ...(today.length > SECTION_MAX ? [`… and ${today.length - SECTION_MAX} more`] : [])] : []),
+    ...(rest.length ? ["", ...rest] : []),
     ...(c.snoozed ? ["", `${c.snoozed} snoozed.`] : []),
+    ...(o.link ? ["", `Task page: ${o.link}`] : []),
   ].join("\n");
 }
 

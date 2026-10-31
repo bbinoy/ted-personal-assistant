@@ -1,6 +1,7 @@
 import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
 import { forgetLapsed, lapsedIn, openCount, type Lapsed } from "../approvals/approvals.ts";
 import { convDb } from "../core/convdb.ts";
+import { settings } from "../core/settings.ts";
 import { told } from "../core/told.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { fence } from "../core/fence.ts";
@@ -158,7 +159,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts].filter(Boolean);
-  const status = [looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), lapsed, capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
+  const status = [looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), settings.tasksPageUrl && capabilitiesOf(conv).has("login") ? `Your owner's task page (tasks grouped like /tasks, with tick-off): ${settings.tasksPageUrl}` : "", routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), lapsed, capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
   let settled = false;
   return {
     blocks,
