@@ -34,7 +34,8 @@
     "forget": "node --conditions=workspace-source --env-file-if-exists=.env scripts/forget.ts",
     "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts",
     "setup:hooks": "git config core.hooksPath .githooks",
-    "eval:judge": "HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source --env-file-if-exists=.env scripts/judge-eval.ts"
+    "eval:judge": "HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source --env-file-if-exists=.env scripts/judge-eval.ts",
+    "eval:e2e": "HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source scripts/e2e-eval.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
