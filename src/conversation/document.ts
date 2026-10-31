@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, lstatSync, openSync, readSync, readFileSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, openSync, readSync } from "node:fs";
 import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
 import { AUDIO_FILE_MAX_SECONDS, audioMagic, MAX_AUDIO_FILE_BYTES, type AudioInfo } from "@ted-assistant/speech/voice";
 import { looksLikeSpeech } from "@ted-assistant/speech/tts";
@@ -59,34 +59,37 @@ function decodeText(b: Uint8Array, cutAtEnd: boolean): string | undefined {
   return undefined;
 }
 
+// Bytes -> what the model is shown (a PDF or a plain text file; anything else is refused). `size`: the size of the whole file when `bytes` holds only its start (a
+// text file is cut at MAX_TEXT_BYTES anyway; a PDF must be whole). Throws a sentence the sender can be told.
+export function documentFromBytes(bytes: Buffer, claimedName?: string, size: number = bytes.length): Document {
+  const name = safeName(claimedName);
+  if (size === 0) throw new Error(UNSUPPORTED);
+  if (bytes.subarray(0, 5).toString("latin1") === "%PDF-") {
+    if (size > MAX_FILE_BYTES) throw new Error(`That PDF is over ${MAX_FILE_BYTES / 1_000_000} MB, too big for me to open.`);
+    if (/\/Encrypt\s+\d+\s+\d+\s+R/.test(bytes.toString("latin1", Math.max(0, bytes.length - 4096)))) throw new Error("That PDF is password protected, so I can't open it.");
+    const pages = pdfPages(bytes);
+    if (pages !== undefined && pages > MAX_PDF_PAGES) throw new Error(`That PDF has ${pages} pages and I can read at most ${MAX_PDF_PAGES} at a time. Send a part of it.`);
+    return { kind: "pdf", data: bytes.toString("base64"), name, ...(pages !== undefined ? { pages } : {}) };
+  }
+  const ext = extension(claimedName);
+  if (ext === "pdf") throw new Error("That file is called .pdf but is not a real PDF, so I didn't open it.");
+  if (!TEXT_EXTENSIONS.includes(ext)) throw new Error(UNSUPPORTED);
+  const cut = size > MAX_TEXT_BYTES;
+  const text = decodeText(bytes.subarray(0, Math.min(bytes.length, MAX_TEXT_BYTES)), cut);
+  if (text === undefined) throw new Error("That file is not plain UTF-8 text, so I didn't open it.");
+  return { kind: "text", text, name, cut };
+}
+
 // A file -> what the model is shown. Throws a sentence the sender can be told.
 export function prepareDocument(file: string, claimedName?: string): Document {
-  const name = safeName(claimedName);
   const st = lstatSync(file); // a symlink is not what signal-cli writes
   if (!st.isFile()) throw new Error("I can't open that file (not a plain file).");
-  if (st.size === 0) throw new Error(UNSUPPORTED);
-  const ext = extension(claimedName);
   const fd = openSync(file, "r");
   try {
     const size = fstatSync(fd).size; // what is read, not what was said
-    const head = Buffer.alloc(Math.min(size, 8));
-    readSync(fd, head, 0, head.length, 0);
-    if (head.subarray(0, 5).toString("latin1") === "%PDF-") {
-      if (size > MAX_FILE_BYTES) throw new Error(`That PDF is over ${MAX_FILE_BYTES / 1_000_000} MB, too big for me to open.`);
-      const bytes = readFileSync(fd);
-      if (/\/Encrypt\s+\d+\s+\d+\s+R/.test(bytes.toString("latin1", Math.max(0, bytes.length - 4096)))) throw new Error("That PDF is password protected, so I can't open it.");
-      const pages = pdfPages(bytes);
-      if (pages !== undefined && pages > MAX_PDF_PAGES) throw new Error(`That PDF has ${pages} pages and I can read at most ${MAX_PDF_PAGES} at a time. Send a part of it.`);
-      return { kind: "pdf", data: bytes.toString("base64"), name, ...(pages !== undefined ? { pages } : {}) };
-    }
-    if (ext === "pdf") throw new Error("That file is called .pdf but is not a real PDF, so I didn't open it.");
-    if (!TEXT_EXTENSIONS.includes(ext)) throw new Error(UNSUPPORTED);
-    const buf = Buffer.alloc(Math.min(size, MAX_TEXT_BYTES + 3));
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    const cut = size > MAX_TEXT_BYTES;
-    const text = decodeText(buf.subarray(0, Math.min(n, MAX_TEXT_BYTES)), cut);
-    if (text === undefined) throw new Error("That file is not plain UTF-8 text, so I didn't open it.");
-    return { kind: "text", text, name, cut };
+    const bytes = Buffer.alloc(Math.min(size, MAX_FILE_BYTES + 1));
+    readSync(fd, bytes, 0, bytes.length, 0);
+    return documentFromBytes(bytes, claimedName, size);
   } finally {
     closeSync(fd);
   }

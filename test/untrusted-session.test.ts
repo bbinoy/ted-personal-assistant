@@ -8,6 +8,7 @@ import { readSession } from "../src/run/sessionstore.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
 import { settings } from "../src/core/settings.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
+import { rememberNames } from "../src/approvals/seennames.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
 // The untrusted-input flag of a chat session: kept in the session record, so a resumed session that holds a hostile mail is still told to the judge.
@@ -35,22 +36,27 @@ test("the untrusted flag is kept in the session record: set by a read of mail, s
   scopeOf("owner").say("tidy my inbox");
   const turn = (resume: string | undefined) => {
     const j = fake("auto");
-    const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, { provenance: scopeOf("owner").read, conversation: `taint-${Math.random()}`, taint: sessionTaint(FILE, resume) });
-    return { j, can };
+    const conversation = `taint-${Math.random()}`;
+    const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, { provenance: scopeOf("owner").read, conversation, taint: sessionTaint(FILE, resume) });
+    return { j, can, conversation };
   };
   let n = 0;
-  const archive = (can: ReturnType<typeof turn>["can"]) => can(`${MB}archive_conversation`, { conversationId: `t${n++}` }, opts) as Promise<Out>;
+  const archive = (t: ReturnType<typeof turn>) => {
+    const conversationId = `t${n++}`;
+    rememberNames(t.conversation, JSON.stringify({ conversations: [{ conversationId, subject: "Mail", from: "Shop" }] })); // (read: an archive of an unread mail is first sent back)
+    return t.can(`${MB}archive_conversation`, { conversationId }, opts) as Promise<Out>;
+  };
   // turn 1: a fresh session; the run archives, reads a mail, archives again: the judge is told from the read on
   const t1 = turn(undefined);
-  await archive(t1.can);
+  await archive(t1);
   await t1.can(`${MB}get_message`, { messageId: 1 }, opts);
-  await archive(t1.can);
+  await archive(t1);
   assert.deepEqual(t1.j.seen.map((s) => s.untrustedInput), [false, true]);
   await turnEnd("S1"); // consume() writes the session: the flag belongs to S1 now
   assert.equal(readSession(FILE).untrustedIn, "S1");
   // turn 2: the same session resumed, nothing read yet in this turn: the hostile mail is still in its context
   const t2 = turn("S1");
-  assert.equal(((await archive(t2.can)) as Out).behavior, "allow");
+  assert.equal(((await archive(t2)) as Out).behavior, "allow");
   assert.deepEqual(t2.j.seen.map((s) => s.untrustedInput), [true]);
   await turnEnd("S1");
   assert.equal(readSession(FILE).untrustedIn, "S1", "kept across turns");
@@ -63,11 +69,11 @@ test("the untrusted flag is kept in the session record: set by a read of mail, s
   assert.ok(forgetUnresumable(FILE, new Error("No conversation found with session ID: S1"), "chat"));
   assert.equal(readSession(FILE).untrustedIn, undefined);
   const t3 = turn(undefined);
-  await archive(t3.can);
+  await archive(t3);
   assert.deepEqual(t3.j.seen.map((s) => s.untrustedInput), [false], "a fresh session has read nothing");
   await turnEnd("S2");
   assert.equal(readSession(FILE).untrustedIn, undefined);
   const t4 = turn("S2");
-  await archive(t4.can);
+  await archive(t4);
   assert.deepEqual(t4.j.seen.map((s) => s.untrustedInput), [false]);
 });

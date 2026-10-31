@@ -1,5 +1,6 @@
 import { createdFact, createdLabel, idsInCall } from "./created.ts";
 import { confirmsDelete, moduleOf } from "../policy/toolmanifest.ts";
+import { archivedBy } from "../modules/archivecap.ts";
 import { seenName } from "./seennames.ts";
 
 // A question about a call that acts on an object by its id (delete or change a calendar event, a Notion page, a Drive file, a mail draft) must name the object, not only the id.
@@ -31,7 +32,8 @@ export async function objectLines(conversation: string, tool: string, input: Rec
       clearTimeout(timer);
     }
   }
-  return confirmsDelete(tool, input) && createdFact(conversation, input) !== "yes" ? UNNAMED : "";
+  // A delete, and an archive (nothing shows the mail was handled when even its subject and sender are unknown), says so: permissions.ts sends the run to look it up first.
+  return (confirmsDelete(tool, input) || !!archivedBy(tool, input)) && createdFact(conversation, input) !== "yes" ? UNNAMED : "";
 }
 
 export const UNNAMED = "\nNamed: unknown (only its id is known: it was not made by the assistant here, not read in this conversation, and could not be looked up)";

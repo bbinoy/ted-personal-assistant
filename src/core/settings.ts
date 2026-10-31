@@ -202,7 +202,7 @@ export function loadSettings(env: Env) {
     // Quiet hours (code holds the heartbeat's unprompted posts in them, heartbeat/notices.ts): the preset's window, else 22:00-07:00; QUIET_HOURS or the two hours override it.
     quietStartHour: quiet.from,
     quietEndHour: quiet.to,
-    maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 6, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
+    maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 12, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
     taskDefaultRemind: remindTime(env.TASK_DEFAULT_REMIND), // the morning ping for a task due that day with no reminder of its own (tasks/remind.ts)
     // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), the look is made due and says ONE short prep message; 0 = off.
     prepMinutes: num(env, "PREP_MINUTES", 15, 0, 120),

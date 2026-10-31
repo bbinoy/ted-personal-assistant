@@ -246,27 +246,29 @@ test("a timeout retries once on a fresh cold process; an error never retries", a
   const was = settings.warm;
   setWarm(true);
   const hang = () => (async function* () { await new Promise(() => {}); })();
+  // every call rebuilds the spare from its io: a fake start, or the real SDK would spawn a claude process that keeps node alive (~10 min)
+  const start = (async () => ({ query: () => hang(), close() {} })) as any;
   try {
     // timeout, then a good answer: the answer is used
     let calls = 0;
     const good = rig(yes);
-    const first = { ...good.io, timeoutMs: 30, query: ((a: { prompt: string }) => (++calls === 1 ? hang() : one(result(yes), good.log, "cold", good.prompts, a.prompt))) as any };
+    const first = { ...good.io, start, timeoutMs: 30, query: ((a: { prompt: string }) => (++calls === 1 ? hang() : one(result(yes), good.log, "cold", good.prompts, a.prompt))) as any };
     assert.equal((await judgeAnswer("yes", open, [], undefined, first))?.outcome, "approve");
     assert.equal(calls, 2);
     discardJudge();
     // two timeouts: no answer
     calls = 0;
-    const never = { timeoutMs: 30, query: (() => (calls++, hang())) as any };
+    const never = { start, timeoutMs: 30, query: (() => (calls++, hang())) as any };
     assert.equal(await judgeAnswer("yes", open, [], undefined, never), undefined);
     assert.equal(calls, 2);
     discardJudge();
     // an error: no retry
     calls = 0;
-    const boom = { timeoutMs: 30, query: (() => (calls++, (async function* () { yield { type: "result", subtype: "error_during_execution", is_error: true }; })())) as any };
+    const boom = { start, timeoutMs: 30, query: (() => (calls++, (async function* () { yield { type: "result", subtype: "error_during_execution", is_error: true }; })())) as any };
     assert.equal(await judgeAnswer("yes", open, [], undefined, boom), undefined);
     assert.equal(calls, 1);
   } finally {
-    discardJudge();
+    await settle(); // the rebuild scheduled by the last call runs, then is dropped
     setWarm(was);
   }
 });

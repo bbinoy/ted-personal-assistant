@@ -359,12 +359,13 @@ test("google: reads run free; a send, a draft and a label go to the judge and, u
   ] as const) assert.equal((await r.run(tool, input)).behavior, "deny", `${tool} ${JSON.stringify(input)}`);
   assert.equal(r.asked.length + r.judged.length, 0, "refused before any judge or question");
   // archive: a label change is judged like the owner's
+  rememberNames(`tenant:${ctx.id}`, JSON.stringify({ messages: [{ id: "a1", subject: "Lunch?", from: "Carl <carl@example.org>" }] })); // (read: an archive of an unread mail is first sent back to look it up)
   r = rig(ctx, "auto");
   assert.equal((await r.run("modify_gmail_message_labels", { message_id: "a1", remove_label_ids: ["INBOX"] })).behavior, "allow");
   assert.equal(r.judged.length, 1);
 });
 
-test("google: a calendar write that names guests, and every answer to an invite, always asks her, a delete is denied and is never judged; a plain one is judged", async () => {
+test("google: a calendar write is judged, guests included; every answer to an invite always asks her; a delete is judged with care", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
   scopeOf(`tenant:${ctx.id}`).say("put the dentist on Wednesday");
   let r = rig(ctx, "auto");
@@ -374,8 +375,8 @@ test("google: a calendar write that names guests, and every answer to an invite,
   assert.equal(r.asked.length, 0);
   r = rig(ctx, "auto");
   await r.run("manage_event", { action: "create", summary: "Lunch", attendees: ["carl@example.org"], start_time: "2026-10-21T12:00:00", end_time: "2026-10-21T13:00:00" });
-  assert.equal(r.judged.length, 0, "guests: the judge is not asked");
-  assert.equal(r.asked.length, 1, "she is");
+  assert.equal(r.judged.length, 1, "guests: judged like a send");
+  assert.equal(r.asked.length, 0, "the judge said auto");
   r = rig(ctx, "ask");
   await r.run("manage_event", { action: "delete", event_id: "e1", summary: "Dentist" });
   assert.equal(r.judged.length, 1, "a delete is judged, with care: told it was not created by the assistant");
@@ -387,10 +388,10 @@ test("google: a calendar write that names guests, and every answer to an invite,
   assert.equal(r.judged.length, 0, "a delete that names guests would email a cancellation: never judged");
   assert.equal(r.asked.length, 1);
   await r.run("manage_event", { action: "rsvp", event_id: "e2", response: "accepted" });
-  // the real field names of the calendar schema all count as guests
+  // the real field names of the calendar schema all count as guests (judged like a send)
   for (const guests of [{ attendeeEmails: ["a@example.org"] }, { addedAttendees: [{ email: "a@example.org" }] }, { addedAttendeeEmails: ["a@example.org"] }]) await r.run("manage_event", { action: "update", event_id: "e3", ...guests });
-  assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 5, "the delete, the answer to an invite and three updates that name guests are her call");
+  assert.equal(r.judged.length, 3, "updates that name guests are judged, whatever the field is called");
+  assert.equal(r.asked.length, 2, "the delete with guests and the answer to an invite are her call");
   assert.equal((await r.run("manage_event", { action: "trash", event_id: "e1" })).behavior, "deny", "another word for deleting stays denied");
 });
 

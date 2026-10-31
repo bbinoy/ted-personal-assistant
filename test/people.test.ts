@@ -10,7 +10,7 @@ import { FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT } from "./runkinds.ts";
 const dir = mkdtempSync(join(tmpdir(), "people-"));
 process.env.HARNESS_DATA_DIR = dir;
 
-const { contactsIn, fromContactsText, fromNote, findPerson, rank, matchScore } = await import("../src/modules/people/people.ts");
+const { contactsIn, knownPeople, fromContactsText, fromNote, findPerson, rank, matchScore } = await import("../src/modules/people/people.ts");
 const { parseNote } = await import("../src/memory/notes.ts");
 const { RUNTIME } = await import("../src/modules/runtime.ts");
 const { searchContacts } = await import("../src/modules/google/googlemcp.ts");
@@ -162,14 +162,18 @@ test("people: the tool is in a group's and a friend's set and the owner's; read-
   assert.equal(isFree(T), true);
 });
 
-test("people: an address found by Ted is no looser than any other, a send still asks and the floor still names it outside", () => {
+test("people: a send still asks; an address Ted found counts as named when the person said a name in it", () => {
   const send = "mcp__claude_ai_Gmail__send_message";
   assert.equal(classify(send, { to: ["sam@example.com"], subject: "hi", body: "hi" }, OWNER_CHAT), "ask");
   assert.equal(classify("mcp__mailbird__send_message_now", { messageId: "m" }, OWNER_CHAT), "ask");
   assert.equal(classify("mcp__claude_ai_Google_Calendar__create_event", { attendees: ["sam@example.com"] }, OWNER_CHAT), "ask");
-  // The person typed "send it to Sam": the address Ted found is not in their words, so it is outside (the owner is asked, never the judge).
+  // The person typed "send it to Sam": Sam is a known person (a people note) with that address, so it is accounted for; "send it" names nobody; an address nobody saved is not Sam's.
   const view = { action: "send", to: ["sam.carter@example.com"], cc: [], bcc: [] } as never;
-  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never), ["sam.carter@example.com"]);
+  const known = knownPeople(notesDir({ "people-sam-carter.md": "Sam Carter. sam.carter@example.com" }));
+  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never, known), []);
+  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never), ["sam.carter@example.com"], "no known people: asked");
+  assert.deepEqual(recipientsOutside({ ...(view as object), to: ["sam@evil.example"] } as never, {}, { kind: "owner", message: "send it to Sam" } as never, known), ["sam@evil.example"]);
+  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it" } as never, known), ["sam.carter@example.com"]);
   assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to sam.carter@example.com" } as never), []);
 });
 

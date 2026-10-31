@@ -61,19 +61,21 @@ test("a voice message and a picture go out as attachments of their kind, a pictu
   const { messenger, sent } = fake();
   const out = createOutbound(messenger);
   await out.sendVoice("/tmp/v.m4a", "hello", "grp");
-  await out.sendPicture("/tmp/p.png", "a **drawing**");
+  await out.sendAttachment({ file: "/tmp/p.png", kind: "picture" }, "a **drawing**");
+  await out.sendAttachment({ file: "/tmp/f/pass.pdf", kind: "file" }, "");
   assert.deepEqual(sent[0]!.message, { text: "", attachments: [{ file: "/tmp/v.m4a", kind: "voice" }] });
   assert.equal(sent[0]!.target, "grp");
   assert.equal(sent[1]!.message.text, "a drawing");
   assert.deepEqual(sent[1]!.message.attachments, [{ file: "/tmp/p.png", kind: "picture" }]);
   assert.deepEqual(sent[1]!.message.styles, [{ start: 2, length: 7, style: "BOLD" }]);
+  assert.deepEqual(sent[2]!.message.attachments, [{ file: "/tmp/f/pass.pdf", kind: "file" }], "any other file goes as a file");
 });
 
 test("a messenger without quotes never gets one", async () => {
   const q = { text: "earlier", author: "+1", timestamp: 7 };
   const without = fake({ quotes: false });
   await createOutbound(without.messenger).reply("answer", { quote: q });
-  await createOutbound(without.messenger).sendPicture("/tmp/p.png", "", { quote: q });
+  await createOutbound(without.messenger).sendAttachment({ file: "/tmp/p.png", kind: "picture" }, "",{ quote: q });
   assert.deepEqual(without.sent.map((s) => s.message.quote), [undefined, undefined]);
   const withQuotes = fake();
   await createOutbound(withQuotes.messenger).reply("answer", { quote: q });

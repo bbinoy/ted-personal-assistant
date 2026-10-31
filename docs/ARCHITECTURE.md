@@ -232,7 +232,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - The default is to archive unless the mail needs the owner; the owner's triage notes win.
 - `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or ask Ted in chat to bring it back).
 
-**Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
+**Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (12) is held (`submitPost`) unless the run marked it `urgent`.
 
 - Code never rewrites a held post. There is no fixed text to the owner. Every system matter (the shared key, the spend warnings, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
 - People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `takeCapNotice` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`). A run that merely failed (timeout, connector, other) gets one line for a group or a friend, "⚠️ Something went wrong, try again." (no cause: the log and `npm run doctor` say it); the owner's own failure notices keep their text because they end with the one step she must take.
@@ -447,6 +447,7 @@ src/conversation/lang.ts  the voice reply's language check
 src/conversation/ledger.ts  wake/action ledger in the log: when a look is due
 src/conversation/markdown.ts  Markdown to Signal text styles
 src/conversation/messenger.ts  the app's meeting point with the chat platform
+src/conversation/openbytes.ts  bytes the assistant fetched (a mail attachment) made ready for the model
 src/conversation/outbound.ts  sending, echo guard, retry of a failed send, one message per paragraph
 src/conversation/ownercommands.ts  /stop /pause /resume /status /today /quiet /tasks
 src/conversation/queue.ts  bursts, one turn at a time per conversation
@@ -517,6 +518,8 @@ src/modules/browse/paymentrules.ts  pure rules of a card payment
 src/modules/browse/payments.ts  the payment ledger
 src/modules/browse/profile.ts  the owner's saved details in OpenBao
 src/modules/browse/profilecli.ts  `npm run profile`
+src/modules/files/filetool.ts  the open_file tool: a mail attachment opened and kept for send
+src/modules/files/module.ts  files
 src/modules/draw/drawtool.ts  the draw tool: SVG in, PNG out
 src/modules/draw/module.ts  draw
 src/modules/draw/svgclean.ts  rebuilds model SVG from an allowlist
@@ -526,6 +529,7 @@ src/modules/gmail/gmailrules.ts  Gmail floor rules a flag cannot say
 src/modules/gmail/module.ts  Gmail connector (MAIL_PROVIDER=gmail)
 src/modules/google/googlemcp.ts  the pinned MCP server, one process per friend
 src/modules/google/module.ts  a friend's own Gmail and Calendar tools
+src/modules/mailbird/attachments.ts  an attachment from get_attachment_content, as bytes
 src/modules/mailbird/mailbird.ts  MCP client for the local mail server
 src/modules/mailbird/module.ts  Mailbird (MAIL_PROVIDER=mailbird)
 src/modules/mailbird/proposals.ts  a draft read back; the send-approval text

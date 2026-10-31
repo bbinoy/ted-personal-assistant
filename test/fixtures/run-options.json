@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "e01bb10116d452f1"
+        "sha": "b969fa1ca996088d"
       },
       "kind": {
         "who": "owner",
@@ -72,6 +72,7 @@
         "mcp__claude_ai_Notion__notion-search-agents",
         "mcp__claude_ai_Notion__notion-update-page",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__mailbird__archive_conversation",
         "mcp__mailbird__create_draft",
         "mcp__mailbird__delete_conversation_permanently",
@@ -163,7 +164,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "e01bb10116d452f1"
+        "sha": "b969fa1ca996088d"
       },
       "snapshot": false
     },
@@ -173,6 +174,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
@@ -272,6 +274,7 @@
       "mcp__claude_ai_Google_Docs__update_doc",
       "mcp__mailbird__copy_conversation",
       "mcp__mailbird__delete_conversation_permanently",
+      "mcp__mailbird__get_attachment_content",
       "mcp__mailbird__get_help",
       "mcp__mailbird__get_ui_state",
       "mcp__mailbird__mark_all_as_read",
@@ -321,7 +324,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "969ebac082b50cca"
+        "sha": "a3356af7baf877b5"
       },
       "kind": {
         "who": "group",
@@ -381,7 +384,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "969ebac082b50cca"
+        "sha": "a3356af7baf877b5"
       },
       "snapshot": false
     },
@@ -442,7 +445,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "f6277f4e92b7ce7f"
+        "sha": "0f196ea929eb4b8d"
       },
       "tenant": {
         "id": "<bea>",
@@ -508,7 +511,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "f6277f4e92b7ce7f"
+        "sha": "0f196ea929eb4b8d"
       },
       "snapshot": false
     },
@@ -572,7 +575,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "e01bb10116d452f1"
+        "sha": "b969fa1ca996088d"
       },
       "kind": {
         "who": "owner",
@@ -640,6 +643,7 @@
         "mcp__claude_ai_Notion__notion-search-agents",
         "mcp__claude_ai_Notion__notion-update-page",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__mailbird__archive_conversation",
         "mcp__mailbird__create_draft",
         "mcp__mailbird__delete_conversation_permanently",
@@ -729,7 +733,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "e01bb10116d452f1"
+        "sha": "b969fa1ca996088d"
       },
       "snapshot": false
     },
@@ -739,6 +743,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
@@ -838,6 +843,7 @@
       "mcp__claude_ai_Google_Docs__update_doc",
       "mcp__mailbird__copy_conversation",
       "mcp__mailbird__delete_conversation_permanently",
+      "mcp__mailbird__get_attachment_content",
       "mcp__mailbird__get_help",
       "mcp__mailbird__get_ui_state",
       "mcp__mailbird__mark_all_as_read",
@@ -887,7 +893,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "969ebac082b50cca"
+        "sha": "a3356af7baf877b5"
       },
       "kind": {
         "who": "group",
@@ -951,7 +957,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "969ebac082b50cca"
+        "sha": "a3356af7baf877b5"
       },
       "snapshot": false
     },
@@ -1012,7 +1018,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "f6277f4e92b7ce7f"
+        "sha": "0f196ea929eb4b8d"
       },
       "tenant": {
         "id": "<bea>",
@@ -1082,7 +1088,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "f6277f4e92b7ce7f"
+        "sha": "0f196ea929eb4b8d"
       },
       "snapshot": false
     },

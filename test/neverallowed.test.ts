@@ -230,7 +230,7 @@ test("the table: the verdict of each tool for the owner's chat, an unattended ru
   assert.ok(!toolsFor(groupCapabilities()).has(`${MB}get_message`));
 });
 
-test("guests: every field that names people counts, by token, in any case; removing people does not; the judge is told and never sees such a call", () => {
+test("guests: every field that names people counts, by token, in any case; removing people does not; the judge is told (an untrusted run's unnamed guest is asked, permissions.ts)", () => {
   // the real field names of create_event and update_event (the Google Calendar connector's schema)
   const names = [
     { attendees: [{ email: "a@example.org" }] }, { attendeeEmails: ["a@example.org"] }, { addedAttendees: [{ email: "a@example.org", displayName: "A" }] }, { addedAttendeeEmails: ["a@example.org"] },
@@ -240,8 +240,7 @@ test("guests: every field that names people counts, by token, in any case; remov
   for (const input of names) {
     assert.ok(namesPeople(input), JSON.stringify(input));
     assert.equal(namesNoGuests(input), false);
-    assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "e", ...input }), false, JSON.stringify(input));
-    assert.equal(isJudgeable("mcp__google__manage_event", { action: "update", event_id: "e", ...input }), false, JSON.stringify(input));
+    assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e", ...input }), false, JSON.stringify(input));
     assert.match(notifyNote(`${CAL}create_event`, { summary: "s", ...input }), /this call names guests/, JSON.stringify(input));
     assert.equal(applyChanges(`${CAL}create_event`, { summary: "s", ...input }, [{ field: Object.keys(input)[0]!, value: "x@example.org" }]), undefined, "never changed by a reply");
   }

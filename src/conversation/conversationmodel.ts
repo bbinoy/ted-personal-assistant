@@ -14,7 +14,7 @@ import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
 import type { Deadline } from "../core/deadline.ts";
 import type { SynthLimits } from "@ted-assistant/speech/tts";
-import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
+import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, OutgoingAttachment, Quote, Target } from "@ted-assistant/messenger";
 
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
 
@@ -141,7 +141,7 @@ export interface PipelineDeps {
     reply(text: string, opts?: { plain?: boolean; quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
     replyPlain(text: string, kind?: Kind): Promise<number>;
     sendVoice(file: string, spoken: string, target?: Target): Promise<number>;
-    sendPicture(file: string, caption: string, opts?: { quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
+    sendAttachment(attachment: OutgoingAttachment, caption: string, opts?: { quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
   };
   record: (target: Target, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, a person's direct target for a tenant, none for the owner)
   run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string, reactedAt?: number, arrivedAt?: number, continuation?: { provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)

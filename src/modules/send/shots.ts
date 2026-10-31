@@ -1,5 +1,7 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
+import { safeName } from "../../conversation/document.ts";
 import { instancePaths } from "../../core/convpaths.ts";
 
 // Pictures of a turn, kept so the model can send one with the `send` tool (send.ts): screenshots of a browse run and drawings (drawtool.ts). The worker
@@ -8,11 +10,14 @@ import { instancePaths } from "../../core/convpaths.ts";
 // conversation's turn only (never a path) and checks the file again (a plain file in that folder, jpeg or png bytes, size).
 // A screenshot is page content: untrusted, only ever sent to the conversation that asked for it, never fed back as an instruction. The files are
 // removed when the turn ends (or after SHOT_TTL_MS if the process died first).
+// FILES opened with open_file (a mail attachment: modules/files) are kept the same way under file1, file2... but only in memory, as bytes of this turn; the one
+// file that exists on disk is a temp copy while signal-cli sends it (withTempFile), deleted right after. Their content is data from a third party, untrusted.
 
 export const MAX_PICTURE_BYTES = 3_000_000;
 export const SHOT_TTL_MS = 60 * 60_000;
 export const MAX_DRAWINGS = 20; // per turn
 const ID = /^(shot|img)[1-9]\d{0,2}$/;
+export const MAX_FILES = 10; // per turn
 const shotsRoot = () => join(instancePaths().browse, "shots");
 
 export const isJpeg = (b: Uint8Array): boolean => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
@@ -47,9 +52,15 @@ export interface Shot {
   size: number;
   caption: string;
 }
+export interface HeldFile {
+  id: string;
+  name: string; // a plain label (safeName), also the name it is sent under
+  bytes: Buffer;
+}
 interface TurnShots {
   dir: string;
   shots: Map<string, Shot>;
+  files: Map<string, HeldFile>;
 }
 const turns = new Map<string, TurnShots>(); // by conversation key (OWNER_KEY or the group id)
 
@@ -57,7 +68,7 @@ function turnOf(key: string): TurnShots {
   let t = turns.get(key);
   if (!t) {
     mkdirSync(shotsRoot(), { recursive: true, mode: 0o700 });
-    turns.set(key, (t = { dir: mkdtempSync(join(shotsRoot(), "turn-")), shots: new Map() }));
+    turns.set(key, (t = { dir: mkdtempSync(join(shotsRoot(), "turn-")), shots: new Map(), files: new Map() }));
   }
   return t;
 }
@@ -96,7 +107,36 @@ export function adoptShots(key: string, from: { id: string; file: string; size: 
   return out;
 }
 
-// The turn is over: its pictures go.
+// Keeps the bytes of a file opened in this turn under a new id (file1, file2...); undefined at the per-turn limit or over the size a message can carry.
+export function adoptFile(key: string, bytes: Buffer, name: string): HeldFile | undefined {
+  const t = turnOf(key);
+  if (t.files.size >= MAX_FILES || bytes.length === 0 || bytes.length > MAX_FILE_BYTES) return undefined;
+  const file = { id: `file${t.files.size + 1}`, name: safeName(name), bytes };
+  t.files.set(file.id, file);
+  return file;
+}
+
+// The file of an id of THIS conversation's turn (never a path).
+export function loadFile(key: string, id: string): { file: HeldFile } | { problem: string } {
+  const file = turns.get(key)?.files.get(id);
+  return file ? { file } : { problem: `No file "${id}" in this conversation. The ids are the ones open_file returned in this turn.` };
+}
+
+// The bytes as a short-lived file in a private folder, for the one call that needs a path (signal-cli attaching it); gone when `use` ends, however it ends.
+export async function withTempFile<T>(f: Pick<HeldFile, "name" | "bytes">, use: (path: string) => Promise<T>): Promise<T> {
+  mkdirSync(shotsRoot(), { recursive: true, mode: 0o700 });
+  sweepShots();
+  const dir = mkdtempSync(join(shotsRoot(), "send-")); // (swept after SHOT_TTL_MS if the process dies in between)
+  try {
+    const path = join(dir, safeName(f.name));
+    writeFileSync(path, f.bytes, { mode: 0o600 });
+    return await use(path);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// The turn is over: its pictures and files go.
 export function dropShots(key: string): void {
   const t = turns.get(key);
   if (!t) return;

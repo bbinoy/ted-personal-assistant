@@ -66,13 +66,28 @@ test("an archive of several mails at once keeps every id, so one number restores
 
 test("an unattended look's archive the judge is not sure about is left in the inbox: skipped, no journal line, nobody asked", async () => {
   forgetArmed();
+  forgetSeen();
   const key = owner();
   const before = journal(key).length;
+  rememberNames(key, JSON.stringify({ conversations: [{ conversationId: "a-9", subject: "Sale", from: "Shop" }] }));
   const asked: string[] = [];
   const r = (await look(key, "ask", asked)(`${MB}archive_conversation`, { conversationId: "a-9" }, opts)) as { behavior: string; message?: string };
   assert.deepEqual([r.behavior, r.message], ["deny", UNATTENDED_SKIP]);
   assert.deepEqual(asked, []);
   assert.equal(journal(key).length, before);
+});
+
+test("an unattended look's archive of a mail it never read is denied once with the look-it-up message, and the judge is not called on that first call", async () => {
+  forgetArmed();
+  forgetSeen();
+  const key = owner();
+  const asked: string[] = [];
+  let judged = 0;
+  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: true }), OWNER_LOOK, undefined, async () => (judged++, { decision: "auto", reason: "x" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "the look" }), conversation: key, run: `run-${++n}` });
+  const r = (await can(`${MB}archive_conversation`, { conversationId: "u-1" }, opts)) as { behavior: string; message?: string };
+  assert.equal(r.behavior, "deny");
+  assert.match(r.message ?? "", /look the object up first/i);
+  assert.deepEqual([judged, asked], [0, []]);
 });
 
 test("bringing mail back: free in the owner's own chat (Mailbird to inbox, Gmail INBOX label), judged anywhere else; trash and spam stay refused", async () => {

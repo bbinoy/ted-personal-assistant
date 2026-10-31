@@ -118,6 +118,16 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
     .map((x) => x.c);
 }
 
+// The people THIS conversation knows by name and address, read at once from its own people notes (a folder of the conversation, never another's). Synchronous on purpose: the
+// recipient floor (approvals/autojudge.ts) needs it inside a permission check, and a friend's Google Contacts need a network call per query, so only what is saved as a note counts.
+export const knownPeople = (notesDir: string | undefined): Candidate[] => (notesDir ? readNotes(undefined, notesDir).flatMap((n) => fromNote(n) ?? []) : []);
+
+// Pure: the addresses of the known people whose first name (3+ letters) is a whole word of the text. "invite Anna" names anna.clements@... only if a known Anna has that address.
+export function addressesNamedIn(text: string, known: readonly Candidate[]): Set<string> {
+  const said = new Set(tokens(text));
+  return new Set(known.filter((c) => { const first = tokens(c.name)[0]; return !!first && first.length >= 3 && said.has(first); }).flatMap((c) => c.emails));
+}
+
 const label = (f: Candidate["from"][number]): string => f.detail;
 
 // Pure: the answer as text (the tool fences it): which sources were used, which were not and why, then the candidates, or the reason there are none.

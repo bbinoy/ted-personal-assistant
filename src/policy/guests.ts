@@ -24,4 +24,14 @@ function walk(v: unknown, depth: number): boolean {
 }
 
 export const namesPeople = (input: Record<string, unknown>): boolean => walk(input, 0);
+
+// The people a call names, lower-case: every string under a people key (an address, or a name), e.g. an event's guests.
+const texts = (v: unknown, depth = 0): string[] =>
+  depth > 6 ? [] : typeof v === "string" ? (v.trim() ? [v.trim().toLowerCase()] : []) : Array.isArray(v) ? v.flatMap((x) => texts(x, depth + 1)) : v && typeof v === "object" ? Object.values(v).flatMap((x) => texts(x, depth + 1)) : [];
+export function peopleIn(v: unknown, depth = 0): string[] {
+  if (depth > 6) return [];
+  if (Array.isArray(v)) return v.flatMap((x) => peopleIn(x, depth + 1));
+  if (!v || typeof v !== "object") return [];
+  return Object.entries(v).flatMap(([k, x]) => (isPeopleKey(k) ? texts(x) : peopleIn(x, depth + 1)));
+}
 export const namesNoGuests = (input: Record<string, unknown>): boolean => !namesPeople(input);

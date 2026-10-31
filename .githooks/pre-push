@@ -1,5 +1,7 @@
 #!/bin/sh
 # Refuses a push unless every gate passes (npm run gates: typecheck, lint, tests, secrets, isolation, unused code; CONTRIBUTING.md).
 # It checks the working tree, so commit or stash what you do not mean to push. Enable once per clone: npm run setup:hooks
+# A clean tree that a full gates run already passed on is not checked again.
 cd "$(dirname "$0")/.." || exit 1
+node scripts/gates.ts --passed && { echo "gates already passed on this tree"; exit 0; }
 exec npm run --silent gates

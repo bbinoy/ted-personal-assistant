@@ -2,7 +2,8 @@ import type { Kind as MessageKind } from "../core/messages.ts";
 import { clean } from "../core/sanitize.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { splitMessages } from "./split.ts";
-import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
+import { basename } from "node:path";
+import type { Messenger, OutgoingAttachment, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 
 const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
 const ECHO_WINDOW_MS = 5 * 60_000; // our own sent text coming back within this long is an echo, not the owner
@@ -136,17 +137,18 @@ export function createOutbound(
     return ts;
   }
 
-  // A picture (a screenshot kept by the browse tool, shots.ts) with an optional caption, to the owner's chat or another conversation.
-  async function sendPicture(file: string, caption: string, opts: { quote?: Quote; kind?: MessageKind; target?: Target } = {}): Promise<number> {
+  // A picture (a screenshot kept by the browse tool, shots.ts) or a file (a mail attachment opened with open_file) with an optional caption, to the owner's chat or another conversation.
+  async function sendAttachment(attachment: OutgoingAttachment, caption: string, opts: { quote?: Quote; kind?: MessageKind; target?: Target } = {}): Promise<number> {
     const r = caption ? renderMarkdown(clean("picture caption", caption, { max: 300 })) : { text: "", styles: [] };
     if (!opts.target && r.text) remember(`x:${r.text}`);
-    const ts = await send(opts.target, { text: r.text, styles: r.styles, quote: messenger.capabilities.quotes ? opts.quote : undefined, attachments: [{ file, kind: "picture" }] });
+    const ts = await send(opts.target, { text: r.text, styles: r.styles, quote: messenger.capabilities.quotes ? opts.quote : undefined, attachments: [attachment] });
     if (!opts.target) remember(`t:${ts}`);
-    record?.(opts.kind ?? "chat", ts, `🖼️ ${r.text || "(picture)"}`, opts.target);
+    const file = attachment.kind === "file";
+    record?.(opts.kind ?? "chat", ts, `${file ? "📎" : "🖼️"} ${r.text || (file ? basename(attachment.file) : "(picture)")}`, opts.target);
     return ts;
   }
 
   const replyPlain = (text: string, kind?: MessageKind) => reply(text, { plain: true, kind });
 
-  return { reply, replyPlain, sendVoice, sendPicture, isOwnEcho };
+  return { reply, replyPlain, sendVoice, sendAttachment, isOwnEcho };
 }
