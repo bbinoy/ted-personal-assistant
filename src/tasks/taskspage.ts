@@ -4,7 +4,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
 import { completeItem, counts, dueClass, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
 import { localOf, showLocal, todayIn } from "./when.ts";
-import { BUCKETS, groupOpen } from "./render.ts";
+import { BUCKETS, FOCUS, groupOpen } from "./render.ts";
 
 // The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
@@ -18,20 +18,40 @@ function row(it: Item, now: number, zone: string, token?: string): string {
   const due = it.due ? showLocal(it.due, todayIn(now, zone)) : "";
   const late = dueClass(it, now, zone) === "overdue";
   const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind].filter(Boolean).map((b) => esc(b!));
-  const tick = token === undefined ? "" : `<form method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
+  const tick = token === undefined ? "" : `<form class="tick" method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
   return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}">${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br><span class="m">${bits.join(" · ")}</span></div></li>`;
 }
 
 const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string =>
-  items.length ? `<details${open ? " open" : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
+  items.length ? `<details${open ? " open" : ""}${title === FOCUS ? ' class="focus"' : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
 
-/** The whole page for one conversation's list at `now` in `zone`. `token` is the tick-off forms' CSRF token; without it a row has no button. */
-export function tasksPage(key: string, now: number, zone: string, token?: string): string {
+/**
+ * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out (without script the form posts and the server redirects back),
+ * and the page reloads itself every minute keeping which sections are open and where it was scrolled (sessionStorage; if that is unavailable it simply reloads).
+ */
+const SCRIPT = String.raw`(()=>{
+const S=sessionStorage,K="tasks-page",k=(d)=>d.querySelector("summary").textContent.replace(/ \(\d+\)$/,"");
+try{const v=JSON.parse(S.getItem(K)||"null");S.removeItem(K);if(v){document.querySelectorAll("details").forEach((d)=>{if(k(d) in v.o)d.open=v.o[k(d)]});scrollTo(0,v.y)}}catch(e){}
+setInterval(()=>{if(document.querySelector("form.busy"))return;try{const o={};document.querySelectorAll("details").forEach((d)=>{o[k(d)]=d.open});S.setItem(K,JSON.stringify({o,y:scrollY}))}catch(e){}location.reload()},60000);
+document.addEventListener("submit",async(e)=>{
+const f=e.target;if(!f.classList||!f.classList.contains("tick"))return;
+e.preventDefault();const li=f.closest("li"),b=f.querySelector("button");
+li.querySelectorAll(".err").forEach((x)=>x.remove());f.classList.add("busy");b.disabled=true;
+try{const r=await fetch(f.action,{method:"POST",body:new URLSearchParams(new FormData(f)),redirect:"manual"});
+if(!r.ok&&r.type!=="opaqueredirect")throw 0;
+const d=li.closest("details"),ul=li.parentNode;li.classList.add("gone");
+setTimeout(()=>{li.remove();const n=ul.children.length;if(!n)d.remove();else{const s=d.querySelector("summary");s.textContent=s.textContent.replace(/\(\d+\)$/,"("+n+")")}},300);
+}catch(x){f.classList.remove("busy");b.disabled=false;const m=document.createElement("span");m.className="err";m.textContent="Could not tick that off, try again.";li.querySelector(".b").append(m)}
+});
+})();`;
+
+/** The whole page for one conversation's list at `now` in `zone`. `token` is the tick-off forms' CSRF token; without it a row has no button. `nonce` (the response's CSP nonce) switches the script on; without it only <noscript>'s meta refresh remains. */
+export function tasksPage(key: string, now: number, zone: string, token?: string, nonce?: string): string {
   const open = listItems(key, { limit: 200 }, now, zone);
   const done = listItems(key, { status: "done", limit: 200 }, now, zone).filter((i) => (i.doneAt ?? 0) >= now - WEEK * DAY);
   const c = counts(key, now, zone);
   const g = groupOpen(open, now, zone);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60"><title>Tasks</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><noscript><meta http-equiv="refresh" content="60"></noscript><title>Tasks</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
 :root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
 body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
 .h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
@@ -39,17 +59,21 @@ li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;borde
 li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
 .b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
 button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
-.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
+details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
+.gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
-${block("Done in the last 7 days", done, now, zone, false)}</body></html>`;
+${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${block("Done in the last 7 days", done, now, zone, false)}${nonce ? `<script nonce="${nonce}">${SCRIPT}</script>` : ""}</body></html>`;
 }
 
 /** The tab icon: a tick in a rounded square, mid-tone colours that read on light and dark tabs. Served by the page itself; nothing is loaded from outside. */
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2e7d6b"/><path d="M8 17l5.5 5.5L24 10.5" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+/** default-src 'none' stays. The one script runs only with this response's nonce (no 'unsafe-inline' for scripts, nothing external) and may fetch only from the page's own origin; a response without a nonce runs no script. */
+const csp = (nonce?: string): string => `default-src 'none'; ${nonce ? `script-src 'nonce-${nonce}'; connect-src 'self'; ` : ""}img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`;
+
 const HEADERS = {
-  "content-security-policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "content-security-policy": csp(),
   "cache-control": "no-store",
   "referrer-policy": "same-origin",
   "x-content-type-options": "nosniff",
@@ -84,7 +108,7 @@ function tickOff(id: number): boolean {
  * `read` renders the page for this process's CSRF token; `tick` completes one of the owner's open tasks and says whether it did.
  * A POST needs the right Host, an Origin equal to the page's own, a form content type, a tiny body and the token; every CSRF failure gets the same 403.
  */
-export function tasksPageServer(read: (token: string) => string = (t) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t), tick: (id: number) => boolean = tickOff): Server {
+export function tasksPageServer(read: (token: string, nonce: string) => string = (t, n) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t, n), tick: (id: number) => boolean = tickOff): Server {
   const token = randomBytes(32).toString("hex"); // per process: a page from before a restart posts nothing
   return createServer((req, res) => {
     const path = (req.url ?? "").split("?")[0]!;
@@ -126,7 +150,8 @@ export function tasksPageServer(read: (token: string) => string = (t) => tasksPa
     if (path === "/healthz") return send(200, "text/plain", "ok");
     if (path !== "/tasks") return send(404, "text/plain", "not found");
     try {
-      send(200, "text/html", read(token));
+      const nonce = randomBytes(16).toString("base64"); // per response
+      send(200, "text/html", read(token, nonce), { "content-security-policy": csp(nonce) });
     } catch (e) {
       console.error(`tasks page: ${(e as Error).message}`);
       send(500, "text/plain", "the list cannot be read right now");

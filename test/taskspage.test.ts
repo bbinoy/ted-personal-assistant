@@ -224,3 +224,40 @@ test("a repeating task moves to its next due, like the tool", async () => {
     assert.ok(it.due! > "2026-10-22" && it.doneAt !== undefined);
   });
 });
+
+test("the page's one script runs only with the response's nonce, and the CSP has no unsafe-inline for scripts", async () => {
+  const get = async (port: number) => {
+    const r = await fetch(`http://127.0.0.1:${port}/tasks`);
+    return { csp: r.headers.get("content-security-policy")!, html: await r.text() };
+  };
+  const server = tasksPageServer();
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const [a, b] = [await get(port), await get(port)];
+    const nonce = (x: { csp: string }) => /script-src 'nonce-([A-Za-z0-9+/=]{16,})'(;|$)/.exec(x.csp)?.[1];
+    assert.ok(nonce(a) && nonce(b) && nonce(a) !== nonce(b)); // (new for every response)
+    for (const x of [a, b]) {
+      const script = /script-src ([^;]*)/.exec(x.csp)![1]!;
+      assert.ok(!script.includes("unsafe-inline") && !script.includes("http") && !script.includes("*"));
+      assert.match(x.csp, /^default-src 'none'; /);
+      assert.ok(x.html.includes(`<script nonce="${nonce(x)}">`));
+      assert.equal(x.html.match(/<script/g)!.length, 1); // (one script, not an external one)
+      assert.ok(!/<script[^>]* src=/.test(x.html));
+      assert.ok(x.html.includes('<noscript><meta http-equiv="refresh" content="60"></noscript>'));
+      assert.ok(!/<meta http-equiv="refresh"/.test(x.html.replace(/<noscript>.*?<\/noscript>/s, "")));
+    }
+  } finally {
+    server.close();
+  }
+});
+
+test("the script posts the tick from the page (same token, same origin) and keeps the open sections over a refresh", () => {
+  const html = tasksPage(OWNER_KEY, NOW, ZONE, "tok", "N0NCE");
+  assert.ok(html.includes('<script nonce="N0NCE">'));
+  assert.ok(html.includes('class="tick" method="post"')); // (without script the form posts as before)
+  assert.match(html, /fetch\(f\.action,\{method:"POST"/);
+  assert.match(html, /sessionStorage/);
+  assert.doesNotThrow(() => new Function(/<script nonce="N0NCE">(.*)<\/script>/s.exec(html)![1]!)); // (it at least parses)
+  assert.match(html, /d\.open=v\.o\[k\(d\)\]/);
+});

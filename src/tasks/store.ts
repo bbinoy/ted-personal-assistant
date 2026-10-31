@@ -52,6 +52,7 @@ export interface Item {
   updatedAt: number;
   doneAt?: number;
   urgent?: boolean; // the reminder may break quiet hours (tasks/remind.ts)
+  focusOn?: string; // the local day (YYYY-MM-DD) it is a focus item for: focus today iff that is today, so it lapses by itself
 }
 
 export interface TaskEvent {
@@ -88,6 +89,10 @@ export class TaskError extends Error {
 /** How the history names the changes of an unattended run. */
 export const LOOK_BY = "assistant (look)";
 
+export const FOCUS_MAX = 5; // focus items per day
+/** Focus today: the item's focus day is the conversation's today. Nothing clears it; tomorrow it is simply not today any more. */
+export const isFocus = (it: Item, today: string): boolean => it.focusOn === today;
+
 export const nowOf = (s: Scope): number => s.now ?? Date.now();
 
 // ---- rows ----
@@ -111,6 +116,7 @@ interface Row {
   updated_at: number;
   done_at: number | null;
   urgent: number | null;
+  focus_on: string | null;
 }
 const opt = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
 const toItem = (r: Row): Item => ({
@@ -132,6 +138,7 @@ const toItem = (r: Row): Item => ({
   updatedAt: r.updated_at,
   ...(opt(r.done_at) !== undefined ? { doneAt: r.done_at! } : {}),
   ...(r.urgent ? { urgent: true } : {}),
+  ...(r.focus_on !== null ? { focusOn: r.focus_on } : {}),
 });
 
 export const writeDb = (key: string): Db => {
@@ -187,7 +194,7 @@ function checkInstant(label: string, v: number | null | undefined): number | nul
 
 const NOUN: Record<Kind, string> = { task: "task", i_owe: "promise", owed_to_me: "item owed to you" };
 const VERB: Record<Action, string> = { added: "Added", edited: "Edited", done: "Completed", reopened: "Reopened", dropped: "Dropped", snoozed: "Snoozed", reminded: "Reminded about" };
-const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind", urgent: "urgent" };
+const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind", urgent: "urgent", focus_on: "focus" };
 
 /** The line for the journal and the tool's reply: "Added task #4 'Call Sam' (due Fri 24 Oct)". `zone` and `now` put dates in the conversation's clock. */
 export function lineOf(action: Action, it: Item, o: { zone: string; now: number; changed?: readonly string[]; next?: string }): string {
@@ -342,6 +349,7 @@ export interface Patch {
   person?: string | null;
   assignee?: string | null;
   urgent?: boolean;
+  focus?: boolean; // true: focus today (code writes today's local day; at most FOCUS_MAX a day); false: not
 }
 
 const live = (it: Item, what: string): void => {
@@ -375,6 +383,12 @@ export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line
   const assignee = optText("assignee", p.assignee, LIMITS.assignee);
   if (assignee !== undefined) set.assignee = assignee;
   if (p.urgent !== undefined && mayUrgent(scope)) set.urgent = p.urgent ? 1 : null; // (a group member's urgent is ignored)
+  if (p.focus !== undefined) {
+    const today = todayIn(nowOf(scope), scope.zone);
+    if (p.focus && !isFocus(it, today) && allItems(scope.key).filter((o) => o.id !== id && o.status === "open" && isFocus(o, today)).length >= FOCUS_MAX)
+      throw new TaskError(`Focus today is full (${FOCUS_MAX} items): take one out first (update_task with focus false), or leave this one off.`);
+    set.focus_on = p.focus ? today : null;
+  }
   if (!Object.keys(set).length) throw new TaskError("Nothing to change: give at least one field to update.");
   const finalRepeat = set.repeat !== undefined ? set.repeat : (it.repeat ?? null);
   const finalDue = set.due !== undefined ? set.due : (it.due ?? null);

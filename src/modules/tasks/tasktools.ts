@@ -170,6 +170,7 @@ export function createTasksServer(run: TasksRun) {
           person: z.string().max(80).nullable().optional(),
           assignee: z.string().max(80).nullable().optional(),
           urgent: z.boolean().optional().describe("true: the reminder ignores quiet hours; false: back to normal"),
+          focus: z.boolean().optional().describe("true: put it in 'focus today' (today only, at most 5; it lapses by itself tomorrow); false: take it out"),
           reopen: z.boolean().optional().describe("true: put a done, dropped or snoozed item back on the open list (before any other change)"),
         },
         (a) =>
@@ -185,6 +186,7 @@ export function createTasksServer(run: TasksRun) {
               person: clearable(a.person),
               assignee: clearable(a.assignee),
               urgent: a.urgent,
+              focus: a.focus,
             };
             if (reopened && Object.values(patch).every((v) => v === undefined)) return reopened;
             return editItem(s, a.id, patch);
