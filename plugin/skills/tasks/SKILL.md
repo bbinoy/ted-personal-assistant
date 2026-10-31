@@ -79,6 +79,8 @@ change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
 Whenever you read the calendar, mail or chat, notice links between open tasks and where the person is or will be: the computer's location line where there is one, trips and events on the calendar, what they say. When a task fits (shopping when heading into town, flat errands when back home, things to buy before a trip, something to bring to a meeting), remind once, briefly, at a sensible moment before it matters. No standing section in every brief, no message when nothing fits, and never state a location as certain: it is a likely place, the calendar or the chat may say otherwise.
 
+A task that depends on a place ("when I'm next in London, meet Sam") is written with the place first in the title ("When in London: meet Sam"), no due date, and the person set when there is one. The same for "next time I see Sam: ...": the person set. When the calendar shows a trip to a place, `list_tasks` with a `query` for the place and its obvious variants (city, country) and mention the matching open ones before the trip, early enough to arrange them (about a week ahead, or at the first brief that sees the trip), once and not every day. When a person is on the calendar, do the same for their "next time I see" tasks (`person`).
+
 ## A long overdue pile
 
 When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Snooze the long-overdue tail to a sensible date with `snooze_task` (reversible with `reopen`), in any run, and say so in one line ("Snoozed 14 old tasks to Monday; say 'reopen' for any you still want"). Keep the recent ones as they are.

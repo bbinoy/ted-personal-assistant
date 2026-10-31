@@ -33,6 +33,8 @@ For a trip that starts within about 10 days (or is under way):
 3. Skip anyone a note says is not to be bothered, or whose cadence says they were just seen.
 4. Send ONE short message to the owner, in your voice: where and when, who lives there, how long since you were in touch, and one useful detail from the note (a birthday, a baby, the thing they like). Write the draft note to them (say "draft ready") and, where a visit fits, a tentative hold on the owner's own calendar. Never contact the person yourself: a draft or an invitation goes through the usual approval.
 
+Also mention the owner's open tasks that wait on the place, as `ted-personal-assistant:tasks` says ("Tasks that fit a place or a moment"), in the same message.
+
 Do not repeat yourself. If your recent messages show you already told the owner about this trip, say nothing again unless the dates changed or the owner answered.
 
 ## Reaching out without a trip
