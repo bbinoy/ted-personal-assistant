@@ -363,7 +363,7 @@ Secrets never go through the chat or a model. They are entered at the local CLI 
 
 ## Tenancy: friends and groups
 
-One instance, one messenger account, several people. Off by default (`TENANTS=off`). A friend is a `tenant(id)` conversation (`friend-<id>`): the owner's pipeline with the group's isolation (policy source `group`).
+One instance, one messenger account, several people. Always on. A friend is a `tenant(id)` conversation (`friend-<id>`): the owner's pipeline with the group's isolation (policy source `group`).
 
 - **Routing** (`src/tenants/tenantroute.ts`): identity is the sender's account id. A tenant's message goes to her conversation; a suspended tenant's to nobody.
 - Anyone else is a registration request (`registration.ts`): one fixed reply with no model call, her messages held and read by no model, and a question to the owner in her own chat. Limits: one open request per sender, 10 open, 3 new an hour, 7-day expiry.

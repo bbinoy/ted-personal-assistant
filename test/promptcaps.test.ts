@@ -18,7 +18,6 @@ const { groupSystem, tenantSystem } = await import("../src/run/persona.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
 
 const on = settings as unknown as Record<string, unknown>;
-on.tenants = true;
 let n = 0;
 function friend(name: string, config?: object) {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;

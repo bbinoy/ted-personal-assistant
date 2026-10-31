@@ -10,7 +10,6 @@ import { answer, answerReaction } from "./approvalrig.ts";
 // stranger in. Real approvals, real registry files, fake chat.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "registration-test-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const Reg = await import("../src/tenants/registration.ts");
 const R = await import("../src/tenants/tenantroute.ts");
@@ -19,7 +18,6 @@ const { turnContext } = await import("../src/run/runoptions.ts");
 const { FIRST_CONTACT } = await import("../src/run/persona.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
 
-const on = settings as unknown as { tenants: boolean };
 const aci = (n: number) => `bbbbbbbb-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const NOW = Date.now();
 const HOUR = 3600_000;
@@ -28,7 +26,6 @@ const CANARY = "CANARY-STRANGER-TEXT-9931";
 const never = { judge: async () => assert.fail("the judge must not be called"), recent: () => [] };
 
 beforeEach(() => {
-  on.tenants = true;
   rmSync(Reg.FILE, { force: true });
 });
 
@@ -168,13 +165,6 @@ test("a question nobody answered lapses but the request stays open; a question t
   assert.ok(T.tenantByAci(aci(23)));
 });
 
-test("TENANTS=off: a stranger is ignored, nothing is stored, nobody is asked", async () => {
-  on.tenants = false;
-  const { toStranger, toOwner, io } = rig();
-  assert.deepEqual(R.admitStranger({ fromUuid: aci(30), name: "Off", text: "hi" }, io), { kind: "ignore", why: "tenants are off" });
-  await tick();
-  assert.deepEqual([toStranger, toOwner, Reg.openRequests()], [[], [], []]);
-});
 
 test("the question and the pending list carry the profile name and id only; a number the messenger gave is the id; the CLI side approves by id", async () => {
   const { io } = rig(false);

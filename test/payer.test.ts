@@ -39,7 +39,6 @@ function friend(name: string): import("../src/tenants/tenants.ts").TenantRecord 
 const her = (rec: { id: string }) => ({ kind: "tenant", tenantId: rec.id }) as const;
 
 beforeEach(() => {
-  on.tenants = true;
   resetCooldown();
   resetOwnerFacts();
 });

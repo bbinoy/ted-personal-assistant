@@ -182,7 +182,8 @@
       "memory",
       "people",
       "meetings",
-      "browse"
+      "browse",
+      "tenants"
     ],
     "tools": [
       "Skill",

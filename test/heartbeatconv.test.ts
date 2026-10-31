@@ -13,7 +13,6 @@ process.env.HARNESS_DATA_DIR = dir;
 process.env.GOOGLE_OAUTH_CLIENT_ID = "fake-client-id.example";
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own login, which a friend's run must never carry
-process.env.TENANTS = "on";
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
@@ -40,7 +39,6 @@ const withoutGoogle = <R,>(fn: () => R): R => {
     googleCfg.clientId = was;
   }
 };
-on.tenants = true;
 const KEY = "instance-key-not-real";
 const NOW = new Date(2026, 9, 14, 14, 0, 0);
 const signal = new AbortController().signal;

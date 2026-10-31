@@ -9,7 +9,6 @@ import { ROOT } from "../src/core/paths.ts";
 
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "forget-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const { convPaths, conversationsDir, groupConvId, friendConvId, instancePaths } = await import("../src/core/convpaths.ts");
 const { groupDir, recordGroup } = await import("../src/conversation/groupstore.ts");
 const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/conversation/forget.ts");
@@ -96,7 +95,6 @@ test("forget group: found by its name (any case) or its folder name; an unknown 
 
 test("forget friend: her registry entry, folder (voices, pending, history), audio, marks and notice marks; the owner and another friend stay", async () => {
   resetVoiceNotes();
-  (settings as { tenants: boolean }).tenants = true;
   const mk = (n: number, name: string) => T.addTenant({ aci: `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`, name })!;
   const gone = mk(1, "Gina");
   const stay = mk(2, "Hal");

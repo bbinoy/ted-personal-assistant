@@ -2,7 +2,7 @@
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role changes: no tool, no chat path,
 // no model can reach it (a friend's capabilities are not stored: every capability but the owner's own, tenants.ts OWNER_ONLY; to stop a friend, suspend or remove her). test/tenants.test.ts walks every tool.
 import "../src/core/requirelayout.ts";
-import { settings, signalIdentity } from "../src/core/settings.ts";
+import { signalIdentity } from "../src/core/settings.ts";
 import { loadMessengerInUse } from "../src/conversation/messenger.ts";
 import { approve, decline, describePending, forget, invitePerson } from "../src/tenants/registration.ts";
 import { describeTenants } from "../src/tenants/tenanttools.ts";
@@ -13,11 +13,6 @@ const [cmd, arg, ...rest] = process.argv.slice(2);
 const say = (l: string) => console.log(l);
 const usage = `usage: npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | remove <id> | timezone <id> <zone|default> | set-admin <id>`;
 
-// The admin role is the way back in after a lock-out, so it works with TENANTS off too; everything about friends needs TENANTS=on.
-if (cmd !== "set-admin" && !settings.tenants) {
-  say("TENANTS is off. Set TENANTS=on in .env (and give the assistant its own Signal account) first; see docs/SETUP.md.");
-  process.exit(1);
-}
 ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
 
 if (cmd === "list") {

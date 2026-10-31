@@ -320,10 +320,9 @@ export function loadSettings(env: Env) {
 
     dailyBudgetUsd: num(env, "DAILY_BUDGET_USD", 20, 0, 10_000), // the first spend WARNING level for the login (not a ceiling)
 
-    // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
-    // On: an unknown sender gets one fixed line (no model call) and the owner is asked in her chat whether to let her in, and each friend is a tenant with
+    // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Always on:
+    // an unknown sender gets one fixed line (no model call) and the owner is asked in her chat whether to let her in, and each friend is a tenant with
     // her own folder, her own limits, and runs on the instance key below. The bot never writes first to anybody.
-    tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",
     weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
     draw: oneOf(env, "DRAW", "on", ["on", "off"] as const) === "on", // the draw tool and skill: an SVG the model writes, rendered to a PNG (drawtool.ts)
     // The key tenants' runs use: a separate Anthropic Console workspace key with a spend limit, never the owner's login or key. It is handed to a tenant's
