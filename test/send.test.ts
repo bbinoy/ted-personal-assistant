@@ -131,6 +131,7 @@ test("browse result: captions are cleaned and cut, odd ids dropped", () => {
 
 function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {}) {
   const sent: { text: string; attachments?: string[]; groupId?: string; quote?: unknown }[] = [];
+  const kinds: string[] = [];
   const existed: boolean[] = []; // (did each attachment's file exist while it was being sent)
   const reacted: { emoji: string; target: unknown; groupId?: string }[] = [];
   const typing: boolean[] = [];
@@ -144,7 +145,7 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
     react: async (groupId: string | undefined, target: unknown, emoji: string) => void reacted.push({ emoji, target, groupId }),
     typing: async (_groupId: string | undefined, on: boolean) => void typing.push(!on),
     markRead: async () => {},
-    send: async (groupId: string | undefined, m: { text: string; attachments?: { file: string }[]; quote?: unknown }) => (existed.push(!!m.attachments?.every((a) => existsSync(a.file))), sent.push({ text: m.text, attachments: m.attachments?.map((a) => a.file), groupId, quote: m.quote }), sent.length),
+    send: async (groupId: string | undefined, m: { text: string; attachments?: { file: string; kind?: string }[]; quote?: unknown }) => (kinds.push(...(m.attachments ?? []).map((a: { kind?: string }) => a.kind ?? "")), existed.push(!!m.attachments?.every((a) => existsSync(a.file))), sent.push({ text: m.text, attachments: m.attachments?.map((a) => a.file), groupId, quote: m.quote }), sent.length),
   };
   const record = () => {};
   const pipeline = createPipeline({
@@ -172,7 +173,7 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
     isOwner: () => true,
     wait: async () => {},
   });
-  return { sent, existed, reacted, typing, spoken, pipeline };
+  return { sent, kinds, existed, reacted, typing, spoken, pipeline };
 }
 
 const TARGET = { author: "+2", timestamp: 77 };
@@ -236,6 +237,7 @@ test("send: a file opened with open_file goes out through the same delivery as a
   });
   assert.deepEqual(r.sent.map((s) => [s.text, s.attachments?.length]), [["Your pass", 1]]);
   assert.equal(r.sent[0]!.attachments![0]!.endsWith("/pass.pdf"), true);
+  assert.deepEqual(r.kinds, ["file"]);
   assert.deepEqual(r.existed, [true]);
   assert.equal(existsSync(r.sent[0]!.attachments![0]!), false);
 });

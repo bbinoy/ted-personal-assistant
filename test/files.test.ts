@@ -8,6 +8,7 @@ import { OPEN_TOOL } from "../src/modules/files/module.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { adoptFile, dropShots, loadFile, MAX_FILES, withTempFile } from "../src/modules/send/shots.ts";
 import { MAX_PDF_PAGES } from "../src/conversation/document.ts";
+import { isPicture } from "../src/conversation/openbytes.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { classify } from "../src/policy/policy.ts";
 import { OWNER_CHAT, GROUP_CHAT } from "./runkinds.ts";
@@ -43,7 +44,7 @@ test("open_file: a text file comes back fenced in the result; no block is swappe
 
 test("open_file: anything but a PDF or text is refused, as are a fake PDF, a long PDF, an encrypted one, a failed fetch; nothing is kept", async () => {
   const bad: [Buffer, string, RegExp][] = [
-    [Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), "photo.jpg", /can't open that kind of file/],
+    [Buffer.from("MZ\u0090\u0000program"), "tool.exe", /can't open that kind of file/],
     [Buffer.from("PK\u0003\u0004zip"), "a.zip", /can't open that kind of file/],
     [Buffer.from("just text"), "fake.pdf", /not a real PDF/],
     [pdf(MAX_PDF_PAGES + 1), "long.pdf", /pages/],
@@ -104,15 +105,32 @@ test("send: a file goes out as a file attachment from a temp copy that is delete
   assert.equal("problem" in loadFile(OWNER_KEY, "file1"), true, "the turn's files are dropped with it");
 });
 
-test("Mailbird's attachment result is read tolerantly: base64 under content, data, or as the text itself, with its file name", () => {
-  const b64 = pdf().toString("base64");
-  for (const res of [{ fileName: "a.pdf", content: b64 }, { attachment: { name: "a.pdf", data: b64 } }, [{ contentBase64: b64, name: "a.pdf" }], b64]) {
-    const got = attachmentOf(res)!;
-    assert.deepEqual(got.bytes, pdf(), JSON.stringify(res).slice(0, 30));
-    if (typeof res !== "string") assert.equal(got.name, "a.pdf");
-  }
-  assert.equal(attachmentOf({ error: "no such attachment", size: 5 }), undefined);
-  assert.equal(attachmentOf("not base64 at all, sorry!"), undefined);
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAHnOcQAAAAABJRU5ErkJggg==", "base64");
+const meta = (name: string, mimeType: string) => ({ type: "text", text: JSON.stringify({ attachmentId: 9300, fileName: name, mimeType, size: 233, resourceUri: "mailbird://mcp/messages/1/attachments/9300" }) });
+
+test("Mailbird's attachment result: an image item or a resource blob gives the bytes, the name comes from the metadata text; no bytes item gives nothing", () => {
+  const image = attachmentOf([meta("inline.png", "image/png"), { type: "image", data: PNG.toString("base64"), mimeType: "image/png" }])!;
+  assert.deepEqual([image.name, image.bytes], ["inline.png", PNG]);
+  const blob = attachmentOf([meta("pass.pdf", "application/pdf"), { type: "resource", resource: { uri: "mailbird://x", mimeType: "application/pdf", blob: pdf().toString("base64") } }])!;
+  assert.deepEqual([blob.name, blob.bytes], ["pass.pdf", pdf()]);
+  assert.equal(attachmentOf([meta("big.zip", "application/zip")]), undefined);
+  assert.equal(attachmentOf([{ type: "text", text: "no such attachment" }]), undefined);
+  assert.equal(attachmentOf("junk"), undefined);
+});
+
+test("open_file: a picture (an inline barcode) is shown as an image, kept as file1, and sent as a picture; a missing-bytes fetch is refused", async () => {
+  const r = await openNow(OWNER_KEY, { messageId: 1, attachmentId: "a" }, source(PNG, "barcode.png"));
+  assert.equal(r.isError, undefined);
+  assert.equal(r.content[0]!.type, "image");
+  assert.match(text(r), /file1: barcode\.png, picture\./);
+  assert.equal(openedBlocks(OWNER_KEY, text(r)), undefined, "no document swap for a picture");
+  assert.equal(isPicture((loadFile(OWNER_KEY, "file1") as { file: { bytes: Buffer } }).file.bytes), true);
+  assert.equal(isPicture(pdf()), false);
+  dropShots(OWNER_KEY);
+  const none = await openNow(OWNER_KEY, { messageId: 1, attachmentId: "a" }, async () => {
+    throw new Error("get_attachment_content returned no file content");
+  });
+  assert.equal(none.isError, true);
 });
 
 test("open_file: the tool is the owner's only (her Mailbird): free and untrusted for her, denied to a group; its server is built on a source", () => {

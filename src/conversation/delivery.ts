@@ -5,6 +5,7 @@ import type { Conversation, PipelineDeps, Turn, TurnResult } from "./conversatio
 import { shouldThread } from "./quote.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
+import { isPicture } from "./openbytes.ts";
 import { withTempFile } from "../modules/send/shots.ts";
 import { splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
@@ -107,11 +108,11 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         told = `Sent ${c.id} as a picture.`;
       } else if (c.kind === "file") {
         const caption = c.caption.trim();
-        await withTempFile(c.held, (file) => out.sendAttachment({ file, kind: "file" }, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target })); // (the temp copy signal-cli reads is deleted right after)
+        await withTempFile(c.held, (file) => out.sendAttachment({ file, kind: isPicture(c.held.bytes) ? "picture" : "file" }, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target })); // (the temp copy signal-cli reads is deleted right after)
         state.spoke = true;
         state.pieces++;
         console.log(`${conv.kind} file sent (${c.id}, ${c.size} bytes)`);
-        told = `Sent ${c.id} (${c.held.name}) as a file.`;
+        told = `Sent ${c.id} (${c.held.name}) as ${isPicture(c.held.bytes) ? "a picture" : "a file"}.`;
       } else {
         const words = SILENT.test(c.text) ? "" : c.text.trim(); // (a text goes out as one message per paragraph, outbound.ts reply; a voice note speaks the whole)
         let spoken = false;

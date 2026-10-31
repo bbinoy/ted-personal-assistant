@@ -57,7 +57,7 @@ export interface ModuleLifecycle {
 // open_file's source: Mailbird's get_attachment_content over code's own connection (made when first needed), so the bytes never pass through the model.
 let attachmentClient: Mailbird | undefined;
 const mailbirdAttachments: AttachmentSource = async (a) => {
-  const res = await (attachmentClient ??= new Mailbird()).call("get_attachment_content", { messageId: a.messageId, attachmentId: a.attachmentId });
+  const res = await (attachmentClient ??= new Mailbird()).content("get_attachment_content", { messageId: a.messageId, attachmentId: a.attachmentId });
   const got = attachmentOf(res);
   if (!got) throw new Error("get_attachment_content returned no file content");
   return got;

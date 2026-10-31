@@ -17,10 +17,11 @@ holds what is particular to Mailbird.
   (`list_folders`, then `list_conversations`).
 - **Reading** is `get_message` with the row's `lastMessageId`. Rows carry only a
   short preview.
-- **Attachments.** `list_attachments` (ids as the message gives them), then
-  `open_file` with the `messageId` and `attachmentId` it returned: you get the PDF or
-  text file itself (anything else is refused) and an id like `file1`. To send it to the
-  owner, `send` with `file: "file1"` (and a short caption). Only when the task needs
+- **Attachments.** `list_attachments` (ids as the message gives them; inline images such as
+  a boarding pass's barcode show with `isInline`), then `open_file` with the `messageId`
+  and `attachmentId` it returned: you see the picture, PDF or text file itself (anything
+  else is refused) and an id like `file1`. To send it to the
+  owner, `send` with `file: "file1"` (a picture goes out as a picture; add a short caption). Only when the task needs
   the content, not for routine triage.
 - **Archive** is `archive_conversation` (reversible: `npm run restore <id>`). Never
   `trash_conversation` or `delete_conversation_permanently`, never spam or block.

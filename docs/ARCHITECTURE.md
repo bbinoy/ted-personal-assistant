@@ -446,6 +446,7 @@ src/conversation/lang.ts  the voice reply's language check
 src/conversation/ledger.ts  wake/action ledger in the log: when a look is due
 src/conversation/markdown.ts  Markdown to Signal text styles
 src/conversation/messenger.ts  the app's meeting point with the chat platform
+src/conversation/openbytes.ts  bytes the assistant fetched (a mail attachment) made ready for the model
 src/conversation/outbound.ts  sending, echo guard, retry of a failed send, one message per paragraph
 src/conversation/ownercommands.ts  /stop /pause /resume /status /today /quiet /tasks
 src/conversation/queue.ts  bursts, one turn at a time per conversation
