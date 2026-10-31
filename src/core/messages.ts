@@ -40,11 +40,12 @@ export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" 
 export interface Wake {
   next: string; // ISO: the next look
   looked: string; // ISO: when the look that chose it began (anything said after it is news)
+  quiet?: true; // the look was called off by a message: it is due again once the conversation has been quiet for a while (ledger.ts QUIET_MINUTES), whatever `next` says
 }
 export function parseWake(text: string): Wake | undefined {
   try {
     const w = JSON.parse(text) as Partial<Wake>;
-    return typeof w.next === "string" && Number.isFinite(Date.parse(w.next)) && typeof w.looked === "string" && Number.isFinite(Date.parse(w.looked)) ? { next: w.next, looked: w.looked } : undefined;
+    return typeof w.next === "string" && Number.isFinite(Date.parse(w.next)) && typeof w.looked === "string" && Number.isFinite(Date.parse(w.looked)) ? { next: w.next, looked: w.looked, ...(w.quiet === true ? { quiet: true as const } : {}) } : undefined;
   } catch {
     return undefined;
   }

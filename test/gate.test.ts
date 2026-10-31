@@ -123,6 +123,19 @@ test("ledger: the last wake line is the state; due on time, on news, on a change
   assert.equal(lookState([entry("wake", 0, "garbage")]).wake, undefined); // unreadable state: look again
 });
 
+test("ledger: a called-off look is due once the conversation has been quiet for 3 minutes, not at the normal slot; a new message pushes it back", () => {
+  const off = (min: number) => entry("wake", min, JSON.stringify({ next: at(min), looked: at(min - 1), quiet: true }));
+  const st = lookState([wake(-40, 30), entry("owner", 0, "hi"), off(1)]);
+  assert.equal(st.wake?.quiet, true);
+  assert.equal(lookDue(st, new Date(T0.getTime() + 3 * 60_000)), false, "2 minutes after the call-off: wait");
+  assert.equal(lookDue(st, new Date(T0.getTime() + 4 * 60_000)), true, "quiet for 3 minutes, long before 30");
+  const again = lookState([wake(-40, 30), off(1), entry("owner", 3, "one more")]);
+  assert.equal(lookDue(again, new Date(T0.getTime() + 5 * 60_000)), false, "a message in the quiet window pushes it back");
+  assert.equal(lookDue(again, new Date(T0.getTime() + 6 * 60_000)), true);
+  assert.equal(lookDue(again, new Date(T0.getTime() + 6 * 60_000), { messagesCount: false }), true, "a tagged group too");
+  assert.equal(lookState([wake(0, 30)]).wake?.quiet, undefined, "a completed look books the model's time as before");
+});
+
 test("ledger: wakeText clamps the next look", () => {
   const w = JSON.parse(wakeText(5, T0, T0.getTime()));
   assert.equal(w.next, at(15));
