@@ -26,7 +26,7 @@ import { prepareJudge } from "./approvaljudge.ts";
 // Payments and the browse guard's steps never come here (permissions.ts): they keep the blocking ask. The grant is the only thing a yes leaves; an approval is the chat's own answer (approvals.ts
 // scopes it), so no text a run, a mail or another conversation relays can create one. This module cannot import the conversation pipeline: main.ts hands the continuation in (setContinuation).
 
-const GRANT_MINUTES = 15; // a yes that no run has used within this long is void
+const GRANT_MINUTES = 5; // a yes only has to last until its continuation runs; one that no run has used by then is void
 let proceed: (scope: string, prompt: string, provenance?: RunProvenance) => void = () => {};
 /** main.ts (wiring.ts): how a continuation turn enters the conversation `scope`. `provenance`: what led to the turn that asked (the judge reads that, never the prompt below). */
 export const setContinuation = (fn: typeof proceed): void => void (proceed = fn);
@@ -34,7 +34,7 @@ export const setContinuation = (fn: typeof proceed): void => void (proceed = fn)
 const callBlock = (tool: string, input: Record<string, unknown>) => fence("approved_call", JSON.stringify({ tool, input }, null, 2));
 const changed = (changes?: readonly Change[]) => (changes?.length ? `They approved it with a change (${changes.map((c) => `${c.field} = ${c.value}`).join(", ")}); the arguments above already include it.\n` : "");
 const approvedPrompt = (tool: string, input: Record<string, unknown>, changes?: readonly Change[]) =>
-  `The person you asked said yes in this conversation, so this call is approved:\n${callBlock(tool, input)}\n${changed(changes)}Run it now, exactly as given (one call, the same tool and arguments), then report the outcome in your own words, and carry on with what you were doing.`;
+  `The person you asked said yes in this conversation, so this call is approved:\n${callBlock(tool, input)}\n${changed(changes)}Run it now, exactly as given (one call, the same tool and arguments), unless a later message from the person cancels or changes it (then do not run it, and answer that message), then report the outcome in your own words, and carry on with what you were doing.`;
 const repliedPrompt = (tool: string, input: Record<string, unknown>, reply: string, failure?: string) =>
   `You asked the person to approve this call:\n${callBlock(tool, input)}\nThey did NOT approve it${failure ? ` (${failure})` : ""}. Nothing was executed. Their reply:\n${fence("their_reply", reply)}\nMake a new proposal now (call the tool again with the arguments changed as that reply asks; a fresh question is asked) if you still want to act, otherwise answer them. Do not repeat the original unchanged.`;
 

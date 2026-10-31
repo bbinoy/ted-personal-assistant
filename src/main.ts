@@ -134,7 +134,7 @@ const tenantRunner = createTenantRunner({});
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt, continuation) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
   if (continuation && !ownerMessage) {
-    if (continuation.provenance) turn.carry(continuation.provenance); // (a call the person approved: the judge reads what led to the asking, never the prompt or the arguments in it)
+    turn.carry(continuation.provenance ?? null); // (a call the person approved: the judge reads what led to the asking, never the prompt or the arguments in it)
   } else turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
   return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents, !!continuation) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents, untrusted: !!continuation }), hooks?.firstOutput)).finally(() => turn.end());
 };

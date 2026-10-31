@@ -20,6 +20,7 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import type { AnswerDeps } from "../src/approvals/approvals.ts";
 import { settings } from "../src/core/settings.ts";
 import * as T from "../src/tenants/tenants.ts";
+import { sessionTaint } from "../src/run/chatsession.ts";
 import { runConversation } from "../src/run/agent.ts";
 import { readSession } from "../src/run/sessionstore.ts";
 import { BROWSE_RUN, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
@@ -406,7 +407,8 @@ test("a group continuation runs without the gate, takes no member's address, and
   assert.equal(gated, 0);
   assert.equal(seen.length, 1);
   assert.match(seen[0]!.prompt, /approved call text/);
-  assert.doesNotMatch(seen[0]!.prompt, /You were addressed|Nobody addressed/);
+  assert.doesNotMatch(seen[0]!.prompt, /You were addressed/);
+  assert.match(seen[0]!.prompt, /Nobody addressed you directly[^\n]*leave them unanswered/, "chatter in the same burst is still answered only if it fits");
   assert.equal(seen[0]!.untrusted, true);
   assert.deepEqual(reacts, []);
   assert.deepEqual(quotes, [undefined]);
@@ -426,23 +428,44 @@ test("a judge that cannot read a message leaves handed-off questions open; an un
   await tick();
 });
 
-test("a new message voids a yes that was not used yet (\"wait, don't\"); a question still waiting stays", async () => {
+test("a message after the yes voids nothing: thanks leaves the call to run once with no second question; a cancelling message reaches the model in the continuation's burst", async () => {
   const can = canOf();
   const input = event();
   await can(CAL, input, opts);
   answerReaction("👍", sent.at(-1)!.ts);
   await tick();
-  const waiting = event();
-  await can(CAL, waiting, opts);
   const { pipeline } = rig2(true);
-  const msg: Incoming = { type: "message", m: { from: "+10000000000", text: "wait, don't", timestamp: 77, direct: true } };
-  await pipeline.handleIncoming(owner(), msg);
+  await pipeline.handleIncoming(owner(), { type: "message", m: { from: "+10000000000", text: "thanks", timestamp: 77, direct: true } });
   const s0 = sent.length;
-  assert.match(((await can(CAL, input, opts)) as { message: string }).message, HANDED, "the voided yes does not run it; a fresh question");
-  assert.equal(sent.length, s0 + 1);
-  assert.equal(rows("owner").filter((r) => r.status === "pending").length >= 1, true);
+  assert.equal(((await can(CAL, input, opts)) as { behavior: string }).behavior, "allow", "runs once");
+  assert.equal(sent.length, s0, "no second question");
+  assert.match(continued.at(-1)!.prompt, /unless a later message from the person cancels or changes it/);
+  const both = rig2(true);
+  await Promise.all([
+    both.pipeline.handleIncoming(owner(), { type: "message", m: { from: "+10000000000", text: "wait, do not", timestamp: 78, direct: true } }),
+    both.pipeline.continuation(owner(), continued.at(-1)!.prompt),
+  ]);
+  assert.equal(both.calls.length, 1);
+  assert.match(both.calls[0]![1] as string, /wait, do not[\s\S]*cancels or changes it/);
   closeAll();
   await tick();
+});
+
+test("a continuation whose asking turn had no provenance has none: the call asks, an older message never stands in", async () => {
+  const scope = scopeOf("owner");
+  scope.say("an older message with evil@example.com");
+  scope.carry(null);
+  assert.equal(scope.read(), undefined);
+  scope.end();
+  assert.equal((scope.read() as { message: string }).message, "an older message with evil@example.com", "an ordinary turn is unchanged");
+});
+
+test("a continuation with no session to resume is untrusted for the whole run", async () => {
+  const fresh = group("g-fresh-untrusted");
+  let during: boolean | undefined;
+  const query = (() => (async function* () { during = sessionTaint(fresh.convId, undefined).read(); yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s-fresh", total_cost_usd: 0, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } }; })()) as never;
+  await runConversation(fresh, {}, () => ({ prompt: "approved call", untrusted: true }), undefined, { query });
+  assert.equal(during, true);
 });
 
 test("a question that was sent but could not be stored is a failure, not a no", async () => {

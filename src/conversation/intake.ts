@@ -15,7 +15,6 @@ import { scopeOf } from "../approvals/turnscope.ts";
 import { createGroupAnswering, speaker, type Go } from "./group.ts";
 import { replayPrompt } from "./replay.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
-import { voidGrants } from "../approvals/pendingstore.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { voiceOption } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
@@ -295,7 +294,6 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       if (await approvalAnswer(conv, m, author)) return;
     }
     forgetDeclined(conv.key); // 4. a new message: they may be asking for a declined action again (declined.ts)
-    voidGrants(conv.key); // ...and a yes not yet used is void: this may be them taking it back ("wait, don't"); a question still waiting stays open
     const e: Entry = { ...m, line, said: w.say(m, line, LIMITS.message), author, arrivedAt: arrived };
     if (w.forUs(m)) overtake(conv); // 5. a look of this conversation that is running gives way to the turn (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
     if (!w.mayAnswer(m)) return;

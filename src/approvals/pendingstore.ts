@@ -58,12 +58,6 @@ export function grantPending(scope: string, id: string, input: Record<string, un
 /** One unused yes void (a restart came first). */
 export const voidGrant = (scope: string, id: string): boolean => db(scope).run("UPDATE pending_actions SET status = 'superseded' WHERE id = ? AND status = 'granted'", id).changes === 1;
 
-/** A new message from the people of the conversation: a yes not yet used is void (they may be taking it back, "wait, don't"). A question still waiting stays open. */
-export function voidGrants(scope: string): number {
-  const d = peekConvDb(convIdOfKey(scope));
-  return d ? d.run("UPDATE pending_actions SET status = 'superseded' WHERE conv = ? AND status = 'granted'", scope).changes : 0;
-}
-
 /** The single-use grant for exactly this call in this conversation, if one is live and the description still hashes as asked. Consumed atomically: two callers cannot both get it. */
 export function takeGrant(scope: string, tool: string, input: Record<string, unknown>, hash: string, now: number): Pending | undefined {
   const d = peekConvDb(convIdOfKey(scope));
