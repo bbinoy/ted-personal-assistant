@@ -71,9 +71,9 @@ export const googleModule: ToolModule = {
     perRun: archiveGate, // a friend's INBOX removal is an archive too (archivecap.ts)
     confirmDelete: { tools: ["manage_event"], actions: ["delete"] }, // her calendar delete: a destructive action the judge handles with care, asked in HER chat (neverallowed.ts ConfirmDelete)
     onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
-    // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email
-    // people, and every answer to an invite, is the person's call; a delete that names guests is asked, never judged: judgeVeto below).
-    judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input), [DELETE_CONFIRM]: namesNoGuests },
+    // A mail nobody can be named for is not judged; a calendar event is judged when it is created or changed, guests included, like a send (every answer to an
+    // invite is the person's call; a delete that names guests is asked, never judged: judgeVeto below).
+    judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)), [DELETE_CONFIRM]: namesNoGuests },
     creates: (name, input) => (name === "manage_event" && calendarAction(input) === "create") || name === "draft_gmail_message",
     noFix: ["send"],
     judgeNote: { "calendar-write": notifyLine },

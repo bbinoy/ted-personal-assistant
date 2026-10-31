@@ -30,7 +30,7 @@ test("a friend's broken connection says nothing in the owner's chat; it is held 
   assert.doesNotMatch(held[0]!, /friend-/);
 });
 
-test("a background approval that lapsed is told to the next look once, with its age; a chat turn is not handed it", async (t) => {
+test("a background approval that lapsed is told to the next run once, with its age: a chat turn is handed it as a look is", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const conv = owner();
   const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
@@ -39,7 +39,9 @@ test("a background approval that lapsed is told to the next look once, with its 
   assert.equal((await asked).expired, true);
   closeAllConvDbs(); // a restart: the entry is in the file
   const now = new Date(Date.now() + 5 * 60_000);
-  assert.ok(!factsFor(conv, now, true).status.some((s) => /lapsed unanswered/.test(s)));
+  const chat = factsFor(conv, now, true);
+  assert.ok(chat.status.some((s) => /lapsed unanswered/.test(s)), "a chat turn is told too (the hand-off leaves silence and a no to the next run)");
+  chat.done({ ended: false, said: false });
   const look = factsFor(conv, now, false);
   const line = look.status.find((s) => /lapsed unanswered/.test(s));
   assert.ok(line && /Create event Dentist/.test(line) && /no answer within 15 min/.test(line) && /5 min ago/.test(line), String(line));

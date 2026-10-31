@@ -6,6 +6,10 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { describeCall } from "../src/approvals/format.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { knownPeople } from "../src/modules/people/people.ts";
 import { CHAT } from "./util.ts";
 import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
@@ -70,6 +74,52 @@ test("a send in an untrusted run to someone the owner did not name is never judg
   scopeOf("owner").say("send it to jessica@example.com");
   assert.equal((await run(true)(SEND, { messageId: 803, confirm: true }, opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "the owner wrote the address: judged");
+});
+
+const notes = (files: Record<string, string>): string => {
+  const d = mkdtempSync(join(tmpdir(), "known-"));
+  for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), t);
+  return d;
+};
+const ANNA = { "people-anna-clements.md": "Anna Clements. anna.clements@example.com" };
+
+test("recipientsOutside: an address is the person's when verbatim in their words, or a known person's whose first name they said; a word in an address proves nothing", () => {
+  const v = { action: "send" as const, to: ["anna.clements@example.com", "anna@evil.example"], cc: [], bcc: [] };
+  const known = knownPeople(notes(ANNA));
+  assert.deepEqual(recipientsOutside(v, {}, owner("I booked, update the calendar and invite Anna"), known), ["anna@evil.example"], "a known Anna's address is named; another address with her name is not");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna")), ["anna.clements@example.com", "anna@evil.example"], "no known people: only verbatim counts");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite her"), known), ["anna.clements@example.com", "anna@evil.example"], "no name, no match");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite annabelle"), known), ["anna.clements@example.com", "anna@evil.example"], "a whole word, not a prefix");
+  assert.deepEqual(recipientsOutside(v, {}, owner("send to anna@evil.example")), ["anna.clements@example.com"], "verbatim still counts");
+  const al = knownPeople(notes({ "people-al.md": "Al. al@example.com" }));
+  assert.deepEqual(recipientsOutside({ ...v, to: ["al@example.com"] }, {}, owner("call al"), al), ["al@example.com"], "names under three letters never match");
+  // Common words in an injected address are no longer enough.
+  const injected = { action: "send" as const, to: ["thanks@evil.example", "please@x.example", "the.team@x.example", "send.slides@x.example"], cc: [], bcc: [] };
+  assert.deepEqual(recipientsOutside(injected, {}, owner("thanks, please send the slides to the team"), known), injected.to);
+});
+
+test("a friend's run uses the friend's own people, never the owner's", () => {
+  const owners = notes(ANNA);
+  const friends = notes({ "people-ben-hall.md": "Ben Hall. ben.hall@example.org" });
+  const v = { action: "send" as const, to: ["anna.clements@example.com"], cc: [], bcc: [] };
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna"), knownPeople(friends)), ["anna.clements@example.com"]);
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna"), knownPeople(owners)), []);
+});
+
+test("an event with guests is judged; in an untrusted run only when the person named every guest", async () => {
+  let judged = 0;
+  let asked = 0;
+  const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "fine" });
+  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, notes(ANNA), judge as never, undefined, undefined, false, { provenance: scopeOf("guests").read, conversation: "guests", untrusted });
+  let day = 4;
+  const event = (guest: string) => (day++, { summary: "Dinner", startTime: `2026-11-0${day}T19:00:00`, endTime: `2026-11-0${day}T21:00:00`, attendees: [{ email: guest }] });
+  scopeOf("guests").say("dinner tomorrow at 7, invite Anna");
+  assert.equal((await run(false)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "a trusted run: the judge decides about the guest");
+  assert.equal((await run(true)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 2, asked: 0 }, "untrusted, but the owner named Anna: judged");
+  assert.equal((await run(true)(CAL, event("billing@evil.example"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "untrusted and nobody named this guest: the owner is asked, the judge is not");
 });
 
 // ---- a wake-up is judged like a chat message ----

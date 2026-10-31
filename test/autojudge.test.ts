@@ -6,13 +6,14 @@ const CAL = "mcp__claude_ai_Google_Calendar__";
 const MB = "mcp__mailbird__";
 const own = (message: string, o: Partial<Extract<Provenance, { kind: "owner" }>> = {}): Provenance => ({ kind: "owner", message, ...o });
 
-test("judge floor: calendar events with a guest are never judged; the same floor for a new and an existing event", () => {
+test("judge floor: calendar events are judged with or without guests, new or existing (an untrusted run's unnamed guest is asked: permissions.ts)", () => {
   assert.equal(isJudgeable(`${CAL}create_event`, { summary: "Pottery", startTime: "2026-10-14T16:00:00" }), true);
   assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", attendees: [] }), true);
   assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", location: "Balboa" }), true);
-  assert.equal(isJudgeable(`${CAL}create_event`, { summary: "Coffee", attendees: [{ email: "a@example.com" }] }), false);
-  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), false);
-  assert.equal(isJudgeable(`${CAL}create_event`, { guests: ["a@example.com"] }), false);
+  assert.equal(isJudgeable(`${CAL}create_event`, { summary: "Coffee", attendees: [{ email: "a@example.com" }] }), true);
+  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), true);
+  assert.equal(isJudgeable(`${CAL}create_event`, { guests: ["a@example.com"] }), true);
+  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), false, "a delete that names guests emails a cancellation");
 });
 
 test("judge floor: what the judge may see at all: routine upkeep yes; sharing, stopping a tenant, unknown tools and trading no", () => {

@@ -41,7 +41,7 @@ function approvalSummary(hours: number) {
 // Mail the assistant archived (the heartbeat run, a chat turn, the brief): read from the audit log, which records the id of every archive call. `npm run restore <id>` puts one back.
 function archiveSummary(hours: number) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const rows = readAudit((e) => e.ts > since && ["allow", "auto-approved", "ask-approved"].includes(e.decision) && entryFor(e.tool)?.action === "archive");
+  const rows = readAudit((e) => e.ts > since && ["allow", "auto-approved", "ask-approved", "granted-run"].includes(e.decision) && entryFor(e.tool)?.action === "archive");
   if (rows.length === 0) return console.log(`Nothing archived in the last ${hours}h.`);
   console.log(`Archived in the last ${hours}h (${rows.length}); npm run restore <id> puts one back:`);
   for (const e of rows) console.log(`  ${localTime(e.ts)}  ${e.source}  ${String((e.meta?.ids as { conversationId?: unknown } | undefined)?.conversationId ?? "(id not recorded)")}`);

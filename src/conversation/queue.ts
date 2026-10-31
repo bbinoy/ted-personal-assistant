@@ -1,4 +1,5 @@
 import { startTiming } from "../core/timing.ts";
+import { inFlight } from "../approvals/pendingstore.ts";
 import type { Batch, Conversation, PipelineDeps } from "./conversationmodel.ts";
 
 // The queue of every conversation: who is waiting, who runs, which unattended look is out. This module owns the three maps (bursts, tails, looks) and nothing else writes them.
@@ -28,9 +29,9 @@ export function createQueue(deps: Pick<PipelineDeps, "now" | "wait" | "settleMs"
     return run;
   }
 
-  // Is a turn of this conversation settling, queued or running (a chat turn, a reaction, a compaction, a post)? An unattended run (the heartbeat look) does not start then: it
+  // Is a turn of this conversation settling, queued or running (a chat turn, a reaction, a compaction, a post), or a question handed off to the database waiting for its yes (or a yes not yet used)? An unattended run (the heartbeat look) does not start then: it
   // would work from a log the turn is still changing and could contradict what the turn says. It is only delayed: the free tick looks again.
-  const busy = (conv: Conversation): boolean => tails.has(conv.key) || !!bursts.get(conv.key)?.pending.length;
+  const busy = (conv: Conversation): boolean => tails.has(conv.key) || !!bursts.get(conv.key)?.pending.length || inFlight(conv.key, now());
 
   // The LEASE of an unattended look (heartbeat/look.ts): a look runs outside the queue (it may wait hours on an approval), so what keeps it from fighting a chat turn over the same
   // mail is this. A look is only started while the conversation is not busy (above); once it runs, a message that arrives for the conversation OVERTAKES it: the look is called

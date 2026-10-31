@@ -1,4 +1,5 @@
 import { setApprovers } from "../approvals/permissions.ts";
+import { setContinuation } from "../approvals/handoff.ts";
 import { factsFor } from "./facts.ts";
 import { turnFactsFrom } from "../run/turncontext.ts";
 import { removeFriend } from "../conversation/tenantremoval.ts";
@@ -9,17 +10,19 @@ import { tenantHooks } from "../tenants/tenanttools.ts";
 // main.ts builds an AppContext and calls wire(). A hook missing here stops the start with its name, instead of a notice or a question silently going nowhere later.
 export interface AppContext {
   approvers: Parameters<typeof setApprovers>[0]; // who is asked about a call, in the conversation that triggered it (approvers.ts)
+  continuation: Parameters<typeof setContinuation>[0]; // a turn for a call the person approved (or a reply to re-propose from), entered into the conversation named by its key (approvals/handoff.ts)
   dropTenant: (id: string) => void; // a suspended or removed tenant: her warm process and every connection of hers stop (tenanttools.ts)
   sendFirst?: NonNullable<typeof tenantHooks.sendFirst>; // the owner's hello to a number or username (invite_person); absent where the platform has none, by design
 }
 
 let wired = false;
 export function wire(ctx: AppContext): void {
-  const missing = (["approvers", "dropTenant"] as const).filter((k) => typeof ctx[k] !== "function");
+  const missing = (["approvers", "continuation", "dropTenant"] as const).filter((k) => typeof ctx[k] !== "function");
   if (missing.length) throw new Error(`startup wiring incomplete: ${missing.join(", ")} not set (main.ts builds the AppContext)`);
   if (wired) throw new Error("startup wiring runs once");
   wired = true;
   setApprovers(ctx.approvers);
+  setContinuation(ctx.continuation);
   turnFactsFrom((conv, now) => factsFor(conv, now, true)); // every chat turn gets the facts a look gets (facts.ts)
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;

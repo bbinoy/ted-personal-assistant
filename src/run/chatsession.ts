@@ -141,7 +141,7 @@ export interface Taint {
 export function sessionTaint(conv: ConvId | undefined, resume: string | undefined): Taint {
   let here = false; // this run
   return {
-    read: () => here || (!!conv && !!resume && readSession(conv).untrustedIn === resume),
+    read: () => here || (!!conv && readSession(conv).untrustedIn === (resume ?? "pending")), // (a fresh run reads the "pending" mark of its own turn: a continuation marks it before the run, whatever process serves it)
     mark: () => {
       here = true;
       if (conv) writeSession(conv, { ...readSession(conv), untrustedIn: resume ?? "pending" }); // (a fresh run does not know its session id yet: consume() fills it in)

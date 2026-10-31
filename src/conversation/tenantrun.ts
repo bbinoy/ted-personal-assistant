@@ -22,7 +22,7 @@ const SILENT = "[[silent]]";
 
 export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)
-  ask?: (ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>;
+  ask?: (ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], untrusted?: boolean) => Promise<{ text: string; costUsd?: number }>;
   now?: () => number;
 }
 
@@ -30,12 +30,12 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const now = deps.now ?? Date.now;
   const may = (conv: Conversation, what: string) => mayRun(conv, what, { chat: true, now: now(), key: deps.apiKey }); // she wrote: no pause switch; her cooldown, budget and the key
   // Her turn is a conversation turn like any other (agent.ts): her record decides the options, the instance key is the one thing she brings.
-  const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, chatTurn(tenant(ctx.id), { prompt, pictures, documents }), hooks?.firstOutput));
+  const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], untrusted?: boolean) => runConversation(tenant(ctx.id), { apiKey }, chatTurn(tenant(ctx.id), { prompt, pictures, documents, untrusted }), hooks?.firstOutput));
 
   // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every 30 minutes)
   const refuse = (ctx: TenantContext, reason: Reason, o: { until?: string; limit?: number } = {}) => ({ text: refusalOnce(reason, "friend", ctx.convId, o, now()) ?? SILENT });
 
-  async function run(conv: Conversation, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]): Promise<{ text: string; costUsd?: number }> {
+  async function run(conv: Conversation, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], untrusted?: boolean): Promise<{ text: string; costUsd?: number }> {
     const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
     if (!rec) return { text: SILENT };
     const ctx = tenantContext(rec);
@@ -48,7 +48,7 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     if (payer.kind !== "instance") return { text: SILENT };
     let r: Awaited<ReturnType<typeof ask>>;
     try {
-      r = await ask(ctx, payer.apiKey, prompt, pictures, hooks, documents);
+      r = await ask(ctx, payer.apiKey, prompt, pictures, hooks, documents, untrusted);
     } catch (e) {
       if (e instanceof InstanceKeyError) setPaused(ctx, cooldownOf(payer, now())); // for doctor, which is another process (the owner's notice is made where the failure is, errors.ts)
       throw e;

@@ -8,6 +8,7 @@ import { addrs, type MailView } from "../policy/mailview.ts";
 import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "../policy/toolmanifest.ts";
 import type { Source } from "../core/audit.ts";
 import { LIMITS } from "../core/sanitize.ts";
+import { addressesNamedIn, type Candidate } from "../modules/people/people.ts";
 
 // The approval judge: a small second opinion on every action that is not a plain read. The same path in every place (chat, group, tenant, mail
 // handler, brief, radar, wake-up, browse): the code floor first (policy.ts classify, isJudgeable below), then this judge, then the question on the owner's phone.
@@ -46,13 +47,17 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
   return veto ? veto(input, view) : true;
 }
 
-// Pure: the recipients of an outgoing mail that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail or pages may have had
-// its recipient steered, so such a send is never judged (permissions.ts): the owner is asked. An address counts as the person's when it is written in their message (or the earlier
-// ones); a reply whose recipients the call does not name itself goes to the thread's own people. A standing task or a wake-up has no words of a person's: every named recipient is outside.
-export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined): string[] {
-  const words = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n").toLowerCase();
+// Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
+// or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
+// the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Anna" covers the
+// Anna of the notes; the judge still sees the whole address). A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
+// the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
+export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = []): string[] {
+  const text = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n");
+  const words = text.toLowerCase();
+  const byName = addressesNamedIn(text, known);
   const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
-  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !words.includes(a) && !(view.action === "reply" && !named.has(a)));
+  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !words.includes(a) && !byName.has(a) && !(view.action === "reply" && !named.has(a)));
 }
 
 // Pure: does this mode let a verdict skip the phone?
