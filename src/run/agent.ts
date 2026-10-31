@@ -38,7 +38,7 @@ export interface LookExtra {
 }
 
 // What a trigger says, made once it is known whether the session resumes (`since`: the newest line the session has been shown; groups' chat and every look).
-export type TurnBuilder = (since?: string) => { prompt: string; seenAt?: string; pictures?: Picture[]; documents?: Document[] };
+export type TurnBuilder = (since?: string) => { prompt: string; seenAt?: string; pictures?: Picture[]; documents?: Document[]; untrusted?: boolean }; // untrusted: the prompt carries a third party's words (the continuation of an approved call): the session is marked, so the judge is told from the first call
 
 interface Wiring {
   approve: Approve;
@@ -53,7 +53,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const t = TRIGGERS[trigger];
   const now = w.inputs.now ?? new Date();
   const r = t.fresh ? { resume: undefined, seenAt: undefined } as ReturnType<typeof chatResume> : chatResume(conv.convId);
-  const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
+  const { prompt, seenAt, pictures, documents, untrusted } = build(r.resume ? r.seenAt : undefined);
   const built = runFor(conv, trigger, w.inputs);
   const o: RunOptions = { ...built, ...w.extra?.(built), seenAt, onFirstOutput: w.onFirstOutput };
   // The clock, the same for every run: the conversation's own zone, taken as the run starts, in the message (not the cached system prompt) and in what each expert is told.
@@ -76,6 +76,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
     return fresh ? [{ key, text: fresh }] : [];
   });
   if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark(); // (the session now holds a mail's words: the judge is told from here on)
+  if (untrusted) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark();
   const input = userInput([...shown.map((s) => s.text), clock, prompt].join("\n\n"), pictures, documents);
   let reply: AgentReply;
   try {

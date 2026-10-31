@@ -18,7 +18,8 @@ import { writeFileAtomic } from "./state.ts";
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
-//   lapsed_approvals background approvals nobody answered in time, until a look is told (7 days at most, a retention rule)
+//   lapsed_approvals questions that were declined or nobody answered in time, until the next run is told (7 days at most, a retention rule)
+//   pending_actions  a call waiting for a person's yes after its turn ended, and the single-use grant a yes leaves (src/approvals/pendingstore.ts; pruned after 7 days)
 //   told             what was told once, or at most once a day / in a while, about this conversation: `group-reminder:<member>` = a group member told that a reminder said in the group is the group's (core/told.ts, src/tasks/grouptasks.ts).
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing mail_decisions makes the whole inbox look new once (its decisions are gone), so a damaged file is never quietly replaced by an empty
@@ -278,6 +279,32 @@ export const CONV_SCHEMA: readonly Migration[] = [
         subject  TEXT,
         at       INTEGER NOT NULL                                   -- epoch ms of the decision
       );
+    `,
+  },
+  {
+    version: 29,
+    name: "approval hand-off: a question waits in the database after its turn ended, and a yes leaves a single-use grant; lapsed rows say how they ended",
+    up: `
+      CREATE TABLE pending_actions (
+        id          TEXT PRIMARY KEY,
+        conv        TEXT NOT NULL,                                  -- Conversation.key it was asked in: only an answer there applies
+        tool        TEXT NOT NULL,
+        input       TEXT NOT NULL,                                  -- the exact arguments (JSON); after an approved edit, the edited ones
+        call_key    TEXT NOT NULL,                                  -- callKey(tool, input)
+        render_hash TEXT NOT NULL,                                  -- hash of the code-rendered description (a mail draft as the client holds it): a changed draft needs a new question
+        label       TEXT NOT NULL,                                  -- first line of the description
+        question    TEXT NOT NULL,                                  -- as sent
+        q_ts        INTEGER NOT NULL,                               -- timestamp of the sent question (what a reaction or a quoted reply points at)
+        provenance  TEXT,                                           -- the judge's context (JSON), for the audit
+        untrusted   INTEGER NOT NULL DEFAULT 0,
+        asked_by    TEXT NOT NULL,                                  -- the audit source: chat | group | tenant
+        asked_at    INTEGER NOT NULL,
+        expires_at  INTEGER NOT NULL,                               -- the question lapses here; once granted, the grant does
+        status      TEXT NOT NULL CHECK (status IN ('pending', 'granted', 'declined', 'expired', 'superseded', 'used')),
+        answer      TEXT                                            -- JSON: what the person said (feedback, the edit)
+      );
+      CREATE INDEX pending_by_call ON pending_actions (call_key, status);
+      ALTER TABLE lapsed_approvals ADD COLUMN outcome TEXT NOT NULL DEFAULT 'lapsed'; -- lapsed (nobody answered) | declined
     `,
   },
 ];

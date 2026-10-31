@@ -50,7 +50,7 @@ export function replayPrompt(lines: readonly { at: string; text: string }[]): st
 
 // A tool call that changed something (the permission check logs "allow" for what needs no approval, and the owner's yes as "ask-approved"; a read does not count).
 const BUILTIN_READS = new Set(["Read", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite"]); // (the SDK's own tools that change nothing)
-const DID = new Set(["allow", "auto-approved", "ask-approved", "ask-approved-modified", "covered-by-approval"]);
+const DID = new Set(["allow", "auto-approved", "ask-approved", "ask-approved-modified", "granted-run", "covered-by-approval"]);
 export const SORRY = "I restarted while working on your last message. Some of it may already be done; tell me if you want me to pick it up again.";
 
 // Pure: did a run of this source act (not just read) since `sinceMs`? The audit rows carry the source (chat: the owner's; group: a group's; tenant: a friend's), not the conversation, so for a

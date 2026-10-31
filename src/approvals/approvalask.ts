@@ -6,6 +6,7 @@ import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { argsForAudit } from "./auditargs.ts";
+import { handoffFor } from "./handoff.ts";
 
 // Asking the owner: a model writes the question in one call, code validates it against the exact arguments and the judge checks that it shows the call
 // faithfully (approvalmodel.ts, questionfacts.ts); if that fails nothing is asked. The ask is audited with the FULL arguments, the exact text sent and, afterwards,
@@ -32,7 +33,10 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     const question = c.text; // the model's words, checked against the call by the judge (approvalmodel.ts)
     const asked = structuredClone(call.input);
     row(call.tool, "approval-asked", { args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by });
-    const d = await request(send, description, call, abort, { question, scope, source, typedYes: o?.typedYes });
+    // A question that does not hold the turn (handoff.ts) is stored once sent, and the turn gets "handed off" at once. Never a payment: only the blocking ask below takes a typed yes.
+    const handoff = o?.handoff && !o.typedYes ? handoffFor({ conv: scope, tool: call.tool, input: asked, renderHash: o.handoff.renderHash, label: description.split("\n")[0] ?? "", question, provenance: o.handoff.provenance, untrusted: !!o.untrusted, askedBy: source }, approvals.APPROVAL_TIMEOUT_MINUTES) : undefined;
+    const d = await request(send, description, call, abort, { question, scope, source, typedYes: o?.typedYes, ...(handoff ? { handoff } : {}) });
+    if (d.handedOff) return { ...d, question };
     // Post-hoc, never blocking: is what will run what the question was written for?
     row(call.tool, "approval-outcome", { approved: d.approved, modified: !!d.updatedInput, argsEqual: sameArgs(asked, d.updatedInput ?? call.input), ...(d.feedback ? { feedback: d.feedback.slice(0, LIMITS.line) } : {}), ...(d.updatedInput ? { executed: argsForAudit(d.updatedInput) } : {}) });
     return { ...d, question };

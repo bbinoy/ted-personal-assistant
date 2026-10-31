@@ -60,15 +60,15 @@ function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): strin
   return `Your own posts here in the last ${OWN_POSTS_DAYS} days (newest first):\n${fence("own_posts", lines.join("\n"))}\nDo not repeat a fact, joke, quote or idea you posted in the last ${OWN_POSTS_DAYS} days; a recurring post (daily fact, pep talk) must be new each time.`;
 }
 
-// Background approvals that lapsed unanswered (approvals.ts lapsedIn) and were not yet told to a look of this conversation: one line each, with how long ago (the label is the action as the approval details describe it).
+// Questions that were declined or lapsed unanswered (approvals.ts lapsedIn: background ones, and every question the hand-off left to the database, handoff.ts) and were not yet told to a run of this conversation: one line each, with how long ago (the label is the action as the approval details describe it).
 const LAPSED_DAYS = 7;
 const lapsedKey = (l: Lapsed) => `lapsed:${l.at}`;
 function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): string {
   const db = convDb(convId);
   const fresh = entries.filter((l) => now - l.at < LAPSED_DAYS * 86_400_000 && !db.get("SELECT 1 FROM told WHERE key = ?", lapsedKey(l)));
   if (!fresh.length) return "";
-  const lines = fresh.map((l) => `${oneLine(l.label, 120)} (no answer within ${l.wait}; ${Math.max(1, Math.round((now - l.at) / 60_000))} min ago, nothing was done)`);
-  return `Approvals that lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
+  const lines = fresh.map((l) => `${oneLine(l.label, 120)} (${l.outcome === "declined" ? "declined" : l.outcome === "interrupted" ? "the person said yes, but a restart came before it ran" : `no answer within ${l.wait}`}; ${Math.max(1, Math.round((now - l.at) / 60_000))} min ago, nothing was done)`);
+  return `Questions that were declined or lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
 }
 
 // Everything held back (notices.ts takeHeld, newest first: quiet hours, /quiet or the day's cap) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
@@ -154,7 +154,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
 
-  const lapsedNow = !attended && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
+  const lapsedNow = !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts].filter(Boolean);

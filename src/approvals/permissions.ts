@@ -20,6 +20,7 @@ import { UNSCOPED_KEY } from "../core/ownerkey.ts";
 import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
+import { isAsked, renderHash, takeGrant } from "./pendingstore.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -28,7 +29,7 @@ export type Approve = (
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal,
-  o?: { typedYes?: boolean; provenance?: Provenance; untrusted?: boolean }, // (the context the judge read, shared with the question: judgecontext.ts)
+  o?: { typedYes?: boolean; provenance?: Provenance; untrusted?: boolean; handoff?: { renderHash: string; provenance?: RunProvenance } }, // (the context the judge read, shared with the question: judgecontext.ts) `handoff`: the question does not hold the turn (handoff.ts); the hash is what the person is shown
 ) => Promise<Decision>;
 
 // A conversation nobody can be asked in (not set up, a person who is gone).
@@ -175,6 +176,16 @@ async function renderCall(conversation: string | undefined, tool: string, input:
   return { description, view };
 }
 
+// The hash of what the person is shown for a call, as it renders now (a grant holds only while it is unchanged): the edited call of an approved edit, hashed the way the run will call it.
+export async function renderHashOf(conversation: string, tool: string, input: Record<string, unknown>): Promise<string | undefined> {
+  const r = await renderCall(conversation, tool, input);
+  return "unreadable" in r ? undefined : renderHash(r.description);
+}
+
+// Said to the run when its call was asked and the turn must not wait for the answer (handoff.ts).
+const HANDED_OFF = `Asked ${OWNER}; it runs on their yes. Do not wait or repeat it. Finish anything independent, then end your turn.`;
+const ALREADY_ASKED = `${OWNER} was already asked about exactly this and has not answered yet. Do not ask again or wait; end your turn.`;
+
 export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
   const isUntrusted = () => untrusted || !!setup.taint?.read();
@@ -272,6 +283,21 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       log(tool, "deny-unreadable-draft", source);
       return { behavior: "deny", message: "That mail could not be read back, so it cannot be shown for approval and was not sent." };
     }
+    // A yes the person gave to exactly this call (same tool, arguments and conversation, the draft unchanged since it was shown) lets it run once. Never for a guard step or a payment: they ask in the foreground.
+    const shownHash = renderHash(rendered.description);
+    if (!g && !unattended) {
+      const granted = takeGrant(conversation, tool, input, shownHash, Date.now());
+      if (granted) {
+        log(tool, "granted-run", source, { grant: granted.id, ...idsOf(input) }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "approved", input, granted: granted.question }) } : undefined);
+        if (onceOnly) remember(memo);
+        if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
+        return { behavior: "allow", updatedInput: granted.input };
+      }
+      if (isAsked(conversation, tool, input, shownHash, Date.now())) {
+        log(tool, "deny-already-asked", source);
+        return { behavior: "deny", message: ALREADY_ASKED };
+      }
+    }
     let description = rendered.description;
     const view: MailView | undefined = rendered.view;
     // A decline is final until the person asks again in a new message (declined.ts): the question and the judge are told, and the judge cannot loosen it.
@@ -344,7 +370,11 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
-    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), provenance, untrusted: isUntrusted() });
+    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), ...(g ? {} : { handoff: { renderHash: shownHash, provenance: setup.provenance?.() } }), provenance, untrusted: isUntrusted() });
+    if (d.handedOff) {
+      log(tool, "ask-handed-off", source);
+      return { behavior: "deny", message: HANDED_OFF };
+    }
     if (d.superseded) {
       log(tool, "ask-superseded", source);
       return { behavior: "deny", message: "That question was closed because a newer question about the same action was asked. Nothing was executed; wait for the answer to the newer one." };

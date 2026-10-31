@@ -155,8 +155,8 @@ test("the look: a due reminder makes it run now; its prompt carries the reminder
   const { lookState } = await import("../src/conversation/ledger.ts");
   const { scratchLog } = await import("./scratch.ts");
   const c = { ...owner(), logFile: scratchLog(`rem-look-${Math.random().toString(36).slice(2)}.jsonl`) };
-  const it = S.addItem(scope(c.key, Date.now() - HOUR), { title: "Ring the vet", remindAt: Date.now() - MIN }).item;
-  await T.fireReminders(rig().pipeline, c as never, new Date(), { looks: true });
+  const it = S.addItem(scope(c.key, NOW - HOUR), { title: "Ring the vet", remindAt: NOW - MIN }).item;
+  await T.fireReminders(rig().pipeline, c as never, new Date(NOW), { looks: true });
   const prompts: string[] = [];
   const posted: string[] = [];
   const pipeline = { enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(), record: () => {}, busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(), runTurn: async (_c: unknown, turn: { run: () => Promise<{ text: string }> }) => (posted.push((await turn.run()).text), { spoke: true }) };
@@ -167,8 +167,8 @@ test("the look: a due reminder makes it run now; its prompt carries the reminder
     why: () => "x",
     notesChangedAt: () => 0,
   });
-  const st = { ...lookState([]), wake: { looked: new Date().toISOString(), next: new Date(Date.now() + HOUR).toISOString() } } as never; // (not due by its clock: only the reminder makes it due)
-  const outcome = await hb.look(c, st, new Date());
+  const st = { ...lookState([]), wake: { looked: new Date(NOW).toISOString(), next: new Date(NOW + HOUR).toISOString() } } as never; // (not due by its clock: only the reminder makes it due)
+  const outcome = await hb.look(c, st, new Date(NOW));
   assert.equal(outcome, "posted");
   assert.match(prompts[0] ?? "", /Reminders due now[\s\S]*Ring the vet/);
   assert.doesNotMatch(prompts[0] ?? "", /⏰/, "a fact for the model, not the code's line");
