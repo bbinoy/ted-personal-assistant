@@ -309,6 +309,16 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     }, e.arrivedAt);
   }
 
+  // A turn that nobody wrote: a yes the person gave to a call asked earlier (the grant is stored, approvals/handoff.ts), or a reply to one that must be re-proposed. The text is code-written data. It enters at step 5
+  // like a message, so it joins what is waiting and takes its turn in order; it is not recorded as anyone's words and calls no look off (a look does not start while a question is open).
+  function continuation(conv: Conversation, text: string): Promise<void> {
+    const w = waysOf(conv);
+    const t = now();
+    const e: Entry = { from: "", text, timestamp: t, direct: conv.direct, addressedToMe: true, line: text, said: text, arrivedAt: t };
+    w.note(conv, e);
+    return settle(conv, w, e);
+  }
+
   // An edit of an earlier message, the same for every conversation. Only its author may edit it; the original may be
   //   still waiting (settling, queued, or being judged by the gate): the edit takes its place, so the answer is about the new text;
   //   answered already: the edit is a new message that says it is one (and what it replaced), so the answer can be corrected;
@@ -416,5 +426,5 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return ev.type === "message" ? message(conv, ev.m) : reaction(conv, ev.r);
   }
 
-  return { handleIncoming, replay };
+  return { handleIncoming, replay, continuation };
 }

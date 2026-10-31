@@ -44,6 +44,7 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
+  handedOff?: true; // the question is sent and kept in the database (handoff.ts): the turn does not wait for it, and the answer arrives as a grant and a turn of its own
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 
@@ -69,23 +70,23 @@ interface Open {
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
 // How long a question asked in a chat turn waits before it lapses (silently: a journal line). Unattended runs ask nobody; a stranger's registration waits a day.
-const APPROVAL_TIMEOUT_MINUTES = 15;
+export const APPROVAL_TIMEOUT_MINUTES = 15;
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
 const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
 
-// Background questions nobody answered in time, kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
+// Questions that were declined or that nobody answered in time (background ones, and every question handed off, handoff.ts), kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
 // next look is told about (heartbeat/facts.ts lapsedFact).
-export interface Lapsed { seq: number; at: number; label: string; wait: string }
-export const lapsedIn = (scope: string): Lapsed[] => convDb(convIdOfKey(scope)).all<Lapsed>("SELECT seq, at, label, wait FROM lapsed_approvals ORDER BY seq");
+export interface Lapsed { seq: number; at: number; label: string; wait: string; outcome: "lapsed" | "declined" }
+export const lapsedIn = (scope: string): Lapsed[] => convDb(convIdOfKey(scope)).all<Lapsed>("SELECT seq, at, label, wait, outcome FROM lapsed_approvals ORDER BY seq");
 export const forgetLapsed = (scope: string, gone: readonly Lapsed[]): void => {
   const db = convDb(convIdOfKey(scope));
   db.tx(() => gone.forEach((l) => db.run("DELETE FROM lapsed_approvals WHERE seq = ?", l.seq)));
 };
-const noteLapsed = (scope: string, label: string, wait: string): void => {
+export const noteLapsed = (scope: string, label: string, wait: string, outcome: Lapsed["outcome"] = "lapsed"): void => {
   try {
-    convDb(convIdOfKey(scope)).run("INSERT INTO lapsed_approvals (at, label, wait) VALUES (?, ?, ?)", Date.now(), label, wait);
+    convDb(convIdOfKey(scope)).run("INSERT INTO lapsed_approvals (at, label, wait, outcome) VALUES (?, ?, ?, ?)", Date.now(), label, wait, outcome);
   } catch (e) {
     console.error("approvals: could not keep a lapsed approval:", (e as Error).message);
   }
@@ -292,6 +293,13 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   return { outcome: "feedback" };
 }
 
+// A question that does not hold its turn (handoff.ts): once it is sent `sent` stores it and the promise resolves at once with `handedOff`; the question stays open here and `decided` gets what it
+// ends in (a yes, a no, a reply, silence), whenever that is. Never for a payment.
+export interface Handoff {
+  sent: (ts: number, expiresAt: number) => void;
+  decided: (d: Decision) => void;
+}
+
 // Ask in `opts.scope`, the conversation that triggered the action, and nowhere else. Resolves "not approved" on no, timeout, or an aborted turn.
 // Several may be open at once.
 // It waits APPROVAL_TIMEOUT_MINUTES (or `minutes`: a stranger's registration). A question nobody answers lapses SILENTLY: no line in the chat, one line in that conversation's journal.
@@ -300,7 +308,7 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; handoff?: Handoff },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
@@ -323,6 +331,7 @@ export function request(
       if (--openChat === 0) discardJudge();
       if (why) console.log(`approval ${why}: ${named}`);
       resolve(d);
+      if (opts.handoff && entry.ts) opts.handoff.decided(d);
     };
     const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
@@ -342,8 +351,13 @@ export function request(
     send(shown)
       .then((ts) => {
         if (entry.done) return;
+        opts.handoff?.sent(ts, Date.now() + minutes * 60_000); // (a throw is a failed ask, below)
         entry.ts = ts;
         open.set(slot(opts.scope, ts), entry);
+        if (opts.handoff) {
+          signal?.removeEventListener("abort", onAbort); // the turn ends now: that is no answer
+          resolve({ approved: false, handedOff: true });
+        }
       })
       .catch(() => finish({ approved: false }));
   });

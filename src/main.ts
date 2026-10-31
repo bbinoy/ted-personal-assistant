@@ -11,6 +11,8 @@ import { approveIn } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
+import { rehydrate } from "./approvals/handoff.ts";
+import { isTenantKey, OWNER_KEY } from "./core/ownerkey.ts";
 import { acceptOwner } from "./conversation/guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
 import { groupName, sponsorInGroup, sponsorOfMember } from "./conversation/group.ts";
@@ -81,6 +83,7 @@ const out = createOutbound(messenger, (kind, ts, text, target) => record(target,
 // This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
 wire({
   approvers: createApprovers(out),
+  continuation: (scope, prompt) => void pipeline.continuation(scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope), prompt).catch((e) => console.error("approved-call turn error:", e.message)),
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
@@ -225,6 +228,7 @@ prepare(owner()); // (start-up: the owner's chat is the one conversation that is
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
+rehydrate(); // questions handed off before the stop are open again, with the time they had left (approvals/handoff.ts)
 replayUnanswered({ pipeline, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES (settings.ts) idle, and the next reply restarts it).

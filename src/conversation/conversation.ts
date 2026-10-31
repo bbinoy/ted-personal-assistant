@@ -22,13 +22,13 @@ export { cleanIncoming, group, owner, tenant,  type Conversation, type Incoming 
 export function createPipeline(deps: PipelineDeps) {
   const queue = createQueue(deps);
   const delivery = createDelivery(deps);
-  const { handleIncoming, replay } = createIntake(deps, queue, delivery);
+  const { handleIncoming, replay, continuation } = createIntake(deps, queue, delivery);
   const { enqueue, busy, lease, burst, burstQueued, wait, dropPending } = queue;
   const { holdTyping, runTurn, sendWhile, canSpeak, reactTo, warn } = delivery;
   const record = (conv: Conversation, kind: Kind, ts: number, text: string, extra?: Extra) => deps.record(conv.target, kind, ts, text, extra);
 
   // `react`: a quick reaction of our own, no run needed (the gate chose it).
-  return { handleIncoming, replay, enqueue, busy, lease, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
+  return { handleIncoming, replay, continuation, enqueue, busy, lease, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;
