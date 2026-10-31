@@ -16,7 +16,8 @@ import { scheduledIn } from "../modules/tasks/routinelist.ts";
 //   voice_notes / voice_quotes   notes outside the 7-day look-back, and the 50 / 100 newest
 //   meetings        rows whose meeting started more than 3 days ago (tasks/meetings.ts)
 //   reminders       a claimed / retry mark older than a day whose task is no longer open or snoozed (done, dropped); the marks of an open task stay: they are its at-most-once record
-//   lapsed_approvals  rows older than 7 days (a lapsed background approval no look got to)
+//   lapsed_approvals  rows older than 7 days (a declined or lapsed question no run got to)
+//   pending_actions   rows asked more than 7 days ago (a question lapses in 15 minutes and a yes in 15 more: whatever is left is long over)
 //   routine_runs    rows of a routine whose note (routine-<name>.md, broken ones too) is gone; one still `started` (not yet stale) stays
 // NEVER touched: the session record, the dream day, /quiet, a friend's bookkeeping, the `told` marks (a once-told mark must outlive everything). A dry run counts and removes nothing.
 // Only conversations that HAVE a database are visited (none is made for the sweep).
@@ -57,7 +58,7 @@ export function convDbRule(L: () => Layout): RetentionRule {
     everyHours: 24,
     run(now, o) {
       const l = L();
-      const parts = { seen: 0, held: 0, voice: 0, meetings: 0, routines: 0, reminders: 0, lapsed: 0 };
+      const parts = { seen: 0, held: 0, voice: 0, meetings: 0, routines: 0, reminders: 0, lapsed: 0, pending: 0 };
       for (const conv of names(l.conversations)) {
         if (!isConvId(conv) || !existsSync(l.conv(conv).db)) continue;
         const db = convDbAt(l.root, conv);
@@ -69,11 +70,12 @@ export function convDbRule(L: () => Layout): RetentionRule {
         parts.meetings += o.dryRun ? db.num("SELECT COUNT(*) FROM meetings WHERE start_ms < ?", now.getTime() - MEETING_KEEP_MS) : db.run("DELETE FROM meetings WHERE start_ms < ?", now.getTime() - MEETING_KEEP_MS).changes;
         const lapsedOld = now.getTime() - 7 * 86_400_000;
         parts.lapsed += o.dryRun ? db.num("SELECT COUNT(*) FROM lapsed_approvals WHERE at < ?", lapsedOld) : db.run("DELETE FROM lapsed_approvals WHERE at < ?", lapsedOld).changes;
+        parts.pending += o.dryRun ? db.num("SELECT COUNT(*) FROM pending_actions WHERE asked_at < ?", lapsedOld) : db.run("DELETE FROM pending_actions WHERE asked_at < ?", lapsedOld).changes;
         parts.reminders += pruneReminders(db, now.getTime(), o.dryRun);
         parts.routines += pruneRoutineRuns(db, l.conv(conv).notes, now, o.dryRun);
       }
-      const removed = parts.seen + parts.held + parts.voice + parts.meetings + parts.routines + parts.reminders + parts.lapsed;
-      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} mail decision(s) past ${MAX_DECISIONS}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.voice} voice row(s) past their window, ${parts.meetings} meeting row(s) older than 3 days, ${parts.routines} record(s) of routines whose note is gone, ${parts.reminders} reminder mark(s) of finished tasks, ${parts.lapsed} lapsed approval(s) older than 7 days` };
+      const removed = parts.seen + parts.held + parts.voice + parts.meetings + parts.routines + parts.reminders + parts.lapsed + parts.pending;
+      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} mail decision(s) past ${MAX_DECISIONS}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.voice} voice row(s) past their window, ${parts.meetings} meeting row(s) older than 3 days, ${parts.routines} record(s) of routines whose note is gone, ${parts.reminders} reminder mark(s) of finished tasks, ${parts.lapsed} lapsed approval(s) and ${parts.pending} hand-off row(s) older than 7 days` };
     },
   };
 }
