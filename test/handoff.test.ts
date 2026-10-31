@@ -9,7 +9,8 @@ import { rehydrate, setContinuation } from "../src/approvals/handoff.ts";
 import { inFlight, isAsked, livePending, renderHash, savePending, takeGrant } from "../src/approvals/pendingstore.ts";
 import { lapsedIn } from "../src/approvals/approvals.ts";
 import { convDb } from "../src/core/convdb.ts";
-import { convIdOfKey } from "../src/core/convpaths.ts";
+import { convIdOfKey, groupConvId } from "../src/core/convpaths.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
 import { callKey } from "../src/core/callkey.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
@@ -487,4 +488,19 @@ test("the audit tells the yes from the run, and the journal keeps the question a
   const w = whyOf({ conv: "owner", step: "approved", input: {}, granted: "Shall I add the dentist on Tuesday?" });
   assert.match(w.text, /you said yes to: Shall I add the dentist on Tuesday\?/);
   assert.doesNotMatch(w.text, /no reason/);
+});
+
+test("a continuation that runs on a warm process built earlier is still untrusted in canUseTool", async () => {
+  const key = "g-warm-spare";
+  const sessionConv = groupConvId(key);
+  scopeOf(key).say("send it");
+  setDraftReader(async () => ({ to: ["stranger@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
+  const asked: (boolean | undefined)[] = [];
+  const approve: Approve = async (_d, _c, _s, o) => (asked.push(o?.untrusted), { approved: false });
+  // the spare is built before the continuation exists, with the session it will resume
+  const spare = buildOptions(approve, { conversation: key, kind: OWNER_CHAT, systemPrompt: "x", sessionConv, maxTurns: 3, maxBudgetUsd: 1 }, "S-warm");
+  // the continuation turn marks the session as agent.ts runTurn does, then the spare serves it
+  sessionTaint(sessionConv, "S-warm").mark();
+  await spare.canUseTool!(SEND, { messageId: 5001, confirm: true }, opts);
+  assert.deepEqual(asked, [true], "untrusted: the recipient floor is on and the person is asked");
 });
