@@ -53,6 +53,15 @@ const HEADERS = {
   "x-content-type-options": "nosniff",
 };
 
+/** Host: 127.0.0.1 or localhost (bare or on the page's own port), or a tailnet name (what `tailscale serve` forwards, any port). */
+function hostAllowed(host: string | undefined, port: number | undefined): boolean {
+  const m = /^([a-z0-9.-]+)(?::(\d+))?$/i.exec(host ?? "");
+  if (!m) return false;
+  const name = m[1]!.toLowerCase();
+  if (name === "127.0.0.1" || name === "localhost") return m[2] === undefined || Number(m[2]) === port;
+  return name.endsWith(".ts.net");
+}
+
 /** GET /tasks (the page) and GET /healthz, HEAD likewise; any other path is 404, any other method 405. `read` is the page's one data source (the owner's list). */
 export function tasksPageServer(read: () => string = () => tasksPage(OWNER_KEY, Date.now(), systemZone())): Server {
   return createServer((req, res) => {
@@ -61,6 +70,7 @@ export function tasksPageServer(read: () => string = () => tasksPage(OWNER_KEY, 
       res.writeHead(status, { ...HEADERS, "content-type": `${type}; charset=utf-8`, ...extra });
       res.end(req.method === "HEAD" ? undefined : body);
     };
+    if (!hostAllowed(req.headers.host, req.socket.localPort)) return send(421, "text/plain", "misdirected request"); // (DNS rebinding: a web page may point its own name at 127.0.0.1)
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
     if (path === "/healthz") return send(200, "text/plain", "ok");
     if (path !== "/tasks") return send(404, "text/plain", "not found");

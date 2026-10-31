@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 
 // The owner's task page (src/tasks/taskspage.ts): the due buckets in the owner's clock, escaping, the routes and methods, and that only the owner's list is ever read.
@@ -45,6 +46,30 @@ test("a title is escaped and nothing is loaded from outside", () => {
 
 test("only the owner's list is read", () => {
   assert.ok(!tasksPage(OWNER_KEY, NOW, ZONE).includes("Secret friend task"));
+});
+
+test("only loopback and tailnet host names are served (DNS rebinding)", async () => {
+  const server = tasksPageServer(() => "<p>page</p>");
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+  const port = (server.address() as AddressInfo).port;
+  const status = (host: string) =>
+    new Promise<number>((ok, bad) => {
+      const req = httpRequest({ host: "127.0.0.1", port, path: "/tasks", headers: { host } }, (res) => (res.resume(), ok(res.statusCode!)));
+      req.on("error", bad).end();
+    });
+  try {
+    assert.equal(await status("evil.example"), 421);
+    assert.equal(await status(`evil.example:${port}`), 421);
+    assert.equal(await status("127.0.0.1:1"), 421);
+    assert.equal(await status(`127.0.0.1:${port}`), 200);
+    assert.equal(await status(`localhost:${port}`), 200);
+    assert.equal(await status("localhost"), 200);
+    assert.equal(await status("x.y.ts.net"), 200);
+    assert.equal(await status("x.y.ts.net:9443"), 200);
+    assert.equal(await status("ts.net.evil.example"), 421);
+  } finally {
+    server.close();
+  }
 });
 
 test("routes, methods and headers", async () => {
