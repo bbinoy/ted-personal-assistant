@@ -1,5 +1,5 @@
 import { addedByLooks, counts, dueClass, effectiveStatus, isFocus, listItems, type Item } from "./store.ts";
-import { addDays, parseLocal, showInstant, showLocal, todayIn } from "./when.ts";
+import { addDays, parseLocal, showInstant, showLocal, todayIn, weekdayOf } from "./when.ts";
 
 // How tasks are SHOWN, always in the conversation's own clock: one item as a compact line (the tool replies and lists), and the phone-sized /tasks answer. Pure over the store's reads.
 
@@ -64,6 +64,21 @@ export function groupOpen(open: readonly Item[], now: number, zone: string): Rec
   const out: Record<Bucket, Item[]> = { [FOCUS]: [], Today: [], "This week": [], Later: [], "No date": [] };
   for (const i of open) out[isFocus(i, day) ? FOCUS : bucketOf(i, now, zone)].push(i);
   out.Today = [...out.Today.filter(late), ...out.Today.filter((i) => !late(i))];
+  return out;
+}
+
+/** The page's sub-headings inside a bucket: This week by day ("Mon 2 Nov"), Later by Monday-to-Sunday week ("Week of Mon 9 Nov"), items in due order (date, then time). Other buckets: one unlabelled group in the order given. Due dates are local, so the zone only decides which year is left out. */
+export function subGroups(bucket: Bucket, items: readonly Item[], now: number, zone: string): { label: string; items: Item[] }[] {
+  if (bucket !== "This week" && bucket !== "Later") return items.length ? [{ label: "", items: [...items] }] : [];
+  const today = todayIn(now, zone);
+  const sorted = [...items].sort((a, b) => a.due!.localeCompare(b.due!));
+  const out: { label: string; items: Item[] }[] = [];
+  for (const it of sorted) {
+    const date = parseLocal(it.due)!.date;
+    const label = bucket === "This week" ? showLocal(date, today) : `Week of ${showLocal(addDays(date, -((weekdayOf(date) + 6) % 7)), today)}`;
+    if (out.at(-1)?.label === label) out.at(-1)!.items.push(it);
+    else out.push({ label, items: [it] });
+  }
   return out;
 }
 

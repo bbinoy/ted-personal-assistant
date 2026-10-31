@@ -261,3 +261,32 @@ test("the script posts the tick from the page (same token, same origin) and keep
   assert.doesNotThrow(() => new Function(/<script nonce="N0NCE">(.*)<\/script>/s.exec(html)![1]!)); // (it at least parses)
   assert.match(html, /d\.open=v\.o\[k\(d\)\]/);
 });
+
+test("This week is split by day in time order; Later by Monday-started week; the empty heading goes with its last task (script parses)", () => {
+  const key = "subgroups-key";
+  add(key, "Wed late", { due: "2026-10-28T18:00" });
+  add(key, "Wed early", { due: "2026-10-28T08:00" });
+  add(key, "Tue", { due: "2026-10-27" });
+  add(key, "Later Mon", { due: "2026-11-02" }); // week of Mon 2 Nov
+  add(key, "Later Sun", { due: "2026-11-08" }); // same week
+  add(key, "Later next", { due: "2026-11-09" });
+  const html = tasksPage(key, NOW, ZONE, "tok", "N");
+  const at = ["Tue 27 Oct", "Wed 28 Oct", "Week of Mon 2 Nov", "Week of Mon 9 Nov"].map((h) => index(html, `<li class="sub">${h}</li>`));
+  assert.ok(at.every((i) => i >= 0), html);
+  assert.deepEqual([...at].sort((a, b) => a - b), at);
+  assert.ok(index(html, "Wed early") < index(html, "Wed late") && index(html, "Wed late") < at[2]!);
+  assert.ok(index(html, "Later Sun") > at[2]! && index(html, "Later Sun") < at[3]!);
+  assert.ok(index(html, "Later next") > at[3]!);
+  assert.ok(!html.includes('<li class="sub"></li>'));
+  assert.match(html, /querySelectorAll\("li\.sub"\)/);
+  assert.doesNotThrow(() => new Function(/<script nonce="N">(.*)<\/script>/s.exec(html)![1]!));
+});
+
+test("sub-headings follow the owner's local day, not UTC's", () => {
+  const now = Date.parse("2026-10-30T11:00:00Z"); // Sat 31 Oct 00:00 in Auckland, still Fri 30 Oct in UTC
+  add("zone-edge-key", "Edge", { due: "2026-11-07T23:30" }); // today+7 there: the last day of This week (UTC's today+7 would be 6 Nov)
+  add("zone-edge-key", "Beyond", { due: "2026-11-08" }); // first day of Later, in the week of Mon 2 Nov
+  const html = tasksPage("zone-edge-key", now, ZONE);
+  assert.ok(html.includes('<li class="sub">Sat 7 Nov</li>'), html);
+  assert.ok(html.includes('<li class="sub">Week of Mon 2 Nov</li>'), html);
+});
