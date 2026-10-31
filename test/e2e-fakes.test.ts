@@ -65,7 +65,7 @@ test("a run built by the production builder sees only the fakes and Ted's own se
   await runConversation(owner(), { now: NOW }, chatTurn(owner(), { prompt: "hi" }), undefined, { query: q });
   const o = seen.options!;
   assert.ok(Object.keys(fakes).every((n) => n in o.mcpServers), "the fakes are in the run's servers");
-  assert.ok(Object.keys(o.mcpServers).every((n) => n in fakes || ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "browse"].includes(n)), `only Ted's own servers besides: ${Object.keys(o.mcpServers)}`);
+  assert.ok(Object.keys(o.mcpServers).every((n) => n in fakes || ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "browse", "tenants"].includes(n)), `only Ted's own servers besides: ${Object.keys(o.mcpServers)}`);
   assert.equal(o.strictMcpConfig, true);
   assert.deepEqual(o.settingSources, [], "no user or project settings (the owner's real Mailbird and connectors are user scope)");
   assert.equal(o.env.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
