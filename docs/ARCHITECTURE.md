@@ -545,6 +545,7 @@ src/modules/notion/notionmcp.ts  the hosted Notion MCP connection
 src/modules/people/module.ts  `find_person` declaration
 src/modules/people/people.ts  notes and contacts as candidates, ranking
 src/modules/people/peopletool.ts  the `find_person` tool
+src/modules/send/connectorback.ts  a connector that came back pulls the owner's next look forward
 src/modules/send/module.ts  send
 src/modules/send/send.ts  the send tool: speak mid-turn
 src/modules/send/shots.ts  pictures of a turn, delivered via send
