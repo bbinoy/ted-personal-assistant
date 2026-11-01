@@ -33,16 +33,6 @@ function quietHours(env: Env): { from: number; to: number } {
   return { from: Number(m[1]), to: Number(m[2]) };
 }
 
-// TASK_DEFAULT_REMIND="08:30": the clock time (the conversation's own zone) of the default ping on the morning of a due date, for an open task with a due and no reminder of its own. "off" = no default pings.
-export function remindTime(raw: string | undefined): string | "off" {
-  const t = raw?.trim();
-  if (t === undefined || t === "") return "08:30";
-  if (t.toLowerCase() === "off") return "off";
-  const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(t);
-  if (!m || Number(m[1]) > 23 || Number(m[2] ?? 0) > 59) throw new Error(`TASK_DEFAULT_REMIND must look like 08:30 (a clock time, or "off"; got "${t}")`);
-  return `${m[1]!.padStart(2, "0")}:${m[2] ?? "00"}`;
-}
-
 function oneOf<T extends string>(env: Env, name: string, fallback: T, allowed: readonly T[]): T {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -203,7 +193,6 @@ export function loadSettings(env: Env) {
     quietStartHour: quiet.from,
     quietEndHour: quiet.to,
     maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 12, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
-    taskDefaultRemind: remindTime(env.TASK_DEFAULT_REMIND), // the morning ping for a task due that day with no reminder of its own (tasks/remind.ts)
     // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), the look is made due and says ONE short prep message; 0 = off.
     prepMinutes: num(env, "PREP_MINUTES", 15, 0, 120),
 

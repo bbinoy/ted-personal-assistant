@@ -1,10 +1,8 @@
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
-import { settings } from "../core/settings.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { doneKey, DROP_AFTER_MS, dueReminders, fallbackText, remindAtAfter, rolledDue, type Planned } from "../tasks/remind.ts";
 import { activeItems, editItem, getItem, lineOf, noteReminded, reopenItem, told, type Item, type Scope } from "../tasks/store.ts";
-import { localOf } from "../tasks/when.ts";
 import { holdingNow, postNotice } from "./notices.ts";
 
 // The reminder TICK (called from wake.ts for every conversation with tasks): code decides WHEN, the conversation's next look says it (CLAUDE.md: Ted speaks, code doesn't). A reminder whose time has
@@ -66,7 +64,6 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
   }
   const rows = peek.all<RemRow>("SELECT item_id, key, state, tries, at, fire_at FROM reminders");
   const done = new Set(rows.filter((r) => r.state === "claimed" || r.state === "sent" || r.state === "folded" || r.state === "retry").map((r) => doneKey(r.item_id, r.key)));
-  const sentOn = new Set(rows.filter((r) => r.state === "claimed" || r.state === "sent").map((r) => `${r.item_id}|${localOf(r.at, zone).date}`));
   const sc = scopeOf(conv, zone, t);
   const holding = holdingNow(conv, now);
   // The mark and what the item becomes are ONE transaction (at most once). The history row is written here; the journal line only once it was told.
@@ -81,7 +78,7 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
       noteReminded(sc, p.item.id, remindAtAfter(p.item, t, zone));
       return true;
     });
-  for (const p of dueReminders(items, t, { zone, defaultTime: settings.taskDefaultRemind, done, sentOn })) {
+  for (const p of dueReminders(items, t, { zone, done })) {
     if (holding && !p.item.urgent) {
       db.run("INSERT OR IGNORE INTO reminders (item_id, key, state, fire_at, at) VALUES (?, ?, 'held', ?, ?)", p.item.id, p.key, p.fireAt, t); // (seen in quiet hours: it waits for them to end)
       continue;
@@ -109,7 +106,7 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
   }
 
   db.run("DELETE FROM reminders WHERE at < ? AND state NOT IN ('claimed', 'retry')", t - KEEP_MS);
-  const plannedHeld = new Set(dueReminders(items, t, { zone, defaultTime: settings.taskDefaultRemind }).map((p) => doneKey(p.item.id, p.key)));
+  const plannedHeld = new Set(dueReminders(items, t, { zone }).map((p) => doneKey(p.item.id, p.key)));
   for (const r of rows) if (r.state === "held" && !plannedHeld.has(doneKey(r.item_id, r.key))) db.run("DELETE FROM reminders WHERE item_id = ? AND key = ? AND state = 'held'", r.item_id, r.key); // (the item was done, moved or changed meanwhile)
   for (const it of activeItems(conv.key)) {
     const rd = rolledDue(it, t, zone);
