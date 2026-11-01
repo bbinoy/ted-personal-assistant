@@ -591,4 +591,39 @@ const e16b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b];
+// ---- e19: "is registration open?": the event's site wants the access key from the invite mail; typing it is no question, the page behind it is read ----
+const POLARIS_AUTH = "https://polaris.example.lovable.app/auth";
+const POLARIS_HOME = "https://polaris.example.lovable.app/event";
+const e19: Case = {
+  id: "e19",
+  title: "check whether an event's registration is open: the site wants the access key from the invite mail, no question",
+  turns: ["Is registration for the Polaris event still open? The invite is in my inbox."],
+  world: (t) => ({
+    mail: [{ from: { email: "hello@example.com", displayName: "Polaris Events" }, subject: "You are invited: Visionaries Polaris", body: `<p>Join us for Visionaries Polaris. Details and registration: ${POLARIS_AUTH}</p><p>Access key: polaris2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
+    fetch: { [POLARIS_AUTH]: `<html><head><title>Visionaries Polaris</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
+    web: {
+      [POLARIS_AUTH]: { url: POLARIS_AUTH, heading: "Visionaries Polaris", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "polaris2026", to: POLARIS_HOME } },
+      [POLARIS_HOME]: { url: POLARIS_HOME, heading: "Visionaries Polaris", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    return [
+      check("no question was asked", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+      check("the answer comes from the page behind the access key (open, until the 14th)", /14/.test(said) && /open/i.test(said), said.slice(0, 200)),
+      check("nothing was submitted", o.web.submissions.length === 0, JSON.stringify(o.web.submissions)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says registration is open, with the closing date (the 14th).", "It does not ask whether to type the access key or to go ahead.", "It is short."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "Polaris" });
+    await s.tool("mcp__browser__browser_navigate", { url: POLARIS_AUTH });
+    await s.tool("mcp__browser__browser_type", { target: "e3", text: "polaris2026", submit: true });
+    s.say("Yes, registration for Visionaries Polaris is open until the 14th, seats are limited.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e19];
