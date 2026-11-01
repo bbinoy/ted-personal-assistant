@@ -39,6 +39,7 @@ import { skillsFor } from "../modules/skills.ts";
 import { recordToolsSeen, toolsSeen } from "../policy/toolsseen.ts";
 import type { Triage } from "../tasks/maildecisions.ts";
 import { delegationHook, type Delegation, type ExpertSetup } from "./delegation.ts";
+import type { TurnWatch } from "./interrupt.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
 // browse sub-run. The options of a conversation come from one builder (runoptions.ts), the entry points are agent.ts, the warm processes agentwarm.ts.
@@ -70,6 +71,7 @@ export interface RunOptions {
   // Fires after a tool call succeeds. Used to capture the brief the agent sends.
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
+  watch?: TurnWatch; // a chat turn that a newer message of its conversation may cut short at a tool boundary (interrupt.ts)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   gate?: GateKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's id
@@ -281,6 +283,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
   for await (const message of stream) {
     observe(payer, message);
+    opts.watch?.see(message);
     if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
@@ -310,6 +313,11 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       writeSession(opts.sessionConv, next);
     }
     charge(payer, turnCostUsd, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
+    if (message.subtype === "error_during_execution" && opts.watch?.landed) { // cut short at a tool boundary by a newer message: not a failure, the session keeps what was done and the message is the next turn
+      opts.watch.cut();
+      succeeded(payer);
+      return { text: "", costUsd: turnCostUsd };
+    }
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
       return { text: message.result, costUsd: turnCostUsd, structured: message.structured_output };

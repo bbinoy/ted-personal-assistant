@@ -21,6 +21,7 @@ import type { Triage } from "../tasks/maildecisions.ts";
 import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
+import { CUT_FACT, takeCutShort, watchTurn } from "./interrupt.ts";
 
 // The entry points of a run. ONE function does a run of any conversation, whatever started it (runTurn): the conversation's own session for the trigger, options from the one builder
 // (runoptions.ts runFor), the context code hands every run (what is set up, the facts of heartbeat/facts.ts, a look's notes), each told only when it differs from what that session was last told,
@@ -77,18 +78,26 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   });
   if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark(); // (the session now holds a mail's words: the judge is told from here on)
   if (untrusted) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark();
-  const input = userInput([...shown.map((s) => s.text), clock, prompt].join("\n\n"), pictures, documents);
+  // The previous turn of this conversation was cut short by a newer message (interrupt.ts): this is the turn that message makes, and the run is told so.
+  const cut = t.attended && takeCutShort(conv.key);
+  const input = userInput([...shown.map((s) => s.text), clock, ...(cut ? [CUT_FACT] : []), prompt].join("\n\n"), pictures, documents);
   let reply: AgentReply;
+  const watch = t.attended ? watchTurn(conv.key) : undefined; // a chat turn only: a newer message may ask it to stop at its next tool boundary (a look has its own preempt logic, queue.ts)
+  if (watch) o.watch = watch;
   try {
     reply = t.attended
       ? await runWarmOrCold(conv, o, r, input, (abortController) => {
         const gate = afterConnectors(input, o.kind);
-        return gate.bind((w.io?.query ?? query)({ prompt: gate.prompt, options: { ...buildOptions(w.approve, o, r.resume, abortController.signal), abortController } }));
+        const q = gate.bind((w.io?.query ?? query)({ prompt: gate.prompt, options: { ...buildOptions(w.approve, o, r.resume, abortController.signal), abortController } }));
+        watch?.attach(q);
+        return q;
       }) // on the conversation's warm process when it still fits (agentwarm.ts)
       : await runAgent(input, w.approve, o, w.io);
   } catch (e) {
     if (own) facts?.done({ ended: false, said: false, abandoned: true });
     throw e;
+  } finally {
+    watch?.end();
   }
   if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId).resume, s.text); // the run went through: the session has it now
   if (own) {

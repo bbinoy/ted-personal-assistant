@@ -14,6 +14,7 @@ import { journalAround } from "../memory/journalread.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { createGroupAnswering, speaker, type Go } from "./group.ts";
 import { replayPrompt } from "./replay.ts";
+import { interruptTurn } from "../run/interrupt.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { voiceOption } from "./voicereply.ts";
@@ -307,7 +308,10 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       let typing: (() => void) | undefined;
       try {
         const go = await w.decide(conv, { batch: b, e, showTyping: () => void (typing ??= holdTyping(conv, b.timing)) });
-        if (go) await b.run((items) => w.turn(conv, items.sort((x, y) => x.timestamp - y.timestamp), go, b));
+        if (go) {
+          if (!e.continuation) interruptTurn(conv.key); // the message will be answered: a chat turn still running for this conversation stops at its next tool boundary, so it does not wait for the whole task (run/interrupt.ts)
+          await b.run((items) => w.turn(conv, items.sort((x, y) => x.timestamp - y.timestamp), go, b));
+        }
       } finally {
         typing?.(); // however it ended: answered, silent, superseded or failed
       }

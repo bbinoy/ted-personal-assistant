@@ -111,6 +111,7 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
       const onWarm = () => {
         const gate = afterConnectors(input, o.kind); // (a connector that failed while the process idled is mended before the model is asked)
         const q = gate.bind(warm!.query(gate.prompt));
+        o.watch?.attach(q);
         c.signal.addEventListener("abort", () => q.close(), { once: true });
         return q;
       };
