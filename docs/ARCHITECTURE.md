@@ -191,7 +191,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **The tick** (`src/heartbeat/heartbeat.ts`). Every `rhythm.heartbeat.everyMinutes` (preset) a free timer starts independent jobs, each in its own try/catch: `wake`, `dream` (`dreamTrigger`) and `retention` (`retentionTrigger`, once a day from 03:30). It writes the `heartbeat` row of `kv` for `npm run doctor`. Each `wake` tick, for the owner, every vouched group and every active friend:
 
-1. Damage notices (`noticeDamaged`); idle databases are closed.
+1. Damage notices (`noticeDamaged`); idle databases are closed. At start, a damaged ledger, an unreadable friends list and open registration requests become facts for the owner's next run (`holdStartupFact`, at most daily; the fixed line only if the store cannot keep the fact); no card is re-sent.
 2. Reminders (`fireReminders`): every conversation with tasks and a database, whatever its look switches say.
 3. Held posts of a conversation with no look are dropped (`dropUnreachable`).
 4. Quiet compaction of a grown, quiet session; meeting claims (`claimPreps`).
@@ -217,8 +217,8 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 |---|---|---|
 | the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (3 in a row over 2 h awake) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
 | held posts (quiet hours, `/quiet`, the day's cap), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over and the cap has room; deleted only when the run ends well; nothing older than 36 h |
-| reminders due | `waitingReminders`, `reminderFacts` | claimed by the tick; told when the run said something (a look: or held, unless urgent) |
-| meetings claimed for prep | `waitingMeetings`, `meetingFacts` | `PREP_MINUTES` before the start; told when the run said something |
+| reminders due | `waitingReminders`, `reminderFacts` (and the trigger line, `reminderWhy`) | claimed by the tick; settled when a look ended well: told if it said something (or held it), only marked if it stayed silent; a failed or called-off look leaves them for the next |
+| meetings claimed for prep | `waitingMeetings`, `meetingFacts` (and the trigger line, `meetingWhy`) | `PREP_MINUTES` before the start; told when the run said something |
 | routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |
 | welcome (`welcomeStart` marks a fresh data folder in `kv`) | `takeWelcome` | the owner's first run, once ever |
 
@@ -249,15 +249,15 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 **Reminders** (`src/tasks/remind.ts`, `src/heartbeat/remindtick.ts`).
 
 - Each tick code CLAIMS reminders that came due (an item's `remind_at`, or a snooze that ended; a task with only a due date gets no code ping: the daily brief, or the first look of the morning, says it, per the tasks skill) in the `reminders` table, in one transaction with the item's next state: at most once.
-- A claim makes the look due at once and the look says it; only if it posted or sent are the rows marked `sent` and journaled.
-- The one fixed text is the fallback, the same for every conversation (an assignee is named): a reminder no look told within 30 minutes (`FALLBACK_MS`: no model run was possible, e.g. budget spent, cooldown, looks failing), or any reminder of a conversation without a look, goes out as `fallbackText`.
+- WAKE WITH A REASON (reminders and meeting prep alike): a claim makes the look due at once, and the look's trigger line carries the event ("Triggered: your task 'X' has its reminder at 10:00", "Triggered: meeting 'Y' with Z starts at 14:00 (in 15 min)") next to the facts. The look decides: usually a short reminder or the prep, nothing if its recent posts already covered it. If it posted, the rows are marked `sent` and journaled; if it chose silence they are only marked.
+- The one fixed text is the fallback for "no model run is possible", the same for every conversation (an assignee is named): the conversation has no look, or the model is unavailable now (`mayRun` refuses: paused, cooldown, budget, key). There is no timer: with a model that can run, code never says a reminder.
 - Quiet hours and `/quiet` hold a reminder unless the item is urgent.
 
 **Meeting prep** (`src/tasks/meetings.ts`, `src/modules/meetings/`, `src/heartbeat/preptick.ts`; `PREP_MINUTES` 15, 0 = off).
 
 - Any run that reads the calendar for the next hours (a look or a chat turn; the tool follows the calendar capability) calls `note_upcoming_meetings`; code validates and stores the meetings.
 - Each tick `claimPreps` drops what is too late, skips by rule (`prepSkip`: declined, all-day, private, nobody else) and claims a due row at most once per event id and start, never between 23:00 and 06:00 or during `/quiet`.
-- The look prepares with the `meeting-prep` skill and says it; then `afterPrep` marks the row sent, else it is given back once. Groups have none.
+- The look decides what helps and, usually, prepares with the `meeting-prep` skill and says it; then `afterPrep` marks the row sent, else it is given back once. Groups have none.
 
 **Records.** Each look is one `look` event: a `wake` audit row and one counted `looks` row (`outcome`: `posted`, `silent`, `failed`, `timeout` or `preempted`). A failed look is retried at the tick period. `npm run heartbeat-report` prints the rows.
 
