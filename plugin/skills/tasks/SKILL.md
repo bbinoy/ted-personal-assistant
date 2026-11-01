@@ -81,6 +81,15 @@ Whenever you read the calendar, mail or chat, notice links between open tasks an
 
 A task that depends on a place ("when I'm next in London, meet Sam") is written with the place first in the title ("When in London: meet Sam"), no due date, and the person set when there is one. The same for "next time I see Sam: ...": the person set. When the calendar shows a trip to a place, `list_tasks` with a `query` for the place and its obvious variants (city, country) and mention the matching open ones before the trip, early enough to arrange them (about a week ahead, or at the first brief that sees the trip), once and not every day. When a person is on the calendar, do the same for their "next time I see" tasks (`person`).
 
+## Due today, in the morning
+
+Code sends nothing for a task that only has a due date; you do. Every open task due today reaches the person (the owner, a friend, a group: each in its own conversation) once, in the morning:
+
+- **Brief first.** When the conversation's daily brief runs today, the tasks due today are in it (Focus / Everything else today) and nothing else is sent for them. Look at the routine status line and the chat log: if the brief already went out, or is about to (it shows as due now or next today), say nothing about them.
+- **Otherwise one short message** from the first check of the morning after quiet hours, listing what is due today in a line or two, in your own words. Do not repeat it later that day unless something changed (a new task due today, a time moved, an overdue item now urgent).
+- **Own reminder time wins.** A task with its own reminder (`remind`) or a snooze is said at that time by the reminder facts; do not list it again in the morning message.
+- Overdue items are not part of this rule; mention them only when they help, as the facts line says.
+
 ## A long overdue pile
 
 When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Snooze the long-overdue tail to a sensible date with `snooze_task` (reversible with `reopen`), in any run, and say so in one line ("Snoozed 14 old tasks to Monday; say 'reopen' for any you still want"). Keep the recent ones as they are.

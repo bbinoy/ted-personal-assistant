@@ -21,13 +21,11 @@ const { convPaths } = await import("../src/core/convpaths.ts");
 const { statusText } = await import("../src/conversation/ownercommands.ts");
 
 type Conv = ReturnType<typeof group>;
-type Item = import("../src/tasks/store.ts").Item;
 const ZONE = "Europe/Berlin";
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
 s.maxUnpromptedPerDay = 3;
-s.taskDefaultRemind = "08:30";
 const berlin = (date: string, time: string): number => Date.parse(`${date}T${time}:00${date < "2026-10-25" && date > "2026-03-29" ? "+02:00" : "+01:00"}`);
 const NOW = berlin("2026-10-22", "12:00"); // Thu, CEST
 const MIN = 60_000;
@@ -189,12 +187,12 @@ test("a repeating reminder is claimed, moves to its next time and stays ONE item
   assert.equal(S.listItems(conv.key, { status: ["open", "snoozed", "done", "dropped"] }).length, 3);
 });
 
-test("one reminder a day: an own reminder already claimed today replaces the due-day one; two days late is only marked; a conversation without a database is left alone", async () => {
+test("a task with only a due date is never pinged by code (the brief and the look tell it); an own reminder is one row; two days late is only marked; a conversation without a database is left alone", async () => {
   const conv = fresh();
   const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22", remindAt: berlin("2026-10-22", "07:05") }).item;
   await tick(rig(), conv, berlin("2026-10-22", "07:10"));
   await tick(rig(), conv, berlin("2026-10-22", "08:35"));
-  assert.deepEqual(rows(conv, it.id).map((x) => x.key), [`at:${berlin("2026-10-22", "07:05")}`], "no second one at 08:30");
+  assert.deepEqual(rows(conv, it.id).map((x) => x.key), [`at:${berlin("2026-10-22", "07:05")}`], "no second one at 08:30: a due date alone sends nothing");
   const old = S.addItem(scope(conv.key, NOW - 72 * HOUR), { title: "Ancient", remindAt: NOW - 50 * HOUR }).item;
   await tick(rig(), conv, NOW);
   assert.deepEqual(rows(conv, old.id).map((x) => x.state), ["folded"]);
@@ -214,7 +212,7 @@ test("stale held rows are pruned when the item is done or moved on", async () =>
   assert.deepEqual(rows(conv, it.id), []);
 });
 
-test("planner: an item's own reminder, a snooze that ran out, and the default morning ping", () => {
+test("planner: an item's own reminder, a snooze that ran out", () => {
   const conv = fresh();
   const a = S.addItem(scope(conv.key, NOW - 5 * HOUR), { title: "Call Sam", remindAt: NOW - MIN }).item;
   const b = S.addItem(scope(conv.key, NOW - 5 * HOUR), { title: "Later one", remindAt: NOW + HOUR }).item;
@@ -222,33 +220,19 @@ test("planner: an item's own reminder, a snooze that ran out, and the default mo
   const d = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Next week", due: "2026-10-29" }).item;
   const e = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Nap" }).item;
   S.snoozeItem(scope(conv.key, NOW - 3 * HOUR), e.id, NOW - HOUR);
-  const o = { zone: ZONE, defaultTime: "08:30" };
+  const o = { zone: ZONE };
   const plan = R.dueReminders(S.activeItems(conv.key), NOW, o);
   assert.deepEqual(plan.map((p) => [p.item.id, p.kind, p.key]), [
-    [c.id, "default", "due:2026-10-22"],
     [e.id, "snooze", `snooze:${NOW - HOUR}`],
     [a.id, "at", `at:${NOW - MIN}`],
   ]);
-  assert.equal(plan[0]!.fireAt, berlin("2026-10-22", "08:30"));
-  assert.ok(![b.id, d.id].some((id) => plan.some((p) => p.item.id === id)), "nothing in the future");
+  assert.ok(![b.id, c.id, d.id].some((id) => plan.some((p) => p.item.id === id)), "nothing in the future, and a due date alone plans nothing");
   const done = new Set([`${a.id}|at:${NOW - MIN}`]);
   assert.equal(R.dueReminders(S.activeItems(conv.key), NOW, { ...o, done }).some((p) => p.item.id === a.id), false, "a claimed reminder is not planned again");
-  assert.deepEqual(R.dueReminders(S.activeItems(conv.key), NOW, { ...o, defaultTime: "off" }).map((p) => p.item.id), [e.id, a.id], "default pings can be switched off");
 });
 
 test("planner: the default ping is at the default time, or the due time when that is earlier; DST days are right; an item touched after that morning gets none", () => {
-  const mk = (due: string, created: number): Item => S.addItem(scope(fresh().key, created), { title: "x", due }).item;
-  const o = { zone: ZONE, defaultTime: "08:30" };
-  assert.equal(R.defaultFireAt(mk("2026-10-24", NOW), o), Date.parse("2026-10-24T06:30:00Z"), "CEST");
-  assert.equal(R.defaultFireAt(mk("2026-10-24T07:15", NOW), o), Date.parse("2026-10-24T05:15:00Z"), "a due before 08:30 pings at the due time");
-  assert.equal(R.defaultFireAt(mk("2026-10-25", NOW), o), Date.parse("2026-10-25T07:30:00Z"), "the day the clocks go back: 08:30 is CET");
-  assert.equal(R.defaultFireAt(mk("2026-03-29", NOW), o), Date.parse("2026-03-29T06:30:00Z"), "the day they go forward: 08:30 is CEST");
-  assert.equal(R.defaultFireAt(S.addItem(scope(fresh().key), { title: "r", due: "2026-10-24", remindAt: NOW + HOUR }).item, o), undefined, "an own reminder replaces the default");
-  const late = S.addItem(scope(fresh().key, berlin("2026-10-22", "10:00")), { title: "made today", due: "2026-10-22" }).item;
-  assert.deepEqual(R.dueReminders([late], NOW, o), [], "made after 08:30 that day: no 'missed' ping for something just written");
-});
 
-test("repeats: the reminder moves to the next occurrence, one item, nothing piles up; a day that is over rolls the due", () => {
   const conv = fresh();
   const daily = S.addItem(scope(conv.key), { title: "Stretch", remindAt: berlin("2026-10-22", "11:00"), repeat: "every day" }).item;
   assert.equal(R.remindAtAfter(daily, NOW, ZONE), berlin("2026-10-23", "11:00"), "the same clock time tomorrow");

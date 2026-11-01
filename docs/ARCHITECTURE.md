@@ -248,7 +248,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Reminders** (`src/tasks/remind.ts`, `src/heartbeat/remindtick.ts`).
 
-- Each tick code CLAIMS reminders that came due (an item's `remind_at`, a snooze that ended, the default morning ping `TASK_DEFAULT_REMIND`) in the `reminders` table, in one transaction with the item's next state: at most once.
+- Each tick code CLAIMS reminders that came due (an item's `remind_at`, or a snooze that ended; a task with only a due date gets no code ping: the daily brief, or the first look of the morning, says it, per the tasks skill) in the `reminders` table, in one transaction with the item's next state: at most once.
 - A claim makes the look due at once and the look says it; only if it posted or sent are the rows marked `sent` and journaled.
 - The one fixed text is the fallback, the same for every conversation (an assignee is named): a reminder no look told within 30 minutes (`FALLBACK_MS`: no model run was possible, e.g. budget spent, cooldown, looks failing), or any reminder of a conversation without a look, goes out as `fallbackText`.
 - Quiet hours and `/quiet` hold a reminder unless the item is urgent.
