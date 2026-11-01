@@ -49,13 +49,15 @@ export const offline = (servers: readonly ServerStatus[] | undefined): boolean =
 
 // This is for the doctor and /status ("not available in the last run"), never for the prompts: a run sees its own tools. A run that started without a network records nothing,
 // so one bad moment does not stand for the connectors until the next run.
-export function recordConnectors(tools: readonly string[], servers?: readonly ServerStatus[]): void {
-  if (offline(servers)) return;
+export function recordConnectors(tools: readonly string[], servers?: readonly ServerStatus[]): string[] {
+  if (offline(servers)) return [];
   const now = detect(tools, servers);
+  const before = readConnectors();
   kvSet(KEY, now);
   const seen = readSeen();
   const added = Object.keys(now).filter((k) => now[k] === true && !seen.includes(k));
   if (added.length) kvSet(SEEN, [...seen, ...added]);
+  return Object.keys(now).filter((k) => before?.[k] === false && now[k] === true).map((k) => NAMES[k]); // the connectors that were down and are connected again (every recorded one, the mail client's too)
 }
 export const readConnectors = (): Connectors | undefined => kvGet<Connectors | undefined>(KEY, undefined);
 

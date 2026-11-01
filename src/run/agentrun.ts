@@ -15,6 +15,7 @@ import { QueryUsage, turnCost } from "./turncost.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { afterConnectors } from "./connectorwait.ts";
 import { recordConnectors } from "../modules/connectors.ts";
+import { connectorBack } from "../modules/send/connectorback.ts";
 import { failure } from "../tenants/errors.ts";
 import { isNotePath, noteSavedHint, writeIndex } from "../memory/notes.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
@@ -290,7 +291,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     opts.watch?.see(message);
     if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
-      recordConnectors(message.tools, message.mcp_servers);
+      for (const label of recordConnectors(message.tools, message.mcp_servers)) connectorBack(label);
       console.log(`run: mcp servers: ${message.mcp_servers.map((m) => `${m.name}=${m.status}`).join(", ") || "none"}`); // (names and statuses only)
     }
     if (message.type === "user") for (const name of missingTools(message.message.content)) console.error(`run: tool not available: ${name}`); // (a connector that was not connected: the call never reached canUseTool)
