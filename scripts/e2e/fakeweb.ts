@@ -21,7 +21,7 @@ const textOf = (html: string) => html.replace(/<(script|style)[\s\S]*?<\/\1>/gi,
 const SKIP = new Set(["the", "and", "for", "with", "that", "this", "from", "about", "check", "out", "all", "there", "website", "site", "page"]);
 
 // The web search of the fake web. The built-in WebSearch runs at the provider and cannot be pointed at a local server, so the guard answers it from here (guard.ts): the case's pages that share a word with the query, best first.
-export function searchPages(pages: Record<string, string>, query: string): string {
+function searchPages(pages: Record<string, string>, query: string): string {
   const words = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])].filter((w) => !SKIP.has(w));
   const found = Object.entries(pages)
     .map(([url, html]) => ({ url, title: /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() ?? url, body: textOf(html) }))
