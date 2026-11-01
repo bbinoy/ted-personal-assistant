@@ -5,6 +5,7 @@ import { isOneEmoji } from "../../core/reaction.ts";
 import { dropShots, loadFile, loadShot, type HeldFile } from "./shots.ts";
 import { setAsking, type Asking } from "../voice/voicenote.ts";
 import { sourceOfKey } from "../../core/ownerkey.ts";
+import { pullLook } from "../../conversation/ledger.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,
 // a picture (a screenshot of this run's browse, or a drawing from the draw tool), a file (one opened with open_file: file1...), or an emoji reaction. Text the model writes before a tool call stays internal; only this tool
@@ -106,7 +107,7 @@ export async function sendNow(key: string, a: SendArgs): Promise<string> {
   }
 }
 
-export function createSendServer(key: string) {
+export function createSendServer(key: string, checkAgain = false) {
   return createSdkMcpServer({
     name: "send",
     version: "1.0.0",
@@ -125,6 +126,17 @@ export function createSendServer(key: string) {
         },
         async (a) => ({ content: [{ type: "text" as const, text: await sendNow(key, a) }] }),
       ),
+      ...(checkAgain ? [
+        tool(
+          "check_again",
+          "Pull this conversation's next background check forward: it runs in `minutes` (2 to 120) and is told your reason. Use it when you expect something soon (a reply, a confirmation, an event ending) instead of promising to look later. It never postpones a check already booked sooner; at most 4 a hour.",
+          {
+            minutes: z.number().int().min(1).max(1000).describe("From now; clamped to 2..120."),
+            why: z.string().min(1).max(300).describe("What to look at then, one short line."),
+          },
+          async (a) => ({ content: [{ type: "text" as const, text: pullLook(key, a.minutes, a.why) }] }),
+        ),
+      ] : []),
     ],
   });
 }

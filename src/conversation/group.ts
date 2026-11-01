@@ -10,7 +10,7 @@ import { resolveSender } from "../tenants/tenants.ts";
 import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
 import { askGate, prepareGate } from "./gate.ts";
 import { logTail } from "../run/chattail.ts";
-import { recordWake } from "./ledger.ts";
+import { recordWakeKeepingPull } from "./ledger.ts";
 import { groupContext, setSponsor, sponsorOf } from "./groupstore.ts";
 import { isPaused } from "../core/pause.ts";
 import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../run/image.ts";
@@ -255,7 +255,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
       const v = r.v;
       batch.timing.set("gate", r.ms);
       batch.timing.set("gateDelay", v.delaySeconds * 1000);
-      recordWake({ record: (c, kind, ts, text) => deps.record(c.target, kind, ts, text) }, conv, v.nextCheckMinutes, r.looked); // the same gate also chose when to look next (wake.ts)
+      recordWakeKeepingPull({ record: (c, kind, ts, text) => deps.record(c.target, kind, ts, text) }, conv, v.nextCheckMinutes, r.looked); // the same gate also chose when to look next (wake.ts)
       if (v.reaction && e.author) delivery.reactTo(conv, v.reaction, { author: e.author, timestamp: e.timestamp }); // quick and cheap: no run
       if (!v.act) return;
       showTyping();

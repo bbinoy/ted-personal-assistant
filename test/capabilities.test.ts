@@ -32,14 +32,14 @@ const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities })
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
+  const full = sorted([...CHAT, "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__send__check_again", "mcp__voice__voice", ...WEATHER, ...TASKS]);
   const shared = [P("research-booking"), P("web-research"), P("how-ted-works"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(toolsFor(groupCapabilities())), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
   // its look: the same set (the notes, memory and list tools are every run's)
   assert.deepEqual(sorted(toolsFor(groupCapabilities(), GROUP_LOOK)), full);
   // a new friend's record is the same set as a group's
-  const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
+  const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
   assert.deepEqual(skillsFor(friend), shared);
   // chat alone: the basics and the web-research skill (so the Skill tool)
@@ -61,7 +61,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     voice: { tools: ["mcp__voice__voice"], skills: [] },
     heartbeat: { tools: [], skills: [] }, // a schedule: its looks' note tools are the unattended run's (above)
     dream: { tools: ["mcp__memory__undo_dream"], skills: [] },
-    wake: { tools: [], skills: [] },
+    wake: { tools: ["mcp__send__check_again"], skills: [] }, // check_again: pull the next look forward
     weather: { tools: WEATHER, skills: [P("surf-conditions")] },
     draw: { tools: ["mcp__draw__draw"], skills: [P("draw")] },
     tasks: { tools: TASKS, skills: [] }, // the conversation's own list: on for the owner, every friend and every group

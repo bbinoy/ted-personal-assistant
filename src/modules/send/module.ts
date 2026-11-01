@@ -6,7 +6,7 @@ import { rowsOf, type ToolModule } from "../types.ts";
 export const sendModule: ToolModule = {
   name: "send",
   connection: { kind: "in-process", name: "send", when: (ctx) => !!ctx.key && ctx.offers("mcp__send__send") },
-  rows: rowsOf("mcp__send__", "send", "chat")("send", "send"),
+  rows: [...rowsOf("mcp__send__", "send", "chat")("send", "send"), ...rowsOf("mcp__send__", "send", "wake")("wake", "check_again")], // check_again: wherever looks exist (heartbeat and wake)
   free: true,
   floor: { judgeNever: ["send"] },
 };

@@ -193,6 +193,17 @@ test("a tenant's night is the instruction's, not a rule in code: her look runs a
   assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /Safe, reversible work with the tools you have \(a note, a task\)/, "no mail or calendar: the same proactivity as everyone's, within her tools (her prompt says so)");
 });
 
+test("a look that calls check_again during its run keeps the pull over its own later choice", async () => {
+  const kim = person("Kim");
+  note(kim);
+  const { pullLook } = await import("../src/conversation/ledger.ts");
+  const r = rig({ answer: (c) => (c.tenantId === kim.id ? (pullLook(c.key, 5, "her reply to the invite", NOON), { nextCheckMinutes: 60 }) : { message: "[[silent]]" }) });
+  await r.wakeups.tick(NOON);
+  const wakes = readFileSync(T.tenantContext(kim).logFile, "utf8").split("\n").filter((l) => l.includes('"kind":"wake"')).map((l) => JSON.parse(JSON.parse(l).text));
+  assert.equal(wakes.at(-1).why, "her reply to the invite", "the last wake is the pull, not the look's 60 minutes");
+  assert.equal(wakes.at(-1).next, new Date(NOON.getTime() + 5 * 60_000).toISOString());
+});
+
 test("one tenant's failing look or run does not stop the others or the owner", async () => {
   const bad = person("Gus");
   const good = person("Hal");
