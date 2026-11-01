@@ -412,4 +412,46 @@ const e12: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e12];
+// ---- e11b: like e11, but the slides mail is archived: finding it needs a search beyond the inbox ----
+const e11b: Case = {
+  ...e11,
+  id: "e11b",
+  title: "a reminder wakes a look: the slides mail is archived, so Ted has to search for it",
+  world: (t) => {
+    const w = e11.world(t);
+    return { ...w, mail: w.mail!.map((m) => (/slides/i.test(m.subject) ? { ...m, folder: "archive" as const } : m)) };
+  },
+};
+
+// ---- e13: a place-first task for a person; the address is in an older thread, found without asking ----
+const DANA = "dana.weiss@example.com";
+const e13: Case = {
+  id: "e13",
+  title: "meet a founder next time in Berlin: task saved, her address looked up in mail, no question",
+  turns: ["Meet Dana, founder of Example Labs, next time I'm in Berlin for coffee"],
+  world: (t) => ({
+    mail: [{ from: { email: DANA, displayName: "Dana Weiss" }, subject: "Great to connect", body: "<p>Thanks for the intro call. Happy to grab a coffee when you are next in Berlin. Dana, Example Labs</p>", receivedAt: new Date(t.now.getTime() - 40 * 86_400_000).toISOString(), folder: "archive", read: true }],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = o.tasks.find((x) => /dana/i.test(`${x.title} ${x.details ?? ""} ${x.person ?? ""}`) && x.status === "open");
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    const noted = Object.entries(o.notes).some(([f, text]) => !/^setup-|^voice-/.test(f) && text.toLowerCase().includes(DANA));
+    return [
+      check("a task for meeting Dana was saved", !!task, o.tasks.map((x) => x.title).join("; ")),
+      check("Dana's address was found (a note or the reply has it)", noted || said.toLowerCase().includes(DANA), said.slice(0, 160)),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+      check("the reply offers no search", !/(want|shall|should|would you like).{0,40}(search|look|dig)/i.test(said), said.slice(0, 160)),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It says the task is saved for the next Berlin trip and that Dana was found in the mail (her address, or the thread it came from).", "It is a few short lines at most, offers no search and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "Dana" });
+    s.tasks.add({ title: "When in Berlin: meet Dana (founder of Example Labs) for coffee" });
+    s.say(`Saved: when you are in Berlin, coffee with Dana from Example Labs. I found her address in your mail, ${DANA}.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13];

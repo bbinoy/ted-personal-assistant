@@ -3,7 +3,7 @@
 // keeps the run away from every real account (guard.ts). A look goes through createHeartbeatLook, the code a heartbeat look uses.
 // Import it only AFTER HARNESS_DATA_DIR and TZ are set (scripts/e2e-case.ts does): the application reads them when it is loaded.
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { settings } from "../../src/core/settings.ts";
 import { OWNER_KEY } from "../../src/core/ownerkey.ts";
@@ -247,7 +247,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(OWNER_KEY, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone), web: { fetched: web?.hits ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots };
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(OWNER_KEY, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone), web: { fetched: web?.hits ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
   if (!error && guard.inits === 0 && !o.perfect) guard.violations.push("no start-up message was checked");
   await web?.close();
   return {

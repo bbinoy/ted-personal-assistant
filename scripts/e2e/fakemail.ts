@@ -120,7 +120,7 @@ export class FakeMail {
       search_conversations: {
         description: "Search conversations in every folder (words in the subject, body, sender; from:name).",
         shape: { query: z.string(), limit: z.number().optional(), accountId: z.number().optional() },
-        run: (a) => this.conversations.filter((c) => matches(c, a.query)).slice(0, a.limit ?? 20).map((c) => ({ ...row(c), actualFolders: [] })),
+        run: (a) => this.conversations.filter((c) => matches(c, a.query)).slice(0, a.limit ?? 20).map((c) => ({ ...row(c), actualFolders: [FOLDER_NAME[c.folder]] })),
       },
       get_message: { description: "Read one message (or draft) by its id.", shape: { messageId: z.number() }, run: (a) => shownMessage(msg(a.messageId).m) },
       get_conversation: { description: "A conversation's messages (without bodies).", shape: { conversationId: z.string() }, run: (a) => ({ ...row(conv(a.conversationId)), messages: conv(a.conversationId).messages.map(({ body: _b, ...m }) => ({ ...m, attachmentCount: m.attachments.length })) }) },
