@@ -5,7 +5,7 @@ import type { TriageRow } from "../tasks/maildecisions.ts";
 // The heartbeat run's pure rules: what its answer looks like, and how its next look is clamped. Code keeps these whatever the model decides.
 
 const MIN_LOOK_MINUTES = 10;
-const MAX_LOOK_MINUTES = 120;
+const MAX_LOOK_MINUTES = 60;
 const SILENT = "[[silent]]";
 const MAX_TRIAGE = 60;
 const TRIAGE_DECISIONS: readonly TriageRow["decision"][] = ["archive", "keep", "task", "draft"];
@@ -25,7 +25,7 @@ export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
   },
 };
 
-// The next look, in minutes, whatever the model said: a number from 10 to 120, the day default when it gave nothing usable. Also at night.
+// The next look, in minutes, whatever the model said: a number from 10 to 60, the day default when it gave nothing usable. The same at night: clampLook has no clock, and the next look is at most an hour away whatever the hour.
 export const clampLook = (minutes: unknown, fallback: number = settings.heartbeatDayMinutes): number => {
   const n = typeof minutes === "number" || (typeof minutes === "string" && minutes.trim() !== "") ? Number(minutes) : NaN;
   const use = Number.isFinite(n) ? n : fallback;

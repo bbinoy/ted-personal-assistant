@@ -38,7 +38,7 @@ import { meetingWhy } from "../tasks/meetings.ts";
 // it is due and the routines due. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge path, with `standing` provenance (the check's fixed
 // text is what the judge reads as the reason for the run; no message of anyone's led there). It never asks anyone: what the judge is not sure about is not done (permissions.ts UNATTENDED_SKIP).
 // It answers with a message or [[silent]] and the minutes until its next look.
-// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
+// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..60 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 interface RunExtra {
   untrusted?: boolean;
@@ -239,7 +239,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
-    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
+    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..60 rule), not after the day's 30 minutes
     if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look was handed is settled by facts.ts: held posts when it ended posted or silent, reminders and learned changes when it posted or held, a prep when it posted, a routine when its expert came back (a look a message overtook settles none of the last two).

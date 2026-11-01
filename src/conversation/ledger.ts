@@ -45,7 +45,7 @@ export function lookState(entries: readonly Sent[]): LookState {
 // the last look (not in a group set to "tagged": there only a tag matters), or when its notes changed since. No look yet: due.
 export function lookWhy(st: LookState, now: Date, o: { notesChangedMs?: number; messagesCount?: boolean } = {}): string | undefined {
   if (!st.wake) return "No check has run yet.";
-  // A look a message called off: due once nobody has written for QUIET_MINUTES (a turn still running is the caller's `busy`). This is code's own schedule, so it does not go through the 10..120 clamp; `next` is not used.
+  // A look a message called off: due once nobody has written for QUIET_MINUTES (a turn still running is the caller's `busy`). This is code's own schedule, so it does not go through the 10..60 clamp; `next` is not used.
   if (st.wake.quiet) {
     const since = Math.max(Date.parse(st.wake.at), st.lastInboundAt ? Date.parse(st.lastInboundAt) : 0);
     return now.getTime() - since >= QUIET_MINUTES * 60_000 ? "Your last check was called off by a message; the conversation is quiet now." : undefined;
@@ -64,7 +64,7 @@ export function notesChangedAt(dir: string): number {
   }
 }
 
-// `clamp`: the gate's 15..60 minutes by default; the owner's heartbeat run chooses 10..120 (heartbeat/rules.ts clampLook).
+// `clamp`: the gate's 15..60 minutes by default; the owner's heartbeat run chooses 10..60 (heartbeat/rules.ts clampLook).
 export const wakeText = (nextCheckMinutes: number, looked: Date, now = Date.now(), clamp: (minutes: unknown) => number = clampCheck): string =>
   JSON.stringify({ next: new Date(now + clamp(nextCheckMinutes) * 60_000).toISOString(), looked: looked.toISOString() } satisfies Wake);
 

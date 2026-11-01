@@ -208,7 +208,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 **What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, the answer format) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat tail.
 
 - The message is also the judge's standing provenance, so it holds no mail and no chat.
-- The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..120 minutes (`clampLook`); `[[silent]]` means nothing to say.
+- The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..60 minutes (`clampLook`); `[[silent]]` means nothing to say.
 
 **A look starts fresh.** Every look is a new SDK session (`freshSession`, `TRIGGERS.look.fresh`): it neither resumes nor saves one, and the chat session is never touched by it, not even to drop it or mark it untrusted. It is told the full context, the notes index, the facts and the chat tail every time. Continuity comes from the shared context (facts, chat tail, journal, its own posts). A look that read mail is untrusted for that run only. An earlier design resumed one Haiku session per conversation and its later looks answered from their memory of earlier checks without opening the inbox.
 

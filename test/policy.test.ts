@@ -24,7 +24,7 @@ test("reads are allowed, including Notion's prefixed names (regression: brief hu
   for (const t of [
     `${N}notion-fetch`, `${N}notion-search`, `${N}notion-ai-search`, `${N}notion-query-meeting-notes`,
     `${N}notion-get-comments`, `${N}notion-list-recent-pages`,
-    `${M}get_message`, `${M}list_conversations`, `${M}summarize_all_inboxes`, `${M}search_conversations`,
+    `${M}get_message`, `${M}list_conversations`, `${M}search_conversations`,
     `${C}list_events`, `${C}get_event`, `${C}suggest_time`,
     "mcp__claude_ai_Google_Drive__read_file_content", "mcp__claude_ai_Google_Docs__read_doc",
   ]) assert.equal(chat(t), "allow", t);
@@ -133,7 +133,7 @@ test("hidden tools: the defaults hide exactly what the per-provider lists did, f
   const MB = "mcp__mailbird__";
   const GM = "mcp__claude_ai_Gmail__";
   const NO = "mcp__claude_ai_Notion__notion-";
-  const mailbirdKeep = ["summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
+  const mailbirdKeep = ["list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
   const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
   const notionKeep = ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"];
   const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, `${MB}set_sender_blocked`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
