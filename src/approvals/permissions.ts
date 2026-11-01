@@ -183,7 +183,7 @@ export async function renderHashOf(conversation: string, tool: string, input: Re
 }
 
 // Said to the run when its call was asked and the turn must not wait for the answer (handoff.ts).
-const HANDED_OFF = `Asked ${OWNER}; it runs on their yes. Do not wait or repeat it. Finish anything independent, then end your turn.`;
+const HANDED_OFF = `Asked ${OWNER}; it runs on their yes. The question already went to them as its own message: do not say that you asked, do not restate the action, do not wait or repeat it. Finish anything independent, then end your turn; if you have nothing else to tell them, answer [[silent]].`;
 const ALREADY_ASKED = `${OWNER} was already asked about exactly this and has not answered yet. Do not ask again or wait; end your turn.`;
 
 export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {

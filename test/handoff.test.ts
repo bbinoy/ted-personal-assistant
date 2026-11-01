@@ -51,7 +51,7 @@ const closeAll = () => {
   for (const scope of ["owner", "group-handoff-a", "group-restart-a"]) for (const m of sent) answerReaction("👎", m.ts, scope); // (no question stays open: its timer would keep the process alive)
 };
 after(closeAll);
-const HANDED = /Asked .*; it runs on their yes\. Do not wait or repeat it/;
+const HANDED = /Asked .*; it runs on their yes\. The question already went to them as its own message: do not say that you asked[\s\S]*\[\[silent\]\]/;
 
 test("a question that needs a yes ends the turn at once: the call is denied with 'asked', the question is open and stored", async () => {
   const can = canOf();

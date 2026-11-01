@@ -182,6 +182,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         edit: (id, patch) => void editItem(scope, id, patch),
       },
       ask: (tool, question, answer, payment = false) => void scriptedAsks.push({ turn, tool, question, payment, answer }),
+      note: (file, text) => void writeFileSync(join(owner().notesDir, file), text),
       say: (text) => void said.push(text),
     };
     await c.perfect(script);

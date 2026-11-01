@@ -78,5 +78,6 @@ export interface PerfectScript {
     edit(id: number, patch: { title?: string; due?: string | null; details?: string | null }): void;
   };
   ask(tool: string, question: string, answer: string, payment?: boolean): void; // a question the scripted run put to the owner
+  note(file: string, text: string): void; // a note file the run saved
   say(text: string): void;
 }

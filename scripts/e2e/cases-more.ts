@@ -458,4 +458,43 @@ const e13: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13];
+// ---- e14: an invite whose address came from mail: one question, no restating, the address saved as a people note ----
+const MIRA = "mira.keller@example.com";
+const e14: Case = {
+  id: "e14",
+  title: "tea tonight, then 'invite her': Mira's address from an old thread, one question, no echo of it, a people note",
+  turns: ["Tea at 8pm with Mira tonight at Example Bar", "invite her"],
+  world: (t) => ({
+    mail: [{ from: { email: MIRA, displayName: "Mira Keller" }, subject: "Re: catching up", body: "<p>Lovely to hear from you, let's do tea soon. Mira</p>", receivedAt: new Date(t.now.getTime() - 30 * 86_400_000).toISOString(), folder: "archive", read: true }],
+  }),
+  answers: ["yes"],
+  maxQuestions: 1, // (an address read from mail makes the code floor ask once before the invitation goes out; saved as a people note first, it is known and nothing is asked)
+  state: (o) => {
+    const ev = o.calendar.find((e) => /tea|mira/i.test(e.summary));
+    const turn2 = (o.turns[1]?.messages ?? []).join("\n");
+    const noted = Object.entries(o.notes).some(([f, text]) => /^people-/.test(f) && text.toLowerCase().includes(MIRA));
+    return [
+      check("one tea event, made in turn 1 with no question", created(o).filter((e) => /tea|mira/i.test(e.summary)).length === 1 && !o.asks.some((a) => a.turn === 0), `${created(o).length} created`),
+      check("at most one question, about the invite (none when the address was saved as a note first)", o.asks.length <= 1 && o.asks.every((a) => a.turn === 1), o.asks.map((a) => a.question).join("; ")),
+      check("Mira is a guest after the yes, at the address from the old thread, and was sent the invitation", !!ev && ev.attendees.includes(MIRA) && ev.invited.includes(MIRA)),
+      check("turn 2 does not restate the pending question", !/(i('| ha)ve asked|i asked|once you (approve|confirm|say yes)|your (ok|approval)|waiting for (your|the)|pending your)/i.test(turn2), turn2.slice(0, 200)),
+      check("a people note for Mira with her address was saved", noted, Object.keys(o.notes).join(", ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["Turn 1 says the tea is in the calendar for 8pm tonight at Example Bar.", "After the invite request it does not say that it asked for an OK or that the invite goes out once approved (the question already said so); silence or a short outcome after the yes is fine.", "It never asks the owner for Mira's email address."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}create_event`, { summary: "Tea with Mira", startTime: s.time.local(s.time.today, "20:00"), endTime: s.time.local(s.time.today, "21:00"), timeZone: s.time.zone, location: "Example Bar" });
+    s.say("Tea with Mira is in your calendar tonight at 8pm, Example Bar.");
+    s.turn(1);
+    await s.tool(`${MB}search_conversations`, { query: "Mira" });
+    s.note("people-mira-keller.md", `Mira Keller, ${MIRA}`);
+    s.ask(`${CAL}update_event`, "Invite Mira Keller (mira.keller@example.com) to Tea with Mira?", "yes");
+    const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") })) as { events: { id: string; summary: string }[] };
+    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Tea/.test(e.summary))!.id, attendees: [{ email: MIRA }] });
+    s.say("Done, Mira has the invite.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14];
