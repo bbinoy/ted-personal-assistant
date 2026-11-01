@@ -18,12 +18,12 @@ import { claimPreps } from "./preptick.ts";
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
 // (heartbeat/look.ts). It is one Haiku run with the conversation's own persona, notes, tools and approver; it looks at the chat log and whatever the conversation can read
-// (mail, calendar, tasks), acts through the normal floor, judge and phone, and answers with a message or [[silent]] and its next look (10..120 minutes). Which tools and
+// (mail, calendar, tasks), acts through the normal floor, judge and phone, and answers with a message or [[silent]] and its next look (10..60 minutes). Which tools and
 // skills it has, whether it may call the expert and whether there is anything to look at at all is the conversation's capability set (capabilities.ts), not its kind.
 //   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has both, unless the instance switches one off), while she is active, the key is out of a cooldown and
 //             she is within her day's budget; the run is on the instance key, billed to her, her approvals go to her chat and the answer to her chat only
 // Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown; for a friend the shared key) and runs on the Payer it returns: no per-conversation branches here.
-// The model decides; THESE are the guards, in code: pause, the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
+// The model decides; THESE are the guards, in code: pause, the next look clamped to 10..60 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
 // an unprompted post and the tick delivers what was held as one message); looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
 
 interface WakeDeps {

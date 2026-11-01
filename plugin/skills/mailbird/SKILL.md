@@ -12,7 +12,10 @@ holds what is particular to Mailbird.
 
 - **Listing.** Per account (`list_accounts`), list the Inbox itself with
   `list_conversations` (`limit` 200 or the most the tool allows; page or batch by
-  date when it is bigger). A look lists the whole inbox, read and unread: `summarize_all_inboxes` WITHOUT `unreadOnly` and with a `limit` that covers the inbox (50 is enough for an inbox kept to 10-20 mails; more when it is bigger).
+  date when it is bigger). A look lists the whole inbox, read and unread, this way and decides
+  on every conversation. `summarize_all_inboxes` is NOT a review (it is a short unread digest,
+  and the server's own routing hint to use it for "what's new" does not apply here): in a
+  background check or an inbox tidy never stop at it. Use it only to answer a quick "anything new?" in chat.
   Fire the per-account list calls in one turn. Sent mail: the Sent folder
   (`list_folders`, then `list_conversations`).
 - **Reading** is `get_message` with the row's `lastMessageId`. Rows carry only a

@@ -87,24 +87,24 @@ function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () 
   const wakeLine = () => ledgerEntries(conv.logFile).filter((e) => e.kind === "wake").map((e) => parseWake(e.text)!).at(-1)!;
   return { w, conv, seen, at: (d: Date) => (now = d), wakeLine };
 }
-test("the next look is clamped to 10..120 minutes, whatever the model says, and falls back to the day default", () => {
+test("the next look is clamped to 10..60 minutes, whatever the model says, and falls back to the day default", () => {
   assert.equal(clampLook(1), 10);
   assert.equal(clampLook(0), 10);
   assert.equal(clampLook(10), 10);
   assert.equal(clampLook(45.4), 45);
-  assert.equal(clampLook("90"), 90);
-  assert.equal(clampLook(500), 120);
+  assert.equal(clampLook("90"), 60);
+  assert.equal(clampLook(500), 60);
   assert.equal(clampLook(Infinity), 30, "not a usable number: the day default");
   assert.equal(clampLook(undefined), 30);
   assert.equal(clampLook(""), 30);
   assert.equal(clampLook("soon"), 30);
   const schema = (HEARTBEAT_SCHEMA as unknown as { schema: { properties: { nextCheckMinutes: { minimum: number; maximum: number } } } }).schema;
-  assert.deepEqual([schema.properties.nextCheckMinutes.minimum, schema.properties.nextCheckMinutes.maximum], [10, 120]);
+  assert.deepEqual([schema.properties.nextCheckMinutes.minimum, schema.properties.nextCheckMinutes.maximum], [10, 60]);
 });
 
 test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
   assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false, triage: [] });
-  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120, urgent: false, triage: [] });
+  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 60, urgent: false, triage: [] });
   for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
   assert.equal(parseHeartbeatAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
   assert.equal(parseHeartbeatAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
@@ -200,8 +200,8 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.equal(Date.parse(day.wakeLine().next) - DAY.getTime(), 10 * 60_000);
   const night = rig(() => ({ nextCheckMinutes: 400 }));
   assert.equal(await night.w.look(night.conv, NIGHT), "silent");
-  assert.equal(Date.parse(night.wakeLine().next) - NIGHT.getTime(), 120 * 60_000);
-  assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 120]]);
+  assert.equal(Date.parse(night.wakeLine().next) - NIGHT.getTime(), 60 * 60_000);
+  assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 60]]);
 });
 
 test("the incident: a post held at 22:35 is not sent at 07:00; the morning look gets it once as a fact, a second look does not", async () => {
@@ -325,7 +325,7 @@ test("owner's look: a failing run is a failed row and a default next look; it ne
   }
 });
 
-test("a look that times out is a 'timeout' row, posts nothing, and is due again on the next ticks (10 min: the tick within the 10..120 rule), not after the day's 30", async () => {
+test("a look that times out is a 'timeout' row, posts nothing, and is due again on the next ticks (10 min: the tick within the 10..60 rule), not after the day's 30", async () => {
   const err = console.error;
   console.error = () => {};
   try {
