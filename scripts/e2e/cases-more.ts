@@ -339,4 +339,77 @@ const e10: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10];
+// ---- e11: a due task Ted can prepare (a look woken by its reminder) ----
+const SLIDES = "https://files.example.org/workshop/slides-thursday.pdf";
+const e11: Case = {
+  id: "e11",
+  title: "a reminder wakes a look: send Sam the slides is prepared as a draft, not only reminded",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    return {
+      tasks: [{ title: "Send Sam the slides for Thursday's workshop", due: t.today, person: "Sam", remindAt: t.now.getTime() - 60_000 }],
+      mail: [
+        { from: { email: "sam.keller@example.com", displayName: "Sam Keller" }, subject: "Thursday's workshop", body: "<p>Hi, could you send me your slides before Thursday? Thanks, Sam</p>", receivedAt: ago(72), read: true },
+        { from: { email: "design.team@example.org", displayName: "Design Team" }, subject: "Final slides for Thursday", body: `<p>The final slides are ready: ${SLIDES}</p>`, receivedAt: ago(30), read: true },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const d = o.mail.drafts().find((m) => m.to.some((p) => p.email === "sam.keller@example.com"));
+    const task = o.tasks.find((x) => /slides/i.test(x.title));
+    return [
+      check("a draft to Sam exists", !!d, o.mail.drafts().map((m) => m.to.map((p) => p.email).join(",")).join("; ")),
+      check("the draft is a reply in Sam's thread", /workshop/i.test(d?.subject ?? ""), d?.subject),
+      check("the draft links the slides", !!d && d.body.includes(SLIDES), d?.body.slice(0, 120)),
+      check("nothing was sent", o.mail.sent.length === 0),
+      check("the owner got a message", o.turns.some((t) => t.messages.length > 0)),
+      check("the task is still open (the send is left)", task?.status === "open" || task?.status === "snoozed", task?.status),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It says a draft of the slides to Sam is ready (and that it has not been sent), and what is left for the owner (to say send / look it over).", "It is short: a few lines at most.", "It is not just a reminder to send the slides, and asks no question that blocks."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}search_conversations`, { query: "workshop" })) as { conversationId: string; subject: string }[];
+    const thread = rows.find((r) => /Thursday's workshop/.test(r.subject))!;
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: thread.conversationId, body: `<p>Hi Sam, here are the slides: ${SLIDES}</p>` });
+    s.say("The slides for Sam are drafted in your thread with him, with the link in. Say send and I will send it.");
+  },
+};
+
+// ---- e12: a due task Ted can finish by looking it up (the morning's first look) ----
+const MUSEUM_URL = "https://citymuseum.example.org/visit";
+const PAGE12 = "<html><head><title>Visit the City Museum</title></head><body><h1>Visit the City Museum</h1><p>Opening hours: Tuesday to Saturday 10:00 to 17:00. Sunday 11:00 to 16:00. Closed on Monday.</p></body></html>";
+const e12: Case = {
+  id: "e12",
+  title: "a task due today to find out opening hours is looked up and ticked off",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [{ title: "Find out the Sunday opening hours of the City Museum (citymuseum.example.org/visit)", due: t.today, details: `Their visitor page: ${MUSEUM_URL}` }],
+    fetch: { [MUSEUM_URL]: PAGE12, "https://citymuseum.example.org": PAGE12 }, // (the root address too: a guess at the site is not a violation)
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = o.tasks.find((x) => /museum/i.test(x.title));
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    return [
+      check("the owner's message gives the Sunday hours", /11(:00)?\s*(to|-|–|until)\s*(16|4)/i.test(said), said.slice(0, 160)),
+      check("the task is done", task?.status === "done", task?.status),
+      check("no mail was drafted", o.mail.drafts().length === 0),
+      check("no calendar event was made", created(o).length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...o.calls.filter((c) => /create_draft|reply/.test(c.tool)).map((c) => `${c.tool.split("__").pop()} was called`)],
+  reply: ["It gives the Sunday opening hours (11:00 to 16:00).", "It is one or two short lines.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.done(s.tasks.find("museum"));
+    s.say("The City Museum is open on Sundays from 11:00 to 16:00. I ticked the task off.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e12];
