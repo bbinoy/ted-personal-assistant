@@ -19,6 +19,7 @@
 - **People who matter.** Tell Ted about friends and family (where they live, how close, how often you'd like to be in touch). When your calendar or mail shows you are travelling to where they live, Ted sends you one short message with who is there and how long since you last spoke, and offers a draft.
 - **Proactive.** Wakes up about every 30 minutes (sooner when something is coming up, like a meeting or an expected reply) to check if anything needs acting on (via small model judge). A check you interrupt by writing runs again once the chat is quiet.
 - **Its own contact.** Give Ted its own Signal account (a name, a picture) and you chat with a contact instead of with yourself.
+- **Ask Ted how it works.** It is open source and explains itself from its own code.
 - **Pre-configured as a helpful personal assistant.** Comes with skills out of the box to be a helpful personal assistant.
 
 ## Personal assistant

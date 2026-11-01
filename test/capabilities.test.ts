@@ -33,7 +33,7 @@ const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
   const full = sorted([...CHAT, "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
-  const shared = [P("research-booking"), P("web-research"), P("surf-conditions"), P("draw")];
+  const shared = [P("research-booking"), P("web-research"), P("how-ted-works"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(toolsFor(groupCapabilities())), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
   // its look: the same set (the notes, memory and list tools are every run's)
@@ -44,13 +44,13 @@ test("capabilities: what a group, a friend and a person with less have, pinned (
   assert.deepEqual(skillsFor(friend), shared);
   // chat alone: the basics and the web-research skill (so the Skill tool)
   assert.deepEqual(sorted(toolsFor(caps("chat"))), CHAT);
-  assert.deepEqual(skillsFor(caps("chat")), [P("web-research")]);
+  assert.deepEqual(skillsFor(caps("chat")), [P("web-research"), P("how-ted-works")]);
   // no chat: no tools at all, whatever else she has (the basics are the capability chat)
   assert.deepEqual(sorted(toolsFor(caps("weather", "draw"))), sorted([...WEATHER, "mcp__draw__draw"]));
   assert.deepEqual(sorted(toolsFor(caps())), []);
   // weather without draw and browse
   assert.deepEqual(sorted(toolsFor(caps("chat", "weather"))), sorted([...CHAT, ...WEATHER]));
-  assert.deepEqual(skillsFor(caps("chat", "weather")), [P("web-research"), P("surf-conditions")]);
+  assert.deepEqual(skillsFor(caps("chat", "weather")), [P("web-research"), P("how-ted-works"), P("surf-conditions")]);
 });
 
 test("capabilities: adding one capability to a record changes exactly its tools and its skills", () => {
@@ -84,7 +84,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     const withIt = caps("chat", c);
     assert.deepEqual(sorted(toolsFor(withIt)).filter((t) => !toolsFor(base).has(t)), sorted(adds[c].tools), `${c}: tools`);
     assert.deepEqual(sorted(toolsFor(base)).filter((t) => !toolsFor(withIt).has(t)), [], `${c}: takes nothing away`);
-    assert.deepEqual(skillsFor(withIt).filter((k) => k !== P("web-research")), adds[c].skills, `${c}: skills`);
+    assert.deepEqual(skillsFor(withIt).filter((k) => k !== P("web-research") && k !== P("how-ted-works")), adds[c].skills, `${c}: skills`);
   }
   // everything at once is still only the sum of the free ones
   assert.deepEqual(sorted(toolsFor(caps(...CAPABILITIES))), sorted(toolsFor(groupCapabilities())));
