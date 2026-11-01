@@ -20,6 +20,7 @@ export interface Call {
 export class Recorder {
   calls: Call[] = [];
   turn = 0;
+  onStart?: (tool: string) => void; // told when a call begins, before its delay (a case may send the owner's next message then)
   add(tool: string, args: Record<string, unknown>, ok: boolean, result: string): void {
     this.calls.push({ n: this.calls.length, turn: this.turn, tool, args: structuredClone(args), ok, result });
   }
@@ -32,6 +33,7 @@ type Shape = Record<string, z.ZodType>;
 export interface ToolDef {
   description: string;
   shape: Shape;
+  delayMs?: number; // the service is slow: the call takes this long before it answers
   run: (args: Record<string, any>) => unknown; // a string is returned as it is, anything else as JSON; a throw is an error result the model reads
 }
 
@@ -48,6 +50,8 @@ export function fakeService(server: string, rec: Recorder, defs: Record<string, 
   const tools = Object.entries(defs).map(([name, d]) => {
     const handle = async (args: Record<string, unknown>) => {
       const full = prefix + name;
+      rec.onStart?.(full);
+      if (d.delayMs) await new Promise<void>((r) => setTimeout(r, d.delayMs));
       try {
         const out = d.run(args);
         const text = typeof out === "string" ? out : JSON.stringify(out);

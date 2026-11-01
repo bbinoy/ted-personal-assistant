@@ -557,4 +557,43 @@ const e15b: Case = {
   group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: e15.group!.turns[0]!.text }] },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b];
+// ---- e17: a correction arrives while the task is still running ----
+const e17: Case = {
+  id: "e17",
+  title: "a slow two-step task; a correction arrives mid-run and is acted on, nothing done twice",
+  turns: ["Find the earliest free hour for a call with Mira on Thursday or Friday (look at Thursday first, then Friday) and put a placeholder called 'Call with Mira' on my calendar then."],
+  interject: { on: `${CAL}list_events`, text: "also: it has to be after 18:00", afterMs: 1500 }, // (while the first calendar read is still out)
+  world: (t) => ({
+    slowMs: 5000,
+    calendar: [
+      { summary: "Team sync", start: t.local(t.nextWeekday(4), "09:00"), end: t.local(t.nextWeekday(4), "12:00") },
+      { summary: "Workshop", start: t.local(t.nextWeekday(4), "13:00"), end: t.local(t.nextWeekday(4), "17:00") },
+      { summary: "Planning", start: t.local(t.nextWeekday(5), "09:00"), end: t.local(t.nextWeekday(5), "17:30") },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const t = o.time;
+    const mine = created(o);
+    const call = mine[0];
+    const days = [t.nextWeekday(4), t.nextWeekday(5)];
+    const makes = o.calls.filter((c) => c.tool === `${CAL}create_event` && c.ok).length;
+    return [
+      check("exactly one placeholder was created, once", mine.length === 1 && makes === 1, `${mine.length} created by ${makes} calls`),
+      check("it is called Call with Mira", !!call && /call with mira/i.test(call.summary), call?.summary),
+      check("it is on Thursday or Friday", !!call && days.includes(t.dateOf(call.startMs)), call && t.dateOf(call.startMs)),
+      check("it starts at 18:00 or later (the correction)", !!call && t.hhmm(call.startMs) >= "18:00", call && t.hhmm(call.startMs)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says a placeholder 'Call with Mira' is on the calendar at 18:00 or later, with the day.", "It does not say an earlier time was booked.", "It is short (a few lines at most) and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    const day = s.time.nextWeekday(4);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(day, "00:00"), endTime: s.time.local(s.time.plus(day, 1), "00:00"), timeZone: s.time.zone });
+    await s.tool(`${CAL}create_event`, { summary: "Call with Mira", startTime: s.time.local(day, "18:00"), endTime: s.time.local(day, "19:00"), timeZone: s.time.zone });
+    s.say("Done: a placeholder 'Call with Mira' is on Thursday at 18:00, the first free hour after 18:00.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e17];

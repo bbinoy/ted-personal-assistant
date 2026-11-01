@@ -102,7 +102,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   for (const t of world.tasks ?? []) addItem(scope, t);
 
   const rec = new Recorder();
-  const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs);
+  const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
   const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail);
   const notion = new FakeNotion(rec, world.notion);
   const guard = newGuardState();
@@ -256,6 +256,51 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
           said.push(...messenger.sent.slice(before).map((x) => x.message.text));
           snapshot(labels[i]!);
         }
+      } else if (c.interject) {
+        // The owner's chat through the production pipeline (as main.ts wires it), so that a second message can arrive while the first turn runs: it asks the running turn to stop at its next tool boundary and makes the next turn.
+        const messenger = new FakeMessenger();
+        const pipeline = createPipeline({
+          messenger,
+          out: createOutbound(messenger, (k, t, text) => recordMessage(k, t, text, o.now), { pauseMs: 0 }),
+          record: (_target, kind, ts, text, extra) => recordMessage(kind, ts, text, o.now, undefined, extra),
+          run: async (cv, prompt, ownerMessage, _pictures, hooks, _documents, _reactedTo, _reactedAt, arrivedAt, continuation) => {
+            const turnScope = scopeOf(cv.key);
+            if (continuation && !ownerMessage) turnScope.carry((continuation.provenance as never) ?? null);
+            else turnScope.say(ownerMessage, undefined, undefined, arrivedAt);
+            try {
+              return await runConversation(cv, { now: o.now }, chatTurn(cv, { prompt, untrusted: !!continuation }), hooks?.firstOutput, { query: realQuery });
+            } finally {
+              turnScope.end();
+            }
+          },
+          picture: async () => { throw new Error("no pictures in the evaluation"); },
+          document: async () => { throw new Error("no files in the evaluation"); },
+          transcript: async () => { throw new Error("no voice in the evaluation"); },
+          speech: { ready: () => false, synth: async () => { throw new Error("no speech"); }, foreign: async () => undefined },
+          approvals,
+          vouch: async () => true,
+          isOwner: (w) => w.from === memberNumber(0),
+          wait: async () => undefined, // (the settling pause is not waited out)
+        });
+        let ts = Date.now();
+        const write = (text: string) => pipeline.handleIncoming(conv, { type: "message", m: { from: memberNumber(0), fromName: settings.owner, text, timestamp: ++ts, direct: true } });
+        let second: Promise<void> | undefined;
+        rec.onStart = (tool) => {
+          if (tool !== c.interject!.on || second) return;
+          second = sleep(c.interject!.afterMs ?? 1000).then(() => write(c.interject!.text));
+        };
+        const before = messenger.sent.length;
+        await write(c.turns[0]!);
+        await second;
+        for (;;) {
+          await Promise.all([...inflight]);
+          const next = continuations.shift();
+          if (!next) break;
+          await pipeline.continuation(conv, next.prompt, next.provenance as never);
+        }
+        if (!second) error = `the tool ${c.interject.on} was never called, so the second message was never sent`;
+        said.push(...messenger.sent.slice(before).map((x) => x.message.text));
+        snapshot(c.turns[0]!);
       } else if (c.look) {
         // A look as the heartbeat starts it: createHeartbeatLook with a pipeline that records what would have been said (a post, or the send tool) instead of delivering it.
         const sink: SendSink = async (content) => (content.kind === "text" && said.push(content.text), "Sent.");
