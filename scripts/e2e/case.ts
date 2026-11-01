@@ -43,7 +43,7 @@ export interface Outcome {
   mail: FakeMail;
   notes: Record<string, string>; // the owner's note files (file name to text), the seeded ones included
   tasks: Item[]; // every task, whatever its status
-  web: { fetched: string[]; submissions: { page: string; button: string; values: Record<string, string> }[]; payments: Payment[]; payClicks: string[]; ledger: { status: string; totalMinor: number; currency: string }[] }; // what reached the fake pay endpoint, and what the real payment ledger says
+  web: { fetched: string[]; searches: string[]; submissions: { page: string; button: string; values: Record<string, string> }[]; payments: Payment[]; payClicks: string[]; ledger: { status: string; totalMinor: number; currency: string }[] }; // what reached the fake pay endpoint, and what the real payment ledger says
   calls: { tool: string; turn: number; args: Record<string, unknown>; ok: boolean }[];
   asks: { turn: number; tool: string; question: string; payment: boolean; answer: string }[]; // every question put to the owner (the model-written text she was shown) and what the scripted owner answered
   turns: { message: string; messages: string[]; sent: SentMail[]; drafts: { id: number; to: string[]; subject: string; body: string }[] }[]; // `messages`: what the chat got during the turn, the final reply last
@@ -55,6 +55,7 @@ export interface Case {
   title: string;
   turns: string[]; // the owner's messages, one chat turn each, in the same conversation; none for a look
   look?: boolean; // the trigger is a background look (heartbeat/look.ts), not a message
+  group?: { members: string[]; turns: { from: string; text: string; addressed?: boolean }[] }; // the trigger is a group chat the owner sponsors: the messages go through the production intake (vouch, gate, participation, group prompt). `members`: the other members by name; `from` is a member's name or "owner"; `addressed`: tagged or quoted (default no, so the participation gate decides); `turns` above is empty
   world: (t: Time) => World;
   answers?: string[]; // the scripted owner's answers to the questions that are not a card payment, in order ("yes" approves); anything else, and running out, declines
   payment?: string; // the answer to the card payment question: "YES" pays; default "no"
@@ -79,5 +80,7 @@ export interface PerfectScript {
   };
   ask(tool: string, question: string, answer: string, payment?: boolean): void; // a question the scripted run put to the owner
   note(file: string, text: string): void; // a note file the run saved
+  search(query: string): string; // a web search, answered by the case's fake web
+  open(url: string): string; // a page opened on the case's fake web
   say(text: string): void;
 }

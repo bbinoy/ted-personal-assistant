@@ -15,7 +15,13 @@ import { lookState } from "../../src/conversation/ledger.ts";
 import { scopeOf } from "../../src/approvals/turnscope.ts";
 import { approveIn, setApprovers } from "../../src/approvals/permissions.ts";
 import { createApprovers } from "../../src/approvals/approvers.ts";
-import { answer } from "../../src/approvals/approvals.ts";
+import * as approvals from "../../src/approvals/approvals.ts";
+import { createPipeline } from "../../src/conversation/conversation.ts";
+import { createOutbound } from "../../src/conversation/outbound.ts";
+import { sponsorInGroup } from "../../src/conversation/group.ts";
+import { groupDir, recordGroup } from "../../src/conversation/groupstore.ts";
+import { group as groupOf } from "../../src/conversation/conversationmodel.ts";
+import { FakeMessenger } from "@ted-assistant/messenger/testing";
 import { setContinuation } from "../../src/approvals/handoff.ts";
 import { withSend, type SendSink } from "../../src/modules/send/send.ts";
 import { setDraftReader } from "../../src/modules/mailbird/module.ts";
@@ -78,6 +84,8 @@ const TEST_CARD: CardRecord = { pan: "4242424242424242", expMonth: 12, expYear: 
 const TEST_CARD_FOR_BROWSER: FakeCard = { pan: TEST_CARD.pan, expiry: "12/99", cvc: TEST_CARD.cvc };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const GROUP_ID = "ZXZhbC1ncm91cC1leGFtcGxlLTAx"; // a made-up group id, and made-up numbers for its members (the owner's is number 0)
+const memberNumber = (i: number) => `+1555555${String(100 + i).padStart(4, "0")}`;
 
 export async function play(c: Case, o: { now: Date; zone: string; perfect?: boolean }): Promise<PlayResult> {
   assertHermetic(process.env, process.env.HARNESS_DATA_DIR); // fail closed: before anything starts
@@ -85,6 +93,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const started = Date.now();
   const nowMs = o.now.getTime();
   const time = makeTime(o.now, o.zone);
+  const ckey = c.group ? GROUP_ID : OWNER_KEY; // the conversation whose tasks and approvals the case is about
+  const labels = c.group ? c.group.turns.map((t) => `${t.from}: ${t.text}`) : c.turns; // what each turn is called in the transcript
   const world = c.world(time);
   seedNotes(o.zone, world.notes);
   const web = world.fetch ? await startFakeWeb(world.fetch) : undefined;
@@ -136,7 +146,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         const asked = readAudit((e) => e.decision === "approval-asked").at(-1); // (the card payment question is the one whose details start with the card sign: it has its own answer)
         const text = String(asked?.meta?.details ?? "").startsWith("💳") ? (c.payment ?? "no") : (answers.shift() ?? "no");
         answered.push({ turn: at, text });
-        await answer(text, () => {}, undefined, {}, { scope: OWNER_KEY, by: settings.owner });
+        await approvals.answer(text, () => {}, undefined, {}, { scope: ckey, by: settings.owner });
       })().catch((e) => void console.error("eval: the scripted owner could not answer:", (e as Error).message));
       inflight.add(p);
       void p.finally(() => inflight.delete(p));
@@ -164,7 +174,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
     const script: PerfectScript = {
       time,
       turn: (n) => {
-        if (n > 0) snapshot(c.turns[n - 1]!);
+        if (n > 0) snapshot(labels[n - 1]!);
         turn = rec.turn = n;
       },
       tool: async (full, args) => {
@@ -176,19 +186,21 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       },
       tasks: {
         add: (t) => void addItem(scope, { title: t.title, due: t.due, remindAt: t.remindAtMs }),
-        find: (part) => listItems(OWNER_KEY, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.title.toLowerCase().includes(part.toLowerCase()))!.id,
+        find: (part) => listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.title.toLowerCase().includes(part.toLowerCase()))!.id,
         done: (id) => void completeItem(scope, id),
         drop: (id) => void dropItem(scope, id),
         edit: (id, patch) => void editItem(scope, id, patch),
       },
       ask: (tool, question, answer, payment = false) => void scriptedAsks.push({ turn, tool, question, payment, answer }),
       note: (file, text) => void writeFileSync(join(owner().notesDir, file), text),
+      search: (query) => web!.search(query),
+      open: (url) => web!.open(url)!,
       say: (text) => void said.push(text),
     };
     await c.perfect(script);
     // (the scripted run does not go through the browse guard, which writes the payment ledger: a completed fake payment gets its ledger row here, as the guard would have written it)
     for (const p of fb?.payments.filter((x) => x.cardOk) ?? []) ledger.add({ id: "0000perf", merchant: "example.com", totalMinor: Math.round(Number(/\d+\.\d\d/.exec(p.amountText)?.[0]) * 100), currency: "GBP", last4: TEST_CARD.last4, cartHash: "perfect", status: "clicked" });
-    snapshot(c.look ? "" : c.turns[c.turns.length - 1]!);
+    snapshot(c.look ? "" : labels[labels.length - 1]!);
   } else {
     const realQuery = guardedQuery(query, fakes, fakeTools, guard, web);
     // One turn of the owner's chat as main.ts runs it (runChat): the judge is told what led to it, the run is built by runConversation, a reply is what the pipeline would have delivered.
@@ -210,7 +222,41 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       }
     };
     try {
-      if (c.look) {
+      if (c.group) {
+        // A group chat as main.ts runs it: the production pipeline (the sponsor's vouch, the participation gate, the group prompt, the group's run and its delivery) over a fake messenger. Only the run's `query` is the guarded one.
+        const messenger = new FakeMessenger();
+        const record = (target: string | undefined, kind: Parameters<typeof recordGroup>[1], ts: number, text: string, extra?: Parameters<typeof recordGroup>[4]) => void (target && (groupDir(target, "Example group"), recordGroup(target, kind, ts, text, extra)));
+        const people = c.group.members.map((name, i) => ({ name, number: memberNumber(i + 1) }));
+        const numberOf = (from: string) => (from === "owner" ? memberNumber(0) : people.find((p) => p.name === from)!.number);
+        const pipeline = createPipeline({
+          messenger,
+          out: createOutbound(messenger, (k, t, text, g) => record(g, k, t, text), { pauseMs: 0 }),
+          record,
+          run: async () => { throw new Error("not a private chat"); },
+          picture: async () => { throw new Error("no pictures in the evaluation"); },
+          document: async () => { throw new Error("no files in the evaluation"); },
+          transcript: async () => { throw new Error("no voice in the evaluation"); },
+          speech: { ready: () => false, synth: async () => { throw new Error("no speech"); }, foreign: async () => undefined },
+          approvals,
+          vouch: (id) => sponsorInGroup(id, async () => [{ id, name: "Example group", members: [{ number: memberNumber(0) }, ...people] }], (who) => (who.number === memberNumber(0) ? { id: "owner", since: "" } : undefined)),
+          isOwner: (w) => w.from === memberNumber(0),
+          group: { run: async (build, { conv, firstOutput }) => (await runConversation(conv, { now: o.now }, build, firstOutput, { query: realQuery })).text.trim() },
+          wait: async () => undefined, // (the settling pause and the gate's delay are not waited out)
+        });
+        for (const [i, t] of c.group.turns.entries()) {
+          turn = rec.turn = i;
+          const before = messenger.sent.length;
+          await pipeline.handleIncoming(groupOf(GROUP_ID), { type: "message", m: { from: numberOf(t.from), fromName: t.from === "owner" ? settings.owner : t.from, text: t.text, timestamp: Date.now(), direct: false, group: { id: GROUP_ID }, addressedToMe: !!t.addressed } });
+          for (;;) {
+            await Promise.all([...inflight]);
+            const next = continuations.shift();
+            if (!next) break;
+            await pipeline.continuation(groupOf(GROUP_ID), next.prompt, next.provenance as never);
+          }
+          said.push(...messenger.sent.slice(before).map((x) => x.message.text));
+          snapshot(labels[i]!);
+        }
+      } else if (c.look) {
         // A look as the heartbeat starts it: createHeartbeatLook with a pipeline that records what would have been said (a post, or the send tool) instead of delivering it.
         const sink: SendSink = async (content) => (content.kind === "text" && said.push(content.text), "Sent.");
         const pipeline = {
@@ -242,14 +288,14 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       }
     } catch (e) {
       error = `${c.look ? "look" : `turn ${turn + 1}`}: ${(e as Error).message}`;
-      snapshot(c.look ? "(a look)" : c.turns[turn] ?? "");
+      snapshot(c.look ? "(a look)" : labels[turn] ?? "");
     }
   }
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(OWNER_KEY, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone), web: { fetched: web?.hits ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
-  if (!error && guard.inits === 0 && !o.perfect) guard.violations.push("no start-up message was checked");
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
+  if (!error && guard.inits === 0 && !o.perfect && !c.group) guard.violations.push("no start-up message was checked"); // (a group the gate leaves unanswered starts no run at all)
   await web?.close();
   return {
     checks: c.state(outcome),

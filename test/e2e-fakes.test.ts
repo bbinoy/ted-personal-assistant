@@ -155,7 +155,7 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
     const cc = new FakeCalendar(r, ZONE, OWNER_EMAIL, w.calendar, () => NOW.getTime());
     const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail);
     await act(cc, mm);
-    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], asks: [], web: { fetched: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
+    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], asks: [], web: { fetched: [], searches: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
   };
   const e1 = await outcome("e1", async (c) => {
     for (let i = 0; i < 2; i++) await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.nextWeekday(4), "12:00"), endTime: t.local(t.nextWeekday(4), "13:00") });
@@ -194,6 +194,12 @@ test("the fake web serves only the case's pages over its own certificate; a page
     const ask = seen.options!.canUseTool as (tool: string, input: Record<string, unknown>, o: unknown) => Promise<{ behavior: string }>;
     assert.equal((await ask("WebFetch", { url: "https://www.example.org/real", prompt: "x" }, { signal: new AbortController().signal })).behavior, "deny");
     assert.ok(state.violations.some((v) => v.startsWith("un-faked page fetch")));
+    // A web search is answered from the case's own pages (title, address, snippet), through the guard, and only when the run's own rules allow it.
+    const found = (await ask("WebSearch", { query: "one page" }, { signal: new AbortController().signal })) as unknown as { behavior: string; message: string };
+    assert.equal(found.behavior, "deny");
+    assert.match(found.message, /1\. [^\n]*\nhttps:\/\/events\.example\.com\/e\/one\n/);
+    assert.match(web.search("nothing like it zzz"), /^No results/);
+    assert.deepEqual(web.searches, ["one page", "nothing like it zzz"]);
   } finally {
     await web.close();
   }
