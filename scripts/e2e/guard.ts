@@ -8,7 +8,7 @@ import type { CanUseTool, Options, query as sdkQuery, SDKMessage } from "@anthro
 import { normalizeServerName, toolPrefix } from "./fakeserver.ts";
 import type { FakeWeb } from "./fakeweb.ts";
 
-type WebPages = Pick<FakeWeb, "rewrite" | "certFile">;
+type WebPages = Pick<FakeWeb, "rewrite" | "certFile" | "search">;
 
 // Ted's own servers that only touch the conversation's own files in the temp data folder. Every other own server (browse, voice, draw, weather, files, intake, tenants, google, notionhosted) reaches
 // out (network, a device, the real mail client) and is refused: a case that needs one gets a fake first.
@@ -55,7 +55,12 @@ function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, st
       const r = await inner(tool, input, opts);
       return r?.behavior === "allow" ? { ...r, updatedInput: { ...(r.updatedInput ?? input), url: local } } : r;
     }
-    if (tool === "WebSearch" && web) return { behavior: "deny", message: "Web search is not available in this environment; open a page whose address you know with WebFetch." }; // (refused, nothing reaches the net; not a violation when the case has fake pages to open instead)
+    // A web search: the built-in tool runs at the provider and cannot be pointed at a local server, so once the run's own rules allow it, the case's fake web answers in its place: the result list comes back as the
+    // reply of a refused call. Nothing reaches the net.
+    if (tool === "WebSearch" && web) {
+      const r = await inner(tool, input, opts);
+      return r?.behavior === "allow" ? { behavior: "deny", message: web.search(String(input.query ?? "")) } : r;
+    }
     if (!isAnswered(tool, fakeTools)) {
       state.violations.push(`un-faked tool call: ${tool}`);
       abort();

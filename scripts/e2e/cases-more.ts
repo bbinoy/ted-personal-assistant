@@ -518,4 +518,43 @@ const e14b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b];
+// ---- e15: a group member says "check out the X website"; no address given. Ted must search, open the page and answer with what it says in the same turn (no "I'll look later") ----
+const MECS_URL = "https://www.mecs-programme.example.org/";
+const dayName = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }); // "20 December"
+const mecsPage = (t: Time) => `<html><head><title>Modern Energy Cooking Services (MECS) programme</title></head><body><h1>Modern Energy Cooking Services (MECS)</h1><p>MECS is a research and funding programme about clean electric cooking in homes that burn charcoal, firewood or kerosene today.</p><h2>Aims</h2><p>The programme aims to cut charcoal and firewood use in 12 partner countries by 2030 and to bring battery-supported electric pressure cookers to one million households.</p><h2>Funding call</h2><p>The second Cooking Futures call funds pilot projects with grants of 50,000 to 150,000 pounds. Applications close on ${dayName(t.day(21))}.</p><h2>Contact</h2><p>Questions about the call: grants@example.org</p></body></html>`;
+const e15: Case = {
+  id: "e15",
+  title: "a group member says 'check out the MECS website': search and open it now, reply with what it says",
+  turns: [],
+  group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: "Ted check out MECS programme website, modern energy cooking services, it's all on there", addressed: true }] }, // (tagged, so the participation gate does not decide)
+  world: (t) => ({ fetch: { [MECS_URL]: mecsPage(t) } }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    const [day, month] = dayName(o.time.day(21)).split(" ");
+    const facts = [/grants@example\.org/i, /50,?000|150,?000/, /12 partner countries|twelve partner countries/i, /one million|1 million|1,000,000/i, new RegExp(`\\b${day}(st|nd|rd|th)?\\b.{0,12}${month}`, "i")].filter((r) => r.test(said));
+    return [
+      check("the web was searched or the page opened during the turn", o.web.searches.length + o.web.fetched.length > 0, "no search, no fetch"),
+      check("the page was opened", o.web.fetched.includes(MECS_URL), o.web.fetched.join() || "not opened"),
+      check("the reply has at least two facts from the page", facts.length >= 2, `${facts.length} found in: ${said.slice(0, 200)}`),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It gives at least two concrete facts that are on the MECS page (an aim, the funding call and its closing date, the grant size, the contact address).", "It does not promise to look later, tomorrow or in a while, and does not say it will get back with the details: the findings are in this reply.", "It does not ask which website is meant."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("MECS Modern Energy Cooking Services programme");
+    s.open(MECS_URL);
+    s.say(`Had a look at the MECS site: it aims to cut charcoal and firewood use in 12 partner countries by 2030, and the second Cooking Futures call funds pilots with grants of 50,000 to 150,000 pounds, closing on ${dayName(s.time.day(21))}. Questions go to grants@example.org.`);
+  },
+};
+
+// ---- e15b: the same words, not tagged (the name only): the participation gate decides whether Ted answers at all ----
+const e15b: Case = {
+  ...e15,
+  id: "e15b",
+  title: "the same, but only named in the text (not tagged): the participation gate decides",
+  group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: e15.group!.turns[0]!.text }] },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b];
