@@ -23,6 +23,7 @@ interface World {
   tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
   calendar?: SeedEvent[];
   mail?: SeedMail[];
+  mailDown?: boolean; // the mail connector is down: every call to it errors
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)
   slowMs?: number; // the calendar's reads take this long (a slow service: the owner's next message can arrive while one runs)
   fetch?: Record<string, string>; // pages the built-in WebFetch can open, by their public-looking address (html); served by a local server for the run (fakeweb.ts)

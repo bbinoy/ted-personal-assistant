@@ -103,7 +103,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
-  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail);
+  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown);
   const notion = new FakeNotion(rec, world.notion);
   const guard = newGuardState();
   blockRealMailbird(Mailbird, guard);

@@ -13,6 +13,7 @@ export interface FakePage {
   text?: string[];
   links?: { name: string; to: string }[];
   fields?: { name: string }[]; // text boxes, in order
+  gate?: { code: string; to: string }; // a login page for a shared access code: typing the code with Enter opens `to`
   buttons?: { name: string; to?: string; pay?: boolean; submit?: boolean }[]; // `pay`: the payment is made by this click (the fake pay endpoint); `submit`: a form is sent by this click (a sign-up), recorded with what was typed
 }
 
@@ -109,6 +110,7 @@ export class FakeBrowser {
           const name = p.fields![hit.index]!.name;
           const text = String(a.text);
           this.values.set(hit.ref, name === "Card number" && /^\d{13,19}$/.test(text) ? text.replace(/(\d{4})(?=\d)/g, "$1 ") : text);
+          if (a.submit === true && p.gate && text === p.gate.code) open(p.gate.to);
           return `### Ran Playwright code\n\`\`\`js\nawait page.getByRole('textbox').fill('${text}');\n\`\`\`\n${view()}`;
         },
       },

@@ -1,7 +1,7 @@
 // The fake Mailbird of the end-to-end eval: the `mailbird` server with the tool names, arguments and result shapes of the real one (copied from tool results, never content). It keeps conversations, drafts and
 // what was sent; the draft reader the approval of a send uses (setDraftReader) is answered from it too, so no real Mailbird client is needed.
 import { z } from "zod";
-import { fakeService, type FakeService, type Recorder } from "./fakeserver.ts";
+import { fakeService, type FakeService, type Recorder, type ToolDef } from "./fakeserver.ts";
 
 export const MAILBIRD_SERVER = "mailbird";
 
@@ -67,7 +67,7 @@ export class FakeMail {
 
   readonly owner: Person;
 
-  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = []) {
+  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = [], down = false) {
     this.owner = owner;
     for (const s of seed) {
       const m = this.message(person(s.from), (s.to ?? [owner]).map(person), s.subject, s.body, s.receivedAt);
@@ -108,7 +108,7 @@ export class FakeMail {
       return { c, m };
     };
 
-    this.service = fakeService(MAILBIRD_SERVER, rec, {
+    const defs: Record<string, ToolDef> = {
       list_accounts: { description: "List the mail accounts.", shape: {}, run: () => [{ id: 1, senderName: owner.displayName ?? "Owner", email: owner.email, unreadConversations: inFolder(10).filter((c) => !c.read).length }] },
       list_folders: { description: "List an account's folders.", shape: { accountId: z.number() }, run: () => (Object.keys(FOLDER_ID) as Folder[]).map((f) => ({ id: FOLDER_ID[f], name: FOLDER_NAME[f], identity: f, parentId: null, unreadConversations: f === "inbox" ? inFolder(10).filter((c) => !c.read).length : 0 })) },
       list_conversations: { description: "List the conversations of a folder, newest first.", shape: { folderId: z.number(), limit: z.number().optional() }, run: (a) => inFolder(a.folderId).slice(0, a.limit ?? 50).map(row) },
@@ -217,7 +217,9 @@ export class FakeMail {
           return { status: "sent", note: "Delivered to your own inbox." };
         },
       },
-    });
+    };
+    if (down) for (const d of Object.values(defs)) d.run = () => { throw new Error("MCP server mailbird is not connected"); }; // (the connector is down: every call errors)
+    this.service = fakeService(MAILBIRD_SERVER, rec, defs);
   }
 
   private message(from: Person, to: Person[], subject: string, body: string, at: string): Message {

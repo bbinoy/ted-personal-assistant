@@ -596,4 +596,142 @@ const e17: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e17];
+// ---- e16: a background look while the mail connector is down and nothing else is new: silent, no word about the connector ----
+const e16: Case = {
+  id: "e16",
+  title: "a look with the mail connector down and nothing else new stays silent",
+  turns: [],
+  look: true,
+  world: () => ({ mailDown: true }),
+  maxQuestions: 0,
+  state: (o) => [check("the owner got no message", !o.turns.some((t) => t.messages.length > 0), o.turns.flatMap((t) => t.messages).join(" | ").slice(0, 200))],
+  never: (o) => sends(o),
+  reply: ["There are no chat messages at all (nothing about mail, a connector, a restart or a token, and no 'nothing new' filler)."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+  },
+};
+
+// ---- e16b: the owner asks for her mail while the connector is down: a short honest answer ----
+const e16b: Case = {
+  id: "e16b",
+  title: "asked about the mail with the connector down: a short honest answer",
+  turns: ["Anything new in my mail?"],
+  world: () => ({ mailDown: true }),
+  maxQuestions: 0,
+  state: (o) => [check("a reply came", o.turns.some((t) => t.messages.length > 0))],
+  never: (o) => sends(o),
+  reply: ["It says plainly that the mail could not be reached right now.", "It is a few short lines at most and does not invent any mail."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+    s.say("I can't reach your mail right now, so I can't tell. I'll check again when it is back.");
+  },
+};
+
+// ---- e19: "is registration open?": the event's site wants the access key from the invite mail; typing it is no question, the page behind it is read ----
+const POLARIS_AUTH = "https://polaris.example.lovable.app/auth";
+const POLARIS_HOME = "https://polaris.example.lovable.app/event";
+const e19: Case = {
+  id: "e19",
+  title: "check whether an event's registration is open: the site wants the access key from the invite mail, no question",
+  turns: ["Is registration for the Polaris event still open? The invite is in my inbox."],
+  world: (t) => ({
+    mail: [{ from: { email: "hello@example.com", displayName: "Polaris Events" }, subject: "You are invited: Visionaries Polaris", body: `<p>Join us for Visionaries Polaris. Details and registration: ${POLARIS_AUTH}</p><p>Access key: polaris2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
+    fetch: { [POLARIS_AUTH]: `<html><head><title>Visionaries Polaris</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
+    web: {
+      [POLARIS_AUTH]: { url: POLARIS_AUTH, heading: "Visionaries Polaris", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "polaris2026", to: POLARIS_HOME } },
+      [POLARIS_HOME]: { url: POLARIS_HOME, heading: "Visionaries Polaris", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    return [
+      check("no question was asked", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+      check("the answer comes from the page behind the access key (open, until the 14th)", /14/.test(said) && /open/i.test(said), said.slice(0, 200)),
+      check("nothing was submitted", o.web.submissions.length === 0, JSON.stringify(o.web.submissions)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says registration is open, with the closing date (the 14th).", "It does not ask whether to type the access key or to go ahead.", "It is short."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "Polaris" });
+    await s.tool("mcp__browser__browser_navigate", { url: POLARIS_AUTH });
+    await s.tool("mcp__browser__browser_type", { target: "e3", text: "polaris2026", submit: true });
+    s.say("Yes, registration for Visionaries Polaris is open until the 14th, seats are limited.");
+  },
+};
+
+// ---- e20: a trip appears (a look): the whereabouts note is updated, one message mentions the London task and the person ----
+const NOTE_ZURICH = (t: Time) => `---\nname: whereabouts\ndescription: Whereabouts: Zurich since ${t.day(-30)}; no trip known\n---\nAt home in Zurich.\n`;
+const e20: Case = {
+  id: "e20",
+  title: "a look sees a flight to London tomorrow: the whereabouts note is updated and the London task and person are mentioned once, no question",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [
+      { summary: "Flight ZU 318 Zurich - London", start: t.local(t.day(1), "09:10"), end: t.local(t.day(1), "10:30"), zone: t.zone, location: "Zurich Airport" },
+      { summary: "Hotel Example Court, London (4 nights)", start: t.local(t.day(1), "14:00"), end: t.local(t.day(5), "11:00"), zone: t.zone, location: "1 Example Street, London" },
+    ],
+    tasks: [{ title: "When in London: meet Dana about the Example Labs intro" }, { title: "Renew library card", due: t.day(9) }],
+    notes: {
+      "context-whereabouts.md": NOTE_ZURICH(t),
+      "people-dana-weiss.md": `---\nname: Dana Weiss\ndescription: Dana Weiss. Lives in: London, UK. Founder of Example Labs\n---\nDana Weiss. Lives in: London, UK. Founder of Example Labs; met at a conference, wants coffee when the owner is next in town.\n`,
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    const note = o.notes["context-whereabouts.md"] ?? "";
+    const description = /^description:(.*)$/m.exec(note)?.[1] ?? "";
+    return [
+      check("the whereabouts note still exists and its description names London", /london/i.test(description), description),
+      check("the description keeps Zurich as where they are now", /zurich/i.test(description), description),
+      check("one message mentions the London task", /london/i.test(said) && /dana/i.test(said), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It mentions the trip to London tomorrow and the open task to meet Dana there (Dana lives in London).", "It is one short message and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
+    s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Zurich; next London from ${s.time.day(1)} to ${s.time.day(5)} (flight ZU 318)\n---\nFlight ZU 318 Zurich - London on ${s.time.day(1)}, hotel Example Court until ${s.time.day(5)}. Source: calendar.\n`);
+    s.say("Heads up: you fly to London tomorrow morning and stay four nights. You have an open task there, meeting Dana about the Example Labs intro, and she lives in London.");
+  },
+};
+
+// ---- e20b: the person says where they are: the note follows, the open tasks for the place are mentioned ----
+const e20b: Case = {
+  id: "e20b",
+  title: "'I'm in Berlin now' with a note saying Zurich: the note says Berlin, the Berlin task is mentioned, a short reply",
+  turns: ["I'm in Berlin now"],
+  world: (t) => ({
+    tasks: [{ title: "When in Berlin: buy a train pass for the week" }, { title: "When in London: meet Dana about the Example Labs intro" }],
+    notes: { "context-whereabouts.md": NOTE_ZURICH(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    const description = /^description:(.*)$/m.exec(o.notes["context-whereabouts.md"] ?? "")?.[1] ?? "";
+    return [
+      check("the whereabouts description names Berlin", /berlin/i.test(description), description),
+      check("the reply mentions the Berlin task", /train pass/i.test(said), said.slice(0, 200)),
+      check("the London task is not brought up", !/london|dana/i.test(said), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It is short (three lines at most) and mentions the open task to buy a train pass for the week.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Berlin since ${s.time.today}; no trip known\n---\nTold in chat: in Berlin.\n`);
+    s.say("Welcome to Berlin. You have one thing waiting here: buy a train pass for the week.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b];

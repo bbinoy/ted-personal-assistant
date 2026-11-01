@@ -467,7 +467,7 @@ test("never offered in a group or a background run: no card in the guard, no car
   assert.match(browseToolText({ mode: "owner", key: OWNER_KEY }), /saved payment card.*typed YES/);
   for (const c of [{ mode: "owner" as const }, { mode: "group" as const, key: "g1" }]) {
     assert.ok(!/payment card|YES/.test(browseToolText(c)), "a wake-up and a group are not told they can pay");
-    assert.match(browseToolText(c), /never enters login details or card details/);
+    assert.match(browseToolText(c), /never has .*passwords.* or card details/);
   }
 });
 
