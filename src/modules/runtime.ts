@@ -168,13 +168,38 @@ async function restoreMailbird(id: string): Promise<number> {
   }
 }
 
-// The doctor's Mailbird check. Reachable means the local server answers and lists its accounts.
-export async function mailbirdCheck(line: DoctorLine, connect: () => Promise<number>): Promise<void> {
-  try {
-    line(true, "Mailbird MCP reachable", `${await connect()} account(s)`);
-  } catch (e) {
-    line(false, "Mailbird MCP reachable", (e as Error).message.slice(0, LIMITS.reason));
-  }
+// Right after an agent restart the agent's own Mailbird connection races the probe's, so a first connect that fails is retried once, later and with more time.
+const PROBE_RETRY_MS = 3_000;
+const PROBE_RETRY_CONNECT_MS = 25_000;
+
+type Probe = { connect(): Promise<void>; call<T>(name: string): Promise<T>; close(): Promise<void> };
+
+// The doctor's Mailbird check. Reachable means the local server answers and lists its accounts. Only a failed connect is tried again; a tool error is reported at once.
+export async function mailbirdCheck(line: DoctorLine, make: (connectMs?: number) => Probe, wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<void> {
+  const what = "Mailbird MCP reachable";
+  const msg = (e: unknown) => (e as Error).message.slice(0, LIMITS.reason);
+  const attempt = async (connectMs?: number): Promise<{ n?: number; err?: unknown; connectFailed?: boolean }> => {
+    const client = make(connectMs);
+    try {
+      try {
+        await client.connect();
+      } catch (err) {
+        return { err, connectFailed: true };
+      }
+      return { n: (await client.call<unknown[]>("list_accounts")).length };
+    } catch (err) {
+      return { err };
+    } finally {
+      await client.close().catch(() => {});
+    }
+  };
+  const first = await attempt();
+  if (first.err === undefined) return line(true, what, `${first.n} account(s)`);
+  if (!first.connectFailed) return line(false, what, msg(first.err));
+  await wait(PROBE_RETRY_MS);
+  const second = await attempt(PROBE_RETRY_CONNECT_MS);
+  if (second.err === undefined) return line(true, what, `${second.n} account(s), slow to connect (needed a second try)`);
+  line(false, what, `failed twice (${msg(first.err)}; then ${msg(second.err)})`);
 }
 
 // The Gmail checks (MAIL_PROVIDER=gmail): the owner's own address is set, the claude.ai connector was available in the last run.
@@ -195,15 +220,7 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
       setDraftReader(async (id) => viewDraft(await client.call("get_message", { messageId: id })));
     },
     check: (line) =>
-      mailbirdCheck(line, async () => {
-        const client = new Mailbird();
-        try {
-          await client.connect();
-          return (await client.call<unknown[]>("list_accounts")).length;
-        } finally {
-          await client.close().catch(() => {});
-        }
-      }),
+      mailbirdCheck(line, (ms) => new Mailbird(undefined, ms)),
   },
   gmail: {
     // Gmail: an archive is only the INBOX label removed, so undoing it is adding INBOX back to the thread (the audit id is the thread id).

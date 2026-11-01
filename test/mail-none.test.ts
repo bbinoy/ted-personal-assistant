@@ -97,9 +97,24 @@ test("doctor without mail: 'mail: off' is OK, Mailbird is never contacted, no ma
   assert.equal(heartbeatDetail({}, Infinity, undefined, () => "x"), "no tick recorded yet");
   // With mail, a reachable client is OK and an unreachable one still FAILS.
   lines.length = 0;
-  await mailbirdCheck(line, async () => 2);
-  await mailbirdCheck(line, async () => { throw new Error("no ~/.claude.json"); });
-  assert.deepEqual(lines.map((l) => l[0]), [true, false]);
+  const fake = (connects: Array<Error | null>, callErr?: Error) => {
+    const made: Array<number | undefined> = [];
+    return { made, make: (ms?: number) => (made.push(ms), { connect: async () => { const f = connects.shift(); if (f) throw f; }, call: async () => { if (callErr) throw callErr; return [1, 2] as any; }, close: async () => {} }) };
+  };
+  const nowait = async () => {};
+  let f = fake([null]);
+  await mailbirdCheck(line, f.make, nowait);
+  f = fake([new Error("mailbird connect timed out after 10000 ms"), null]);
+  await mailbirdCheck(line, f.make, nowait);
+  assert.equal(f.made.length, 2);
+  assert.ok(f.made[1]! > 10_000);
+  f = fake([new Error("timed out"), new Error("refused")]);
+  await mailbirdCheck(line, f.make, nowait);
+  f = fake([null], new Error("tool error"));
+  await mailbirdCheck(line, f.make, nowait);
+  assert.equal(f.made.length, 1);
+  assert.deepEqual(lines.map((l) => l[0]), [true, true, false, false]);
+  assert.match(String(lines[2][2]), /failed twice/);
 });
 
 test("doctor: `npm run doctor` with MAIL_PROVIDER=none and no Mailbird anywhere reports mail off and checks nothing of Mailbird", () => {
