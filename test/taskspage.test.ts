@@ -58,7 +58,7 @@ test("a title is escaped and nothing is loaded from outside", () => {
   const html = tasksPage(OWNER_KEY, NOW, ZONE);
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&#60;script&#62;"));
-  assert.ok(!/(src|href)=/.test(html.replace(' href="/favicon.svg"', ""))); // (the page's own icon is the one link)
+  assert.ok(!/(src|href)=/.test(html.replace(' href="/favicon.svg"', "").replace(' href="/done"', ""))); // (the page's own icon and the link to the other page are the only links)
   assert.ok(html.includes('<link rel="icon" href="/favicon.svg" type="image/svg+xml">'));
   assert.ok(!html.includes('name="token"')); // (no token, no buttons)
 });

@@ -355,7 +355,7 @@ Screenshots are kept per turn and delivered only through `send`. Details: SAFETY
 Secrets never go through the chat or a model. They are entered at the local CLI (`npm run card`, `npm run profile`) or on the intake page, and the audit keeps lengths only.
 
 - **OpenBao** (`src/secrets/openbao.ts`, `secrets.ts`, `keychain.ts`): a small client over `fetch`, loopback only, pinned certificate. `TenantSecrets(bao, tenant)` reaches only `tenants/<tenant>/<kind>/<name>`; `card` is owner only. Callers fail closed. `npm run openbao` installs and runs it.
-- **The task page** (`src/tasks/taskspage.ts`): started by the agent on `127.0.0.1:TASKS_PAGE_PORT`, GET plus one POST (tick a task off through the store; a CSRF token and the page's own Origin are required), the owner's list only, rendered by code; `tailscale serve` (never funnel) shows it on the phone.
+- **The task page** (`src/tasks/taskspage.ts`): started by the agent on `127.0.0.1:TASKS_PAGE_PORT`, GET plus one POST (tick a task off through the store; a CSRF token and the page's own Origin are required), the owner's list only, rendered by code. The same server serves `/done` (`src/conversation/donepage.ts`): the owner's journal by day with an undo button where code can reverse an entry (`POST /done/<ts>/undo` with the same token and Origin checks; the entry is found again in the journal and judged by today's state), each undo a journal line; `tailscale serve` (never funnel) shows it on the phone.
 - **The intake page** (`src/intake/intakeserver.ts`; `npm run intake`): a separate process on `127.0.0.1:INTAKE_PORT` behind a tunnel (`INTAKE_BASE_URL`). A friend's run has `get_setup_link` and `setup_status`.
 - A link is 128 random bits kept as a hash in `instance/intake/`, bound to one person and one purpose, single use (an atomic rename), expiring after 15 minutes. Purposes (`PURPOSES`): `profile`, `card`, `google`, `notion`.
 - The page writes through a write-only token, records only names and lengths and never writes the owner's folder.
@@ -665,7 +665,8 @@ src/tasks/grouptasks.ts  a group's `/tasks`, "saved for the group" line
 src/tasks/meetings.ts  recorded meetings and prep rules
 src/tasks/remind.ts  reminder planner and facts (pure)
 src/tasks/render.ts  items as lines, `/tasks`, task facts
-src/tasks/taskspage.ts  the owner's task list as a page on 127.0.0.1 (with a tick-off button)
+src/tasks/taskspage.ts  the owner's task list as a page on 127.0.0.1 (with a tick-off button); also serves the second page below
+src/conversation/donepage.ts  the owner's page of what was done on its own (the journal by day, with undo where code can reverse it)
 src/tasks/repeat.ts  repeat rules (pure, DST-safe)
 src/tasks/maildecisions.ts  the looks' last decision per inbox mail, and the fact block every run with mail is handed
 src/tasks/routines.ts  the one planner and record of routine notes, and the look's routine facts
