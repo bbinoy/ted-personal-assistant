@@ -112,8 +112,10 @@ your head: take what decides the case and move on.
      for the owner to handle.
    - **Official and open matters stay until something shows they are done**:
      invoices still to pay, bills, tax and accounting mail, lawyers and notaries,
-     insurance, official letters, and requests to sign or verify (DocuSign and the
-     like). They are handled once a later mail, the calendar or a task shows it:
+     insurance, official letters, requests to sign or verify (DocuSign and the
+     like), and setup or onboarding asks from an employer, school or service with
+     steps and a deadline for the owner (set up the account, complete the profile): the
+     mail holds the steps and links, so a task alone does not close it. They are handled once a later mail, the calendar or a task shows it:
      a payment confirmation, "all parties have signed", a closed case.
    - **Something ahead goes on the calendar before its mail is archived.** A ticket,
      booking, registration or event mail that carries a date is opened before it is

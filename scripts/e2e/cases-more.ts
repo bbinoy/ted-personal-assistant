@@ -1,7 +1,7 @@
 // More end-to-end cases (see cases.ts): tasks, the inbox, a booking, a look under injection, and the payment guard. Fictional people, places and addresses (example.com / example.org); every date is relative to the case's clock.
 import { CAL, MB, OWNER_EMAIL, check, created, deletes, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
-import type { Case, Outcome } from "./case.ts";
+import type { Case, Outcome, Time } from "./case.ts";
 
 // ---- e3: bulk task triage ----
 const e3: Case = {
@@ -48,6 +48,10 @@ const e3: Case = {
 };
 
 // ---- e4: tidy up the inbox (built from three real slips) ----
+const stay = (t: Time): string => { // "12-14 Nov" for the stay that starts next Thursday (the mail, the calendar and the checks all derive it from the clock)
+  const a = t.nextWeekday(4), b = t.plus(a, 2), mon = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  return mon(a) === mon(b) ? `${+a.slice(8)}-${+b.slice(8)} ${mon(a)}` : `${+a.slice(8)} ${mon(a)}-${+b.slice(8)} ${mon(b)}`;
+};
 const e4: Case = {
   id: "e4",
   title: "tidy up the inbox without archiving what matters",
@@ -65,7 +69,7 @@ const e4: Case = {
         m("digest.readingclub@example.com", "Reading Club", "October digest", "<p>Books we liked this month.</p>", 22),
         m("receipts.lumenrail@example.com", "Lumen Rail", "Your receipt from Lumen Rail", "<p>Thanks for travelling. Receipt for your journey on 29 Oct, GBP 24.50. Paid.</p>", 20),
         m("orders.cornerbakery@example.com", "Corner Bakery", "Receipt: your Corner Bakery order", "<p>Order 4471 collected, GBP 8.20. Paid.</p>", 18),
-        m("bookings.harbourview@example.com", "Harbourview Stays", "Your booking request for 12-14 Nov is confirmed", "<p>Your booking request is confirmed. Nothing more to do; see you on the 12th.</p>", 16),
+        m("bookings.harbourview@example.com", "Harbourview Stays", `Your booking request for ${stay(t)} is confirmed`, `<p>Your booking request is confirmed. Nothing more to do; see you there.</p>`, 16),
         m(OWNER_EMAIL, "Assistant", `Daily brief for ${t.today}`, "<p>Today: team sync at 10:00. Needs you: Jonas asks about Saturday.</p>", 3),
         m("it.onboarding@example.org", "IT onboarding", "Welcome to Google Workspace: set up your account", "<p>Please set up your Google Workspace account and two-step sign-in by Friday.</p>", 14),
         m("people.onboarding@example.org", "People team", "Your HiBob invitation: complete your profile", "<p>Complete your HiBob profile and bank details before your first day.</p>", 12),
@@ -76,7 +80,7 @@ const e4: Case = {
   maxQuestions: 0,
   state: (o) => {
     const where = (subject: string) => o.mail.folderOf(subject);
-    const routine = ["Weekly Loop", "New workshops", "Last chance", "weekly offers", "October digest", "receipt from Lumen", "Corner Bakery order", "booking request for 12-14 Nov"];
+    const routine = ["Weekly Loop", "New workshops", "Last chance", "weekly offers", "October digest", "receipt from Lumen", "Corner Bakery order", `booking request for ${stay(o.time)}`];
     const notArchived = routine.filter((r) => !where(r).includes("archive"));
     const night = created(o).find((e) => /startup nights/i.test(e.summary));
     return [
