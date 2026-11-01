@@ -162,3 +162,18 @@ test("a wake-up task is judged like a chat message, whatever notes the run read 
   assert.equal((await wake(SEND, { messageId: 901, confirm: true }, opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 });
 });
+
+test("a people note written during an untrusted run does not make its address known to that run; one from before does", async () => {
+  let asked = 0;
+  const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "fine" });
+  const run = (dir: string) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, dir, judge as never, undefined, undefined, false, { provenance: scopeOf("snap").read, conversation: "snap", untrusted: true });
+  const event = (guest: string, d: number) => ({ summary: "Tea", startTime: `2026-11-1${d}T19:00:00`, endTime: `2026-11-1${d}T20:00:00`, attendees: [{ email: guest }] });
+  scopeOf("snap").say("invite Zed to tea");
+  const dir = notes({});
+  const can = run(dir);
+  writeFileSync(join(dir, "people-zed.md"), "Zed. zed@evil.example"); // (saved from a mail the run read)
+  await can(CAL, event("zed@evil.example", 1), opts);
+  assert.equal(asked, 1, "the note of this run does not count: the owner is asked");
+  await run(dir)(CAL, event("zed@evil.example", 2), opts);
+  assert.equal(asked, 1, "the next run knows Zed from the note: no question");
+});
