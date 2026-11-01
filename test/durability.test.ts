@@ -151,6 +151,29 @@ test("outbound: classification of send errors", () => {
   assert.equal(classifySendError(new Error("signal send timed out after 30s")), "unsure");
   assert.equal(classifySendError(new Error("socket closed")), "unsure");
   assert.equal(classifySendError(new Error("attachment not found")), "permanent");
+  const cli = new Error("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException) (UnexpectedErrorException)");
+  assert.equal(classifySendError(cli), "refused", "signal-cli says the send failed");
+  assert.equal(classifySendError(cli, true), "unsure", "a group send may have reached some members");
+});
+
+test("outbound: signal-cli's own send failure is retried; our own client timeout is not", async () => {
+  const run = async (err: string) => {
+    waited = [];
+    const m = fake();
+    let calls = 0;
+    m.send = async () => (++calls, Promise.reject(new Error(err)));
+    const silence = console.error;
+    console.error = () => {};
+    try {
+      await createOutbound(m, undefined, noWait()).reply("hello");
+    } catch {
+      // (the error reaches the caller; only the number of attempts matters here)
+    }
+    console.error = silence;
+    return calls;
+  };
+  assert.equal(await run("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException)"), 3);
+  assert.equal(await run("signal send timed out after 120s"), 1);
 });
 
 test("outbound: a send that was refused is retried twice (2 s, 6 s) and then succeeds", async () => {

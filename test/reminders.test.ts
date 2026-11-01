@@ -34,14 +34,14 @@ let n = 0;
 const fresh = (): Conv => group(`rem-conv-${++n}`);
 const scope = (key: string, now = NOW): import("../src/tasks/store.ts").Scope => ({ key, zone: ZONE, by: "owner", origin: "owner", source: "chat", now });
 let tsClock = 1_000_000;
-function rig(o: { failFirst?: number } = {}) {
+function rig(o: { failFirst?: number; error?: string } = {}) {
   const sent: string[] = [];
   let fail = o.failFirst ?? 0;
   const pipeline = {
     enqueue: <T,>(_c: unknown, job: () => Promise<T>) => job(),
     runTurn: async (c: { logFile: string }, t: { run: () => Promise<{ text: string }> }) => {
       const text = (await t.run()).text;
-      if (fail-- > 0) return { spoke: false, error: new Error("messenger down") };
+      if (fail-- > 0) return { spoke: false, error: new Error(o.error ?? "messenger down") };
       sent.push(text);
       recordMessage("notice", ++tsClock, text, new Date(NOW), c.logFile);
       return { spoke: true };
@@ -120,6 +120,22 @@ test("a send that fails is never journaled as 'Reminded': it is retried, three t
   await tick(flaky, ok, NOW + 5 * MIN, false);
   assert.deepEqual(flaky.sent, ["⏰ Once"]);
   assert.equal(reminded(ok).length, 1, "journaled once, after the send that worked");
+});
+
+test("a fallback reminder whose send outcome is unsure counts as told and is not sent again; one that surely failed is retried", async () => {
+  const unsure = fresh();
+  const a = S.addItem(scope(unsure.key, NOW - HOUR), { title: "Maybe", remindAt: NOW - 2 * MIN }).item;
+  const timeout = rig({ failFirst: 99, error: "signal send timed out after 120s" });
+  for (let i = 0; i < 3; i++) await tick(timeout, unsure, NOW + i * 5 * MIN, false);
+  assert.equal(reminded(unsure).length, 1, "told once, not tried again");
+  assert.deepEqual(rows(unsure, a.id).map((x) => x.tries), [0], "never retried");
+  const refused = fresh();
+  const b = S.addItem(scope(refused.key, NOW - HOUR), { title: "Surely", remindAt: NOW - 2 * MIN }).item;
+  const down = rig({ failFirst: 1, error: "SignalClient is not connected" });
+  await tick(down, refused, NOW, false);
+  assert.deepEqual(rows(refused, b.id).map((x) => x.state), ["retry"]);
+  await tick(down, refused, NOW + 5 * MIN, false);
+  assert.deepEqual(down.sent, ["⏰ Surely"]);
 });
 
 test("a held look post tells its reminders (they go out with the held messages)", async () => {

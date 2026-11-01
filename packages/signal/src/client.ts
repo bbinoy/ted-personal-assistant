@@ -14,6 +14,7 @@ export interface CloseInfo {
 }
 
 const ATTACHMENT_TIMEOUT_FACTOR = 4;
+const SEND_TIMEOUT_FACTOR = 4; // a send waits this many times the plain timeout: right after a wake signal-cli is still reconnecting and answers late
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void };
 
 const DEFAULT_MAX_LINE_CHARS = 16 * 1024 * 1024; // a group list with hundreds of groups is a few MB; an envelope is a few KB
@@ -80,6 +81,7 @@ export class SignalClient {
   private buffer = "";
   private nextId = 1;
   private pending = new Map<number, Pending>();
+  private timedOut = new Map<number, string>(); // request id -> method, for requests we gave up on: an answer that still comes is logged, not dropped
   private handler: ((m: IncomingMessage) => void) | undefined;
   private reactionHandler: ((r: IncomingReaction) => void) | undefined;
   private deletionHandler: ((d: IncomingDeletion) => void) | undefined;
@@ -234,6 +236,7 @@ export class SignalClient {
         this.closed = true;
         for (const p of this.pending.values()) p.reject(new Error("socket closed"));
         this.pending.clear();
+        this.timedOut.clear();
         if (connected) this.closeHandler?.({ requested: this.closeRequested, error: this.closeRequested ? undefined : this.lastError });
       });
     });
@@ -271,6 +274,11 @@ export class SignalClient {
       else p.resolve(msg.result);
       return;
     }
+    if (msg.id !== undefined && this.timedOut.has(msg.id)) {
+      this.log.warn(`late answer to ${this.timedOut.get(msg.id)}: ${msg.error ? (msg.error.message ?? "rpc error") : "sent"}`);
+      this.timedOut.delete(msg.id);
+      return;
+    }
     // A pushed notification.
     if (msg.method === "receive") this.onEnvelope(msg.params?.envelope);
   }
@@ -290,6 +298,7 @@ export class SignalClient {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        this.timedOut.set(id, method);
         reject(new Error(`signal ${method} timed out after ${timeoutMs / 1000}s`));
       }, timeoutMs);
       this.pending.set(id, {
@@ -327,8 +336,8 @@ export class SignalClient {
    */
   async send(text: string, opts: SendOptions = {}): Promise<number> {
     const { style: textStyle = [], quote } = opts;
-    // An upload (voice note, picture, document) takes longer than text: it gets ATTACHMENT_TIMEOUT_FACTOR times the plain timeout.
-    const timeoutMs = opts.attachments?.length ? this.rpcTimeoutMs * ATTACHMENT_TIMEOUT_FACTOR : this.rpcTimeoutMs;
+    // A send waits SEND_TIMEOUT_FACTOR times the plain timeout; an upload (voice note, picture, document) takes longer than text, so ATTACHMENT_TIMEOUT_FACTOR on top.
+    const timeoutMs = this.rpcTimeoutMs * SEND_TIMEOUT_FACTOR * (opts.attachments?.length ? ATTACHMENT_TIMEOUT_FACTOR : 1);
     const result = await this.call<{ timestamp: number }>("send", {
       ...addressOf(opts.groupId, () => this.to()),
       ...(text ? { message: text } : {}),
