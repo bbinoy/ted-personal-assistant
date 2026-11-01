@@ -17,14 +17,14 @@
 - **Smart memory and context.** Ted remembers relevant details about you, your preferences and recurring tasks, and while you are away it can note facts it learns (a friend moved, a trip), logged, so you can inspect it and say "forget it". A nightly dream organises memory; ask "what did you learn" to see what changed and say "undo the dream" to take it back. Context is automatically populated with relevant tools, recent messages, memory, and compacted above a threshold.
 - **Smart about asking for permission.** A small model judge decides what is a safe action and when to ask you for confirmation, like sending an email.
 - **People who matter.** Tell Ted about friends and family (where they live, how close, how often you'd like to be in touch). When your calendar or mail shows you are travelling to where they live, Ted sends you one short message with who is there and how long since you last spoke, and offers a draft.
-- **Proactive.** Wakes up every 15min to check if anything needs acting on (via small model judge).
+- **Proactive.** Wakes up regularly to check whether anything needs acting on.
 - **Its own contact.** Give Ted its own Signal account (a name, a picture) and you chat with a contact instead of with yourself.
 - **Ask Ted how it works.** It is open source and explains itself from its own code.
 - **Pre-configured as a helpful personal assistant.** Comes with skills out of the box to be a helpful personal assistant.
 
 ## Personal assistant
 
-- **Inbox.** Every 15 minutes it checks for new mail. Newsletters, notifications and cold outreach are archived (never deletes). Anything that needs you arrives as one short message on Signal. When appropriate a reply is drafted automatically for you to review.
+- **Inbox.** It keeps an eye on your inbox throughout the day. Newsletters, notifications and cold outreach are archived (never deletes). Anything that needs you arrives as one short message on Signal. When appropriate a reply is drafted automatically for you to review.
 - **A short hello.** On its very first start Ted says hello once (what it does, `/status`, `/pause 2h`, `/today`, and "set up" if you want to walk through connecting things). It archives routine mail from the start, as your notes say; every archive is listed in `/today` and the brief, and asking Ted brings one back.
 - **Meeting prep** from your Notion meeting database and past threads, in the daily brief and again as one short message 15 minutes before each meeting with other people (who, what it is about, your last thread with them, what you owe each other, the Notion page; `PREP_MINUTES`).
 - **People.** "Invite Sam" or "write to Anna" does not mean guessing or asking for an address: `find_person` looks in your people notes and, for a friend, her Google Contacts, and only asks when it finds none or several. Google Drive and Docs are on by default: it can find and read your files.
