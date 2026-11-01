@@ -15,7 +15,7 @@ Whenever you read the calendar for the next hours (a look or a chat turn), call 
 
 ## Timely prep, just before a meeting
 
-Part of an ordinary look: code claims a meeting `PREP_MINUTES` (15) before it starts (one that has other people on it) and your prompt lists it under `meetings_to_prepare` (title, time, who, link). Prepare it now, quickly and in your own voice (delegate to the expert if you like), and post it as an urgent message so quiet hours and the day's cap do not hold it. Nothing is sent to anyone but the owner. Stop looking as soon as you have enough; the meeting is minutes away.
+Part of an ordinary look: code claims a meeting `PREP_MINUTES` (15) before it starts (one that has other people on it) and your prompt lists it under `meetings_to_prepare` (title, time, who, link). Your trigger line says "Triggered: meeting ...". Decide what helps: usually the prep below, unless your recent posts already covered this meeting (then say nothing). Prepare it now, quickly and in your own voice (delegate to the expert if you like), and post it as an urgent message so quiet hours and the day's cap do not hold it. Nothing is sent to anyone but the owner. Stop looking as soon as you have enough; the meeting is minutes away.
 
 1. **Who** - the attendees' names and, from your notes (read them, `find_person` if you have it) or the last mail, how the owner knows them. One clause.
 2. **Last contact** - the most recent mail thread with them: one search by their address or name, open at most one thread. One line: when, and what it was about. Add a note about them if one exists.

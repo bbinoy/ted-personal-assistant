@@ -189,6 +189,8 @@ test("scheduling: nothing before PREP_MINUTES; at the time the meeting is claime
   const facts = M.meetingFacts(PT.waitingMeetings(conv), { now: NOW, zone: "Europe/Berlin", skill: "ted-personal-assistant:meeting-prep" });
   assert.match(facts, /Meeting m1/);
   assert.match(facts, /in 15 min/);
+  const why = M.meetingWhy(PT.waitingMeetings(conv), { now: NOW, zone: "Europe/Berlin" });
+  assert.match(why[0]!, /^Triggered: meeting 'Meeting m1' with .*Anna.* starts at \d\d:\d\d \(in 15 min\)\.$/, "the trigger line carries the reason");
   assert.match(facts, /Anna <anna@client\.org>/);
   assert.match(facts, /<meetings_to_prepare>/, "the calendar's words are fenced data");
   assert.match(facts, /ted-personal-assistant:meeting-prep/);

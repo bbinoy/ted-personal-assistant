@@ -73,13 +73,23 @@ export function fallbackText(it: Item, o: { now: number; zone: string }): string
   return `⏰ ${who}${it.title}${due ? ` (${due})` : ""}`;
 }
 
+/** The trigger lines of a look for the reminders that woke it: which task, and the time that came ("Triggered: your task 'X' has its reminder at 10:00"). Code states the event; the look decides what to do with it. */
+export function reminderWhy(waiting: readonly { item: Item; key: string; fireAt: number }[], o: { now: number; zone: string }): string[] {
+  const today = todayIn(o.now, o.zone);
+  return waiting.map((w) => {
+    const l = localOf(w.fireAt, o.zone);
+    const at = showLocal(`${l.date}T${l.time}`, today);
+    return w.key.startsWith("snooze:") ? `Triggered: your task '${w.item.title}' was snoozed until ${at} and is open again.` : `Triggered: your task '${w.item.title}' has its reminder at ${at}.`;
+  });
+}
+
 /** The reminder and due facts for a look's prompt (heartbeat/look.ts): what is due to be said now, and the open items due or overdue, in the conversation's clock. "" when there is nothing. */
 export function reminderFacts(waiting: readonly { item: Item; fireAt: number }[], open: readonly Item[], o: { now: number; zone: string; group: boolean }): string {
   const today = todayIn(o.now, o.zone);
   const at = (ms: number): string => showLocal(`${localOf(ms, o.zone).date}T${localOf(ms, o.zone).time}`, today);
   const tag = (it: Item): string => [o.group && it.assignee ? `for ${it.assignee}` : "", duePhrase(it, o.now, o.zone), it.urgent ? "URGENT: may break quiet hours, set urgent" : ""].filter(Boolean).join("; ");
   const out: string[] = [];
-  if (waiting.length) out.push(`Reminders due now (the person asked to be reminded: say each one in your message now, in your own words${o.group ? ", naming who it is for" : ""}; it was due at the time given, so say so if that was a while ago):\n${waiting.map((w) => `#${w.item.id} ${w.item.title} (reminder for ${at(w.fireAt)}${tag(w.item) ? `; ${tag(w.item)}` : ""})`).join("\n")}`);
+  if (waiting.length) out.push(`Reminders that came due (decide what helps: usually a short reminder in your own words${o.group ? ", naming who it is for" : ""}, since the person set it; do the task if it is yours to do; say nothing if your recent posts or the journal already covered it; the time given may be a while ago):\n${waiting.map((w) => `#${w.item.id} ${w.item.title} (reminder for ${at(w.fireAt)}${tag(w.item) ? `; ${tag(w.item)}` : ""})`).join("\n")}`);
   const shown = new Set(waiting.map((w) => w.item.id));
   const dueSoon = open.filter((it) => !shown.has(it.id) && it.due && parseLocal(it.due)!.date <= addDays(today, 1)).slice(0, 12);
   if (dueSoon.length) out.push(`Open items due by tomorrow or overdue (for your awareness: the tasks skill, "Due today, in the morning", says when one goes out; otherwise mention one only when it helps now and your recent posts did not already):\n${dueSoon.map((it) => `#${it.id} ${it.title} (${tag(it)})`).join("\n")}`);

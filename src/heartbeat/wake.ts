@@ -132,10 +132,10 @@ export function createWakeups(deps: WakeDeps) {
     if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
     await Promise.all(remind.map(async (conv) => {
       if (paused(clock())) return;
-      const looks = convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake");
-      if (!looks) dropUnreachable(conv); // held posts have no look to be handed to (notices.ts)
-      await fireReminders(pipeline, conv, clock(), { looks });
-    })); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which says them; the fixed line only without a look
+      const hasLook = convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake");
+      if (!hasLook) dropUnreachable(conv); // held posts have no look to be handed to (notices.ts)
+      await fireReminders(pipeline, conv, clock(), { looks: hasLook && !isRefusal(may(conv, "reminder")) }); // (looks: a model run can say it now; else the fixed line, remindtick.ts)
+    })); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which decides what to do; the fixed line only when no model run is possible
     await Promise.all(
       convs.map(async (conv) => {
         if (paused(clock())) return;

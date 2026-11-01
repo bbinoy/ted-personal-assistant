@@ -188,7 +188,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
         if (owing) (finished.delete(owing), markOwed(conv.convId, owing, "email", end.said || (end.sends ?? 0) > 0)); // (the chat may have gone out already: the retry owes only the email)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
-        if (handed.length && (!attended || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
+        if (handed.length && (attended ? end.said : !abandoned)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
         if (prepping.length && (attended ? end.said : !abandoned)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)
         if (lapsed && end.ended && !abandoned) {
           for (const l of lapsedNow) told(convDb(conv.convId), lapsedKey(l), { once: true });
