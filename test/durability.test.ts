@@ -151,12 +151,11 @@ test("outbound: classification of send errors", () => {
   assert.equal(classifySendError(new Error("signal send timed out after 30s")), "unsure");
   assert.equal(classifySendError(new Error("socket closed")), "unsure");
   assert.equal(classifySendError(new Error("attachment not found")), "permanent");
-  const cli = new Error("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException) (UnexpectedErrorException)");
-  assert.equal(classifySendError(cli), "refused", "signal-cli says the send failed");
-  assert.equal(classifySendError(cli, true), "unsure", "a group send may have reached some members");
+  assert.equal(classifySendError(new Error("Failed to send message")), "refused", "signal-cli: no recipient got it");
+  assert.equal(classifySendError(new Error("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException) (UnexpectedErrorException)")), "unsure", "the request may have reached the server");
 });
 
-test("outbound: signal-cli's own send failure is retried; our own client timeout is not", async () => {
+test("outbound: signal-cli's \"no recipient got it\" is retried; a timeout is not", async () => {
   const run = async (err: string) => {
     waited = [];
     const m = fake();
@@ -172,7 +171,8 @@ test("outbound: signal-cli's own send failure is retried; our own client timeout
     console.error = silence;
     return calls;
   };
-  assert.equal(await run("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException)"), 3);
+  assert.equal(await run("Failed to send message"), 3);
+  assert.equal(await run("Failed to send message: Timed out waiting for chat connection response (SocketTimeoutException)"), 1);
   assert.equal(await run("signal send timed out after 120s"), 1);
 });
 

@@ -97,7 +97,7 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
     if (holding && !it.urgent) continue;
     const res = await postNotice(pipeline, conv, fallbackText(it, { now: t, zone }));
     // An unsure failure (a timeout, a connection lost mid-send) may have gone out: it counts as told, at most once (outbound.ts). Only a failure that proves nothing went out is tried again.
-    if (res.error && classifySendError(res.error, conv.kind === "group") !== "unsure") {
+    if (res.error && classifySendError(res.error) !== "unsure") {
       const tries = r.tries + 1;
       db.run(tries >= MAX_TRIES ? "UPDATE reminders SET state = 'folded', tries = ? WHERE item_id = ? AND key = ?" : "UPDATE reminders SET state = 'retry', tries = ? WHERE item_id = ? AND key = ?", tries, r.item_id, r.key); // (given up: the item stays open, the brief lists it)
       console.error(`reminders: the reminder for #${r.item_id} in ${conv.kind} could not be sent (try ${tries})`);
