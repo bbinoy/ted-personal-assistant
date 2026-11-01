@@ -3,7 +3,7 @@ import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
 import { prepare, runConversation, type TurnBuilder } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, RateLimitError, refusalOnce, type Reason } from "../tenants/errors.ts";
+import { refusalOnce, type Reason } from "../tenants/errors.ts";
 import { isRefusal, mayRun, type Payer } from "../tenants/payer.ts";
 import { timeIn } from "../core/timezone.ts";
 import { resolveSender } from "../tenants/tenants.ts";
@@ -157,7 +157,7 @@ export interface Decision {
   showTyping: () => void;
 }
 
-export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record">, delivery: Pick<Delivery, "runTurn" | "canSpeak" | "reactTo" | "warn">, queue: Pick<Queue, "wait">) {
+export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record">, delivery: Pick<Delivery, "runTurn" | "canSpeak" | "reactTo">, queue: Pick<Queue, "wait">) {
   const cfg = deps.group ?? {};
   const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number>; at?: number }>(); // gone: timestamps of messages their author deleted; at: when a message last came (for the pruning below)
   const stateOf = (key: string) => {
@@ -246,10 +246,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
       batch.timing.set("gateWait", Date.now() - waitingSince);
       if (batch.stale()) return; // someone wrote meanwhile: that message is judged on its own
       if (!r.ok) {
-        console.error("group: gate failed:", (r.e as Error).message); // not addressed: usually nobody is waiting for an answer
-        // ...unless the gate could not decide at all: a silent group looks like a broken one, and any message may be meant for us.
-        // The usage limit and an expired login are said now and then (groupNoticeMinutes), like in a turn that fails.
-        if (r.e instanceof RateLimitError || r.e instanceof AuthError) await delivery.warn(conv, r.e);
+        console.error("group: gate failed:", (r.e as Error).message); // the gate runs only for a batch NOT addressed to us: nobody is waiting, so no warning (an addressed batch skips the gate; a refusal for it is said above, refusalOnce)
         return;
       }
       const v = r.v;
