@@ -110,7 +110,7 @@ test("the weekly review has no inbox sweep: the looks own the whole inbox, in th
   assert.doesNotMatch(read("weekly-review"), /inbox sweep/i);
   assert.doesNotMatch(read("mail"), /Inbox sweep/);
   assert.match(read("mail"), /## Keeping the whole inbox[\s\S]*List the WHOLE inbox[\s\S]*Inbox decisions so far[\s\S]*open selectively/);
-  assert.match(read("mailbird"), /`summarize_all_inboxes` is NOT a review/);
+  assert.match(read("mailbird"), /list_conversations/);
 });
 
 test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {

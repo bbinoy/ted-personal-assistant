@@ -112,11 +112,6 @@ export class FakeMail {
       list_accounts: { description: "List the mail accounts.", shape: {}, run: () => [{ id: 1, senderName: owner.displayName ?? "Owner", email: owner.email, unreadConversations: inFolder(10).filter((c) => !c.read).length }] },
       list_folders: { description: "List an account's folders.", shape: { accountId: z.number() }, run: () => (Object.keys(FOLDER_ID) as Folder[]).map((f) => ({ id: FOLDER_ID[f], name: FOLDER_NAME[f], identity: f, parentId: null, unreadConversations: f === "inbox" ? inFolder(10).filter((c) => !c.read).length : 0 })) },
       list_conversations: { description: "List the conversations of a folder, newest first.", shape: { folderId: z.number(), limit: z.number().optional() }, run: (a) => inFolder(a.folderId).slice(0, a.limit ?? 50).map(row) },
-      summarize_all_inboxes: {
-        description: "One call for every account's inbox: unread counts and the conversations.",
-        shape: { limit: z.number().optional(), unreadOnly: z.boolean().optional() },
-        run: (a) => ({ summarizedAt: new Date().toISOString(), accounts: [{ accountId: 1, email: owner.email, inboxFolderId: 10, unreadConversations: inFolder(10).filter((c) => !c.read).length, conversations: inFolder(10).filter((c) => !a.unreadOnly || !c.read).slice(0, a.limit ?? 20).map(row) }] }),
-      },
       search_conversations: {
         description: "Search conversations in every folder (words in the subject, body, sender; from:name).",
         shape: { query: z.string(), limit: z.number().optional(), accountId: z.number().optional() },

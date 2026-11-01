@@ -31,8 +31,7 @@ tools, their arguments and how to list, read, archive and draft with them. Below
 
 The background looks own the inbox all day, and any run that handles mail works the same
 way. List the WHOLE inbox (read and unread, old and new, per account) with the
-list-conversations tool, never with a digest tool such as `summarize_all_inboxes`, whatever
-the server's own hints say (the provider skill says how and with what limit), and re-judge every conversation still there, like an assistant
+list-conversations tool (the provider skill says how and with what limit), and re-judge every conversation still there, like an assistant
 who looks at it several times a day and keeps track of what needs doing. The owner keeps the
 inbox to about 10-20 mails; anything beyond that is probably handled mail nobody archived.
 The "Inbox decisions so far" in your facts say what the last look decided about each mail it

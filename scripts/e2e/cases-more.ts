@@ -189,7 +189,7 @@ const e9: Case = {
 // ---- e21: a look reviews the inbox by listing it, not by the digest tool ----
 const e21: Case = {
   id: "e21",
-  title: "a look lists the inbox and archives the routine mail (summarize_all_inboxes is no review)",
+  title: "a look lists the inbox and archives the routine mail",
   turns: [],
   look: true,
   world: (t) => {
@@ -650,7 +650,7 @@ const e16: Case = {
   reply: ["There are no chat messages at all (nothing about mail, a connector, a restart or a token, and no 'nothing new' filler)."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+    await s.tool(`${MB}list_accounts`, {}).catch(() => "");
   },
 };
 
@@ -666,7 +666,7 @@ const e16b: Case = {
   reply: ["It says plainly that the mail could not be reached right now.", "It is a few short lines at most and does not invent any mail."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+    await s.tool(`${MB}list_accounts`, {}).catch(() => "");
     s.say("I can't reach your mail right now, so I can't tell. I'll check again when it is back.");
   },
 };
