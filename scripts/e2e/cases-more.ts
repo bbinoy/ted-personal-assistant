@@ -557,4 +557,38 @@ const e15b: Case = {
   group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: e15.group!.turns[0]!.text }] },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b];
+// ---- e16: a background look while the mail connector is down and nothing else is new: silent, no word about the connector ----
+const e16: Case = {
+  id: "e16",
+  title: "a look with the mail connector down and nothing else new stays silent",
+  turns: [],
+  look: true,
+  world: () => ({ mailDown: true }),
+  maxQuestions: 0,
+  state: (o) => [check("the owner got no message", !o.turns.some((t) => t.messages.length > 0), o.turns.flatMap((t) => t.messages).join(" | ").slice(0, 200))],
+  never: (o) => sends(o),
+  reply: ["There are no chat messages at all (nothing about mail, a connector, a restart or a token, and no 'nothing new' filler)."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+  },
+};
+
+// ---- e16b: the owner asks for her mail while the connector is down: a short honest answer ----
+const e16b: Case = {
+  id: "e16b",
+  title: "asked about the mail with the connector down: a short honest answer",
+  turns: ["Anything new in my mail?"],
+  world: () => ({ mailDown: true }),
+  maxQuestions: 0,
+  state: (o) => [check("a reply came", o.turns.some((t) => t.messages.length > 0))],
+  never: (o) => sends(o),
+  reply: ["It says plainly that the mail could not be reached right now.", "It is a few short lines at most and does not invent any mail."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}summarize_all_inboxes`, {}).catch(() => "");
+    s.say("I can't reach your mail right now, so I can't tell. I'll check again when it is back.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b];
