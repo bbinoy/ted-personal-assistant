@@ -79,7 +79,7 @@ export function reminderWhy(waiting: readonly { item: Item; key: string; fireAt:
   return waiting.map((w) => {
     const l = localOf(w.fireAt, o.zone);
     const at = showLocal(`${l.date}T${l.time}`, today);
-    return w.key.startsWith("snooze:") ? `Triggered: your task '${w.item.title}' was snoozed until ${at} and is open again.` : `Triggered: your task '${w.item.title}' has its reminder at ${at}.`;
+    return w.key.startsWith("snooze:") ? `Triggered: your task '${w.item.title}' was snoozed until ${at} and is open again.` : `Triggered: your task '${w.item.title}' has its reminder at ${at}. Do what you can of it first: search mail (search_conversations, the archive included) and notes for each thing it names (a file, link or address) by its own words before you say anything is missing.`;
   });
 }
 

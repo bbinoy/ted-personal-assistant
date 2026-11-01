@@ -92,7 +92,7 @@ test("the trigger line names the event: an own reminder, a snooze end", () => {
   const a = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW }).item;
   const w = [{ item: a, key: `at:${NOW}`, fireAt: NOW }, { item: { ...a, title: "Nap" }, key: `snooze:${NOW}`, fireAt: NOW }];
   assert.deepEqual(R.reminderWhy(w, { now: NOW, zone: ZONE }).map((x) => x.replace(/ (at|Thu) .*/, "")), ["Triggered: your task 'Call Sam' has its reminder", "Triggered: your task 'Nap' was snoozed until"]);
-  assert.match(R.reminderWhy(w, { now: NOW, zone: ZONE })[0]!, /has its reminder at .*12:00\.$/);
+  assert.match(R.reminderWhy(w, { now: NOW, zone: ZONE })[0]!, /has its reminder at .*12:00\./);
 });
 
 test("fixed text only when no model run is possible: no look (looks false) sends the line at once; a look that can run waits", async () => {
