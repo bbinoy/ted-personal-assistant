@@ -97,6 +97,7 @@ test("gate: the prompt carries clock, notes and log as data, with the group's de
   assert.equal(p.match(/<\/conversation_log>/g)?.length, 1);
   assert.match(gateSystem(""), /Take part in the group/);
   assert.match(gateSystem(""), /Acting on your own/);
+  assert.match(gateSystem(""), /starts with your name.*act true, always/);
 });
 
 // ---- the ledger: scheduling ----
