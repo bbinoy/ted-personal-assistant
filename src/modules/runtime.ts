@@ -64,7 +64,7 @@ const mailbirdAttachments: AttachmentSource = async (a) => {
 };
 
 export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
-  send: { server: (ctx) => createSendServer(ctx.key!) },
+  send: { server: (ctx) => createSendServer(ctx.key!, ctx.offers("mcp__send__check_again")) },
   files: { server: (ctx) => createFilesServer(ctx.key!, mailbirdAttachments) },
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },

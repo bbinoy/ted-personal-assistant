@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "d5cf27d518abb30f"
+        "sha": "4050ed905867bdd3"
       },
       "kind": {
         "who": "owner",
@@ -109,6 +109,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -165,7 +166,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "d5cf27d518abb30f"
+        "sha": "4050ed905867bdd3"
       },
       "snapshot": false
     },
@@ -327,7 +328,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "b920fd408ebc9f3d"
+        "sha": "6a9e834c2e36a375"
       },
       "kind": {
         "who": "group",
@@ -351,6 +352,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -388,7 +390,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "b920fd408ebc9f3d"
+        "sha": "6a9e834c2e36a375"
       },
       "snapshot": false
     },
@@ -450,7 +452,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "58c54abcdfb73a10"
+        "sha": "ce0c3a0edcb3bf1f"
       },
       "tenant": {
         "id": "<bea>",
@@ -481,6 +483,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -517,7 +520,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "58c54abcdfb73a10"
+        "sha": "ce0c3a0edcb3bf1f"
       },
       "snapshot": false
     },
@@ -582,7 +585,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "d5cf27d518abb30f"
+        "sha": "4050ed905867bdd3"
       },
       "kind": {
         "who": "owner",
@@ -687,6 +690,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -741,7 +745,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "d5cf27d518abb30f"
+        "sha": "4050ed905867bdd3"
       },
       "snapshot": false
     },
@@ -902,7 +906,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "b920fd408ebc9f3d"
+        "sha": "6a9e834c2e36a375"
       },
       "kind": {
         "who": "group",
@@ -927,6 +931,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -967,7 +972,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "b920fd408ebc9f3d"
+        "sha": "6a9e834c2e36a375"
       },
       "snapshot": false
     },
@@ -1029,7 +1034,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "58c54abcdfb73a10"
+        "sha": "ce0c3a0edcb3bf1f"
       },
       "tenant": {
         "id": "<bea>",
@@ -1061,6 +1066,7 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
+        "mcp__send__check_again",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -1100,7 +1106,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "58c54abcdfb73a10"
+        "sha": "ce0c3a0edcb3bf1f"
       },
       "snapshot": false
     },
