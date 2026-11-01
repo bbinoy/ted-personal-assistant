@@ -14,7 +14,7 @@ import { journalAround } from "../memory/journalread.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { createGroupAnswering, speaker, type Go } from "./group.ts";
 import { replayPrompt } from "./replay.ts";
-import { interruptTurn } from "../run/interrupt.ts";
+import { forgetCutShort, interruptTurn } from "../run/interrupt.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { voiceOption } from "./voicereply.ts";
@@ -302,6 +302,9 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return settle(conv, w, e);
   }
 
+  // Who the turn running for each conversation is answering (the authors of its messages), for the decision to cut it short (settle).
+  const running = new Map<string, Set<string | undefined>>();
+
   // Steps 5 to 7: the burst, the answer decision, the turn. Replay (below) joins here too.
   function settle(conv: Conversation, w: Ways, e: Entry): Promise<void> {
     return burst(conv, e, async (b) => {
@@ -309,8 +312,17 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       try {
         const go = await w.decide(conv, { batch: b, e, showTyping: () => void (typing ??= holdTyping(conv, b.timing)) });
         if (go) {
-          if (!e.continuation) interruptTurn(conv.key); // the message will be answered: a chat turn still running for this conversation stops at its next tool boundary, so it does not wait for the whole task (run/interrupt.ts)
-          await b.run((items) => w.turn(conv, items.sort((x, y) => x.timestamp - y.timestamp), go, b));
+          // The message will be answered: the chat turn still running for this conversation stops at its next tool call (run/interrupt.ts), so it does not make the message wait for the whole task.
+          // Not for a continuation or a reaction (no one is waiting), and in a group only for the person the running turn is answering (or when it answers no one in particular): what others
+          // write waits its turn, so one member cannot cut another's task short.
+          const asking = running.get(conv.key);
+          if (!e.continuation && !e.reaction && (!asking?.size || (asking.size === 1 && asking.has(e.author)))) interruptTurn(conv.key, e.timestamp);
+          await b.run((items) => {
+            const real = items.filter((x) => !x.continuation && !x.reaction);
+            if (!real.length) forgetCutShort(conv.key); // a turn without a message in it is not the one a cut was made for
+            running.set(conv.key, new Set(real.map((x) => x.author)));
+            return w.turn(conv, items.sort((x, y) => x.timestamp - y.timestamp), go, b).finally(() => running.delete(conv.key));
+          });
         }
       } finally {
         typing?.(); // however it ended: answered, silent, superseded or failed

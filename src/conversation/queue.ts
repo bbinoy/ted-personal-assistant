@@ -1,4 +1,5 @@
 import { startTiming } from "../core/timing.ts";
+import { forgetCutShort } from "../run/interrupt.ts";
 import { inFlight } from "../approvals/pendingstore.ts";
 import type { Batch, Conversation, PipelineDeps } from "./conversationmodel.ts";
 
@@ -98,6 +99,7 @@ export function createQueue(deps: Pick<PipelineDeps, "now" | "wait" | "settleMs"
   function dropPending(conv: Conversation, stamps: readonly number[]): void {
     const st = bursts.get(conv.key);
     if (st) st.pending = st.pending.filter((x) => !stamps.includes(stampOf(x)));
+    forgetCutShort(conv.key, stamps); // a message that cut the running turn short and was taken back (deleted, or replaced by its edit) tells the next turn nothing
   }
 
   // Everything still settling or queued behind a running turn ("/stop", ownercommands.ts): dropped, so no turn is made of it. Returns how many messages.

@@ -82,14 +82,13 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const cut = t.attended && takeCutShort(conv.key);
   const input = userInput([...shown.map((s) => s.text), clock, ...(cut ? [CUT_FACT] : []), prompt].join("\n\n"), pictures, documents);
   let reply: AgentReply;
-  const watch = t.attended ? watchTurn(conv.key) : undefined; // a chat turn only: a newer message may ask it to stop at its next tool boundary (a look has its own preempt logic, queue.ts)
+  const watch = t.attended ? watchTurn(conv.key, !cut) : undefined; // a chat turn only: a newer message may ask it to stop at its next tool call (not one that began because of a cut; a look has its own preempt logic, queue.ts)
   if (watch) o.watch = watch;
   try {
     reply = t.attended
       ? await runWarmOrCold(conv, o, r, input, (abortController) => {
         const gate = afterConnectors(input, o.kind);
         const q = gate.bind((w.io?.query ?? query)({ prompt: gate.prompt, options: { ...buildOptions(w.approve, o, r.resume, abortController.signal), abortController } }));
-        watch?.attach(q);
         return q;
       }) // on the conversation's warm process when it still fits (agentwarm.ts)
       : await runAgent(input, w.approve, o, w.io);
