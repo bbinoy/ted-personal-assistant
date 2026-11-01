@@ -3,6 +3,7 @@ import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { doneKey, DROP_AFTER_MS, dueReminders, fallbackText, remindAtAfter, rolledDue, type Planned } from "../tasks/remind.ts";
 import { activeItems, editItem, getItem, lineOf, noteReminded, reopenItem, told, type Item, type Scope } from "../tasks/store.ts";
+import { classifySendError } from "../conversation/outbound.ts";
 import { holdingNow, postNotice } from "./notices.ts";
 
 // The reminder TICK (called from wake.ts for every conversation with tasks): WAKE WITH A REASON. Code decides WHEN, the conversation's next look decides what to do (CLAUDE.md: Ted speaks, code doesn't). A reminder whose
@@ -95,7 +96,8 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
     if (!it) continue;
     if (holding && !it.urgent) continue;
     const res = await postNotice(pipeline, conv, fallbackText(it, { now: t, zone }));
-    if (res.error) {
+    // An unsure failure (a timeout, a connection lost mid-send) may have gone out: it counts as told, at most once (outbound.ts). Only a failure that proves nothing went out is tried again.
+    if (res.error && classifySendError(res.error) !== "unsure") {
       const tries = r.tries + 1;
       db.run(tries >= MAX_TRIES ? "UPDATE reminders SET state = 'folded', tries = ? WHERE item_id = ? AND key = ?" : "UPDATE reminders SET state = 'retry', tries = ? WHERE item_id = ? AND key = ?", tries, r.item_id, r.key); // (given up: the item stays open, the brief lists it)
       console.error(`reminders: the reminder for #${r.item_id} in ${conv.kind} could not be sent (try ${tries})`);

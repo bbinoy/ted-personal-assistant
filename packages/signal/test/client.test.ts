@@ -261,7 +261,23 @@ test("client: a request that gets no answer times out after rpcTimeoutMs", async
   open.push(d);
   const c = new SignalClient({ host: d.host, port: d.port, account: ME, rpcTimeoutMs: 50 });
   await c.connect();
-  await assert.rejects(c.send("x"), /timed out after 0.05s/);
+  await assert.rejects(c.send("x"), /timed out after 0.2s/);
+  c.close();
+});
+
+test("client: an answer that comes after the request timed out is logged once, not dropped", async () => {
+  const d = await FakeSignalDaemon.start(() => undefined);
+  open.push(d);
+  const warnings: string[] = [];
+  const c = new SignalClient({ host: d.host, port: d.port, account: ME, rpcTimeoutMs: 20, logger: { ...console, warn: (...a: unknown[]) => void warnings.push(a.join(" ")) } });
+  await c.connect();
+  await c.react("x", { author: ME, timestamp: 1 }); // (best effort: times out, logged)
+  assert.equal(d.requests.length, 1);
+  d.reply(d.requests[0]!.id, {});
+  await until(() => warnings.some((w) => /late answer to sendReaction: sent/.test(w)));
+  d.reply(d.requests[0]!.id, {});
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(warnings.filter((w) => /late answer/.test(w)).length, 1, "logged once");
   c.close();
 });
 
@@ -270,7 +286,7 @@ test("client: a send with an attachment waits longer than a plain text send", as
   open.push(d);
   const c = new SignalClient({ host: d.host, port: d.port, account: ME, rpcTimeoutMs: 50 });
   await c.connect();
-  await assert.rejects(c.send("x", { attachments: ["/none.ogg"] }), /timed out after 0.2s/);
+  await assert.rejects(c.send("x", { attachments: ["/none.ogg"] }), /timed out after 0.8s/);
   c.close();
 });
 

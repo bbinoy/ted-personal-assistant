@@ -45,10 +45,13 @@ export function fitParts(r: { text: string; styles: TextStyle[] }, max: number |
 //   - "refused": the connection was not up, nothing was written: retried twice, after 2 s and 6 s;
 //   - "unsure": a timeout or a connection lost with the request in flight: the messenger may well have sent it. Never retried; one log line, the error reaches the caller;
 //   - anything else (signal-cli refused it: bad attachment, unknown group, a user error): not retried, the error reaches the caller.
+// signal-cli's bare "Failed to send message" (SendMessageResultUtils.java in AsamK/signal-cli) is thrown only when NO recipient got it (mixed results are reported as a success), so it is "refused", group or not.
+// Its IOException form "Failed to send message: <reason> (<class>)" (SendCommand.java), e.g. a timeout waiting for the chat connection right after a wake, can come after the request reached the server: judged by the text below.
 // signal-cli's JSON-RPC has no call to ask afterwards whether a timed-out send went out (only a later sync of our own message, not reliably matchable), so none is built.
 export type SendFailure = "refused" | "unsure" | "permanent";
 export function classifySendError(e: unknown): SendFailure {
   const m = e instanceof Error ? e.message : String(e);
+  if (/^Failed to send message$/.test(m.trim())) return "refused";
   if (/not connected|is closed|ECONNREFUSED|EPIPE/i.test(m) && !/timed out/i.test(m)) return "refused";
   if (/timed out|socket closed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(m)) return "unsure";
   return "permanent";
