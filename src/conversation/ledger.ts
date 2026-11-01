@@ -72,6 +72,12 @@ export const wakeText = (nextCheckMinutes: number, looked: Date, now = Date.now(
 export const recordWake = (pipeline: { record: (conv: Conversation, kind: Kind, ts: number, text: string) => void }, conv: Conversation, nextCheckMinutes: number, looked: Date, clamp?: (minutes: unknown) => number): void =>
   pipeline.record(conv, "wake", Date.now(), wakeText(nextCheckMinutes, looked, looked.getTime(), clamp)); // counted from the look, not from when the run ended
 
+// The same, after the act or the gate: a pulled check (check_again, it has a `why`) that is earlier than the time chosen now stands, so a later choice never postpones it.
+export const recordWakeKeepingPull = (pipeline: { record: (conv: Conversation, kind: Kind, ts: number, text: string) => void }, conv: Conversation, nextCheckMinutes: number, looked: Date, clamp?: (minutes: unknown) => number): void => {
+  const w = lookState(ledgerEntries(convPaths(convIdOfKey(conv.key)).messages)).wake;
+  if (!(w?.why && Date.parse(w.next) < Date.parse(JSON.parse(wakeText(nextCheckMinutes, looked, looked.getTime(), clamp)).next))) recordWake(pipeline, conv, nextCheckMinutes, looked, clamp);
+};
+
 // A look a message called off: it is due again as soon as the conversation has been quiet (lookWhy), not at the normal rhythm.
 export const recordCalledOff = (pipeline: { record: (conv: Conversation, kind: Kind, ts: number, text: string) => void }, conv: Conversation, looked: Date): void =>
   pipeline.record(conv, "wake", Date.now(), JSON.stringify({ next: looked.toISOString(), looked: looked.toISOString(), quiet: true } satisfies Wake));

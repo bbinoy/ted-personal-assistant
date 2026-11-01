@@ -6,7 +6,7 @@ import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { auditSource } from "../core/runkind.ts";
 import { logSince } from "../run/chattail.ts";
-import { lookState, lookWhy, recordCalledOff, recordWake, type LookState } from "../conversation/ledger.ts";
+import { lookWhy, recordCalledOff, recordWake, recordWakeKeepingPull, type LookState } from "../conversation/ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { heartbeatInstruction } from "../run/persona.ts";
 import type { TurnBuilder } from "../run/agent.ts";
@@ -146,7 +146,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const journalFile = convPaths(convIdOfKey(conv.key)).messages; // where the journal sink writes this conversation's lines
     const journaled = (): number => ledgerEntries(journalFile).filter((m) => m.kind === "journal").length;
     const journaledBefore = journaled();
-    const pulledSooner = (minutes: number): boolean => { const w = lookState(ledgerEntries(journalFile)).wake; return !!w?.why && Date.parse(w.next) < now.getTime() + clampLook(minutes) * 60_000; }; // this run called check_again for an earlier time than it now chose
     let steps = 0; // calls that could have a journal line (an action, not a read or plumbing)
     let acted = 0; // tool calls that are not reads (listing the inbox is looking, not acting)
     let archived = 0;
@@ -249,7 +248,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     emit({ type: "look", conv: conv.key, unjournaled, source: auditSource({ who: conv.kind, attended: false }), row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
     else if (outcome === "preempted") recordCalledOff(pipeline, conv, now); // a message overtook it: due again once the conversation is quiet (ledger.ts lookWhy), not at the day's 30 minutes
-    else if (!pulledSooner(retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes)) recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news; a check_again of this run (an earlier time, with its reason) stays
+    else recordWakeKeepingPull(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news; a check_again of this run (an earlier time, with its reason) stays
     return outcome;
   }
 

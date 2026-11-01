@@ -7,7 +7,7 @@ import { join } from "node:path";
 // check_again (ledger.ts pullLook): any run pulls the conversation's next look forward, with a reason the look is told. Real log files in a temporary folder.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "checkagain-"));
 
-const { pullLook, lookState, lookWhy, recordWake } = await import("../src/conversation/ledger.ts");
+const { pullLook, lookState, lookWhy, recordWake, recordWakeKeepingPull } = await import("../src/conversation/ledger.ts");
 const { ledgerEntries } = await import("../src/core/messages.ts");
 const { convIdOfKey, convPaths } = await import("../src/core/convpaths.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
@@ -55,4 +55,19 @@ test("check_again: at most 4 pulls an hour per conversation; an hour later it wo
   const file = convPaths(convIdOfKey(KEYS.capped)).messages;
   recordMessage("wake", min(61).getTime(), JSON.stringify({ next: min(181).toISOString(), looked: min(61).toISOString() }), min(61), file); // a look booked its next one
   assert.match(pullLook(KEYS.capped, 3, "later", min(62)), /^Booked/);
+});
+
+test("check_again: a group gate's later wake does not postpone a pull; an earlier one wins", () => {
+  KEYS.gated = "g-gated";
+  const file = convPaths(convIdOfKey(KEYS.gated)).messages;
+  const state = book("gated", 60);
+  const pipeline = { record: (_c: unknown, kind: Parameters<typeof recordMessage>[0], _ts: number, text: string) => recordMessage(kind, T0.getTime(), text, T0, file) };
+  const conv = { key: KEYS.gated } as never;
+  pullLook(KEYS.gated, 10, "Eve's answer", T0);
+  recordWakeKeepingPull(pipeline, conv, 30, T0, (m) => Number(m)); // the gate chose 30 minutes: later than the pull
+  assert.equal(state().wake?.next, min(10).toISOString());
+  assert.equal(state().wake?.why, "Eve's answer");
+  recordWakeKeepingPull(pipeline, conv, 5, T0, (m) => Number(m)); // earlier: it wins (and is the gate's own, no reason)
+  assert.equal(state().wake?.next, min(5).toISOString());
+  assert.equal(state().wake?.why, undefined);
 });
