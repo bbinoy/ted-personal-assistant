@@ -17,6 +17,7 @@
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:follow-through",
       "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
@@ -910,6 +911,7 @@
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:follow-through",
       "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
@@ -1796,6 +1798,7 @@
     "skills": [
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -2669,6 +2672,7 @@
     "skills": [
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -3542,6 +3546,7 @@
     "skills": [
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -4415,6 +4420,7 @@
     "skills": [
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:web-research",
+      "ted-personal-assistant:how-ted-works",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],

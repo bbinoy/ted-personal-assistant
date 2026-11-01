@@ -121,9 +121,9 @@ test("doctor: `npm run doctor` with MAIL_PROVIDER=none and no Mailbird anywhere 
 test("offered skills: without mail the two mail skills are gone, the rest are unchanged", () => {
   const all = ownerSkills(true);
   const none = ownerSkills(false);
-  assert.equal(all.length, 15);
+  assert.equal(all.length, 16);
   assert.deepEqual(none, all.filter((s) => !/:mail(bird)?$/.test(s)));
-  assert.equal(none.length, 13);
+  assert.equal(none.length, 14);
 });
 
 test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no email here' sentence is there", () => {
