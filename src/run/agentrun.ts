@@ -1,4 +1,4 @@
-import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type CanUseTool, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { gated, parked, type RunKind as GateKind } from "../core/rungate.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emitRecord, endRun } from "../core/events.ts";
@@ -39,6 +39,7 @@ import { skillsFor } from "../modules/skills.ts";
 import { recordToolsSeen, toolsSeen } from "../policy/toolsseen.ts";
 import type { Triage } from "../tasks/maildecisions.ts";
 import { delegationHook, type Delegation, type ExpertSetup } from "./delegation.ts";
+import { cutBefore, CUT_DENIED, type TurnWatch } from "./interrupt.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
 // browse sub-run. The options of a conversation come from one builder (runoptions.ts), the entry points are agent.ts, the warm processes agentwarm.ts.
@@ -70,6 +71,7 @@ export interface RunOptions {
   // Fires after a tool call succeeds. Used to capture the brief the agent sends.
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
+  watch?: TurnWatch; // a chat turn that a newer message of its conversation may cut short at a tool boundary (interrupt.ts)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   gate?: GateKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's id
@@ -254,12 +256,16 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? HIDDEN_BROWSER_TOOLS : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!(opts.tenant ?? opts.sponsor), { provenance, conversation, run, triage: opts.triage, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: cuttable(opts.conversation, kind.attended, makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!(opts.tenant ?? opts.sponsor), { provenance, conversation, run, triage: opts.triage, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf })),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
   };
 }
+
+// A chat turn that a newer message of its conversation has asked to stop is cut at the next call the model asks for (interrupt.ts): denied, not run, and the turn ends. Found by the conversation's key
+// at call time, so a warm process (built before the message that uses it) is cut the same way.
+const cuttable = (conversation: string | undefined, attended: boolean, inner: CanUseTool): CanUseTool => (!conversation || !attended ? inner : async (tool, input, o) => (await cutBefore(conversation, o.toolUseID, o.agentID) ? { behavior: "deny", message: CUT_DENIED, interrupt: true } : inner(tool, input, o)));
 
 // Pure. The tools a user message's results say do not exist ("No such tool available: <name>"): names only.
 export function missingTools(content: unknown): string[] {
@@ -281,6 +287,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
   for await (const message of stream) {
     observe(payer, message);
+    opts.watch?.see(message);
     if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
@@ -310,6 +317,11 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       writeSession(opts.sessionConv, next);
     }
     charge(payer, turnCostUsd, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
+    if (message.subtype === "error_during_execution" && opts.watch?.landed) { // cut short at a tool boundary by a newer message: not a failure, the session keeps what was done and the message is the next turn
+      opts.watch.cut();
+      succeeded(payer);
+      return { text: "", costUsd: turnCostUsd };
+    }
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
       return { text: message.result, costUsd: turnCostUsd, structured: message.structured_output };

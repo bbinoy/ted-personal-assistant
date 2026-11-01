@@ -38,7 +38,7 @@ export class FakeCalendar {
   private next = 1;
   readonly zone: string;
 
-  constructor(rec: Recorder, zone: string, ownerEmail: string, seed: SeedEvent[] = [], now: () => number = Date.now) {
+  constructor(rec: Recorder, zone: string, ownerEmail: string, seed: SeedEvent[] = [], now: () => number = Date.now, readDelayMs = 0) {
     this.zone = zone;
     for (const s of seed) this.events.push({ id: this.newId(), summary: s.summary, startMs: instantOf(s.start, s.zone ?? zone), endMs: instantOf(s.end, s.zone ?? zone), zone: s.zone ?? zone, allDay: false, location: s.location, description: s.description, attendees: (s.attendees ?? []).map((a) => a.toLowerCase()), invited: [], createdByCall: false });
     const shown = (e: CalEvent) => ({
@@ -73,11 +73,13 @@ export class FakeCalendar {
     this.service = fakeService(CALENDAR_SERVER, rec, {
       list_calendars: { description: "List the calendars the user can see.", shape: {}, run: () => ({ calendars: [{ id: "primary", summary: ownerEmail, primary: true, accessRole: "owner", timeZone: zone }] }) },
       list_events: {
+        delayMs: readDelayMs,
         description: "List events in a time range (RFC3339 or local ISO times).",
         shape: { startTime: z.string().optional(), endTime: z.string().optional(), calendarId: z.string().optional(), timeZone: z.string().optional(), orderBy: z.string().optional(), maxResults: z.number().optional(), q: z.string().optional() },
         run: (a) => listed(this.events.filter((e) => within(e, a.startTime, a.endTime) && (!a.q || `${e.summary} ${e.description ?? ""}`.toLowerCase().includes(String(a.q).toLowerCase())))),
       },
       search_events: {
+        delayMs: readDelayMs,
         description: "Search events by text.",
         shape: { query: z.string(), calendarId: z.string().optional(), startTime: z.string().optional(), endTime: z.string().optional() },
         run: (a) => listed(this.events.filter((e) => within(e, a.startTime, a.endTime) && String(a.query).toLowerCase().split(/\s+/).every((w) => `${e.summary} ${e.location ?? ""} ${e.description ?? ""} ${e.attendees.join(" ")}`.toLowerCase().includes(w)))),

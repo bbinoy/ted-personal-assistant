@@ -180,6 +180,7 @@ A new difference is a new row (with the owner's approval), never an `if` in a st
 **Messages in and out.** `src/conversation/intake.ts` handles pictures, documents (PDF, text, audio via whisper), long texts, edits, deletes and quotes, as above.
 
 - A settling pause folds a burst into one turn (`queue.ts`, 2 seconds).
+- A message that will be answered (it passed the intake: for a group, the gate said yes; not a continuation or a reaction) while the same conversation's chat turn is still running asks that turn to stop at the next tool call the model asks for (`src/run/interrupt.ts`, `intake.ts` settle, `cuttable` in `agentrun.ts`): the call is denied, never run, with the SDK's `interrupt` flag, and the turn ends. It is cut only when no other call is in flight (so no approval question, payment or browse step is open), never in the middle of a final answer (a turn that asks for no more tools simply finishes), at most once per turn, and not a turn that began because of a cut. In a group only the person the running turn is answering cuts it. The session keeps what was done; the message is the next turn on it (burst-merged with others) and, when that turn has a real message, the run is told by one code fact that the turn before was cut short (dropped if the message was deleted or replaced). The SDK's interrupt marker after our denial is what marks the cut; any other error stays an error. The message never enters the running turn, so it is neither lost nor answered twice. Looks are not cut (they give way, `queue.ts` lease).
 - Delivery is one function in `conversation.ts` (`[[silent]]`, `[[voice]]`, `[[react: 👍]]`, retry in `outbound.ts`); the `send` tool uses it mid-turn.
 - A voice reply has one deadline (75 seconds); on expiry it goes out as text.
 
@@ -468,6 +469,7 @@ What a model run is made of.
 src/run/agent.ts  runConversation, runLook, prepare: one runTurn for every trigger
 src/run/agentrun.ts  RunOptions, buildOptions, runAgent, the stream
 src/run/agentwarm.ts  the keyed pool of warm processes
+src/run/interrupt.ts  a running chat turn that a newer message cuts at its next tool call
 src/run/connectorwait.ts  holds the owner's first message until every connector is connected (pending waited for, failed reconnected)
 src/run/ceiling.ts  wall-clock ceiling of a run, `/stop`
 src/run/chatsession.ts  session resume and in-place compaction

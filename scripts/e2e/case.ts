@@ -25,6 +25,7 @@ interface World {
   mail?: SeedMail[];
   mailDown?: boolean; // the mail connector is down: every call to it errors
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)
+  slowMs?: number; // the calendar's reads take this long (a slow service: the owner's next message can arrive while one runs)
   fetch?: Record<string, string>; // pages the built-in WebFetch can open, by their public-looking address (html); served by a local server for the run (fakeweb.ts)
   web?: Record<string, FakePage>; // the fake web (the browser the browse worker uses); the owner's card is a public test card, set up for the run
   notes?: Record<string, string>; // note files of the owner's notes folder (people-*.md, ...), on top of the setup notes every case gets
@@ -57,6 +58,7 @@ export interface Case {
   turns: string[]; // the owner's messages, one chat turn each, in the same conversation; none for a look
   look?: boolean; // the trigger is a background look (heartbeat/look.ts), not a message
   group?: { members: string[]; turns: { from: string; text: string; addressed?: boolean }[] }; // the trigger is a group chat the owner sponsors: the messages go through the production intake (vouch, gate, participation, group prompt). `members`: the other members by name; `from` is a member's name or "owner"; `addressed`: tagged or quoted (default no, so the participation gate decides); `turns` above is empty
+  interject?: { on: string; text: string; afterMs?: number }; // the owner's chat only: a second message, sent through the production intake `afterMs` after the named tool (a full tool name) is first called, while the first turn is still running
   world: (t: Time) => World;
   answers?: string[]; // the scripted owner's answers to the questions that are not a card payment, in order ("yes" approves); anything else, and running out, declines
   payment?: string; // the answer to the card payment question: "YES" pays; default "no"
