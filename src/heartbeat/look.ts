@@ -27,7 +27,9 @@ import { heldWaiting, observeLook, postNotice, submitPost } from "./notices.ts";
 import { factsFor, routinesWaiting } from "./facts.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { waitingReminders, remindersWaiting } from "./remindtick.ts";
-import { meetingsWaiting } from "./preptick.ts";
+import { meetingsWaiting, waitingMeetings } from "./preptick.ts";
+import { reminderWhy } from "../tasks/remind.ts";
+import { meetingWhy } from "../tasks/meetings.ts";
 
 // A conversation's look: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed, a claimed reminder, meeting or routine), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown,
@@ -124,8 +126,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const due = [
       lookWhy(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }),
       heldWaiting(conv, now) && "Posts you held back are waiting.",
-      looker0.tasks && remindersWaiting(conv) && "A reminder has come due.",
-      looker0.meetings && meetingsWaiting(conv) && "A meeting is to be prepared.",
+      ...(looker0.tasks && remindersWaiting(conv) ? reminderWhy(waitingReminders(conv), { now: now.getTime(), zone: looker0.zone }) : []), // (wake with a reason: the event itself, in the trigger line)
+      ...(looker0.meetings && meetingsWaiting(conv) ? meetingWhy(waitingMeetings(conv), { now: now.getTime(), zone: looker0.zone }) : []),
       routinesWaiting(conv, now) && "A routine is due.",
     ].filter((r): r is string => typeof r === "string");
     if (!due.length) return "not-due";

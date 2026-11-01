@@ -5,14 +5,15 @@ import { doneKey, DROP_AFTER_MS, dueReminders, fallbackText, remindAtAfter, roll
 import { activeItems, editItem, getItem, lineOf, noteReminded, reopenItem, told, type Item, type Scope } from "../tasks/store.ts";
 import { holdingNow, postNotice } from "./notices.ts";
 
-// The reminder TICK (called from wake.ts for every conversation with tasks): code decides WHEN, the conversation's next look says it (CLAUDE.md: Ted speaks, code doesn't). A reminder whose time has
-// come is CLAIMED here (at most once: the `reminders` row and the item's change are one transaction), which makes the conversation's look due at once (look.ts, `remindersWaiting`); the look's prompt
-// carries it as a fact (`reminderFacts`) and the look says it in its own words. Only when the look has TOLD it (it posted, or sent while it worked) is it marked sent and journaled ("Reminded about ...").
-// The fixed one-line text is only the fallback when no model run says it (CLAUDE.md: "a fallback when no model run is possible at all"): the conversation has no look, or FALLBACK_MS after the claim no
-// look has told it (paused budget, a cooldown, looks failing). Quiet hours and /quiet hold a reminder unless the item is urgent. Repeating items roll here as before.
+// The reminder TICK (called from wake.ts for every conversation with tasks): WAKE WITH A REASON. Code decides WHEN, the conversation's next look decides what to do (CLAUDE.md: Ted speaks, code doesn't). A reminder whose
+// time has come (the item's own reminder, or a snooze's end) is CLAIMED here (at most once: the `reminders` row and the item's change are one transaction), which makes the conversation's look due at once (look.ts,
+// `remindersWaiting`); the look's trigger line names the item and its time (`reminderWhy`) and its prompt carries the facts (`reminderFacts`); the look says it, does it, or finds it covered. When the look
+// ended well the claim is settled: journaled ("Reminded about ...") if it spoke, only marked if it chose to stay silent; a failed or called-off look leaves it for the next one.
+// The fixed one-line text is ONLY the fallback for "no model run is possible" (CLAUDE.md §4): the conversation has no look, or the model is unavailable now (paused, a cooldown, the day's budget, a refused key: `looks` false).
+// Quiet hours and /quiet hold a reminder unless the item is urgent. Repeating items roll here as before.
 const HOUR = 3_600_000;
 const MAX_TRIES = 3;
-const FALLBACK_MS = 30 * 60_000;
+const LATE_MS = 30 * 60_000; // a reminder claimed this long after its time counts as late (doctor)
 const KEEP_MS = 90 * 24 * HOUR;
 
 interface RemRow {
@@ -39,7 +40,7 @@ function markTold(conv: Pick<Conversation, "key" | "convId">, rows: readonly { i
 
 /**
  * One conversation's reminders for this tick. Never creates a database. Returns how many fallback lines went out (a look's telling is counted by the look). Never throws.
- * `looks`: the conversation has a heartbeat look to say its reminders (wake.ts); without one the fallback line goes at once.
+ * `looks`: a model run can say its reminders now (wake.ts: the conversation has a look and mayRun allows it); otherwise the fixed fallback line goes at once.
  */
 export async function fireReminders(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, now: Date, o: { looks?: boolean } = {}): Promise<number> {
   try {
@@ -71,7 +72,7 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
     db.tx(() => {
       const r = db.run(
         "INSERT INTO reminders (item_id, key, state, fire_at, at, late, tries) VALUES (?, ?, ?, ?, ?, ?, 0) ON CONFLICT (item_id, key) DO UPDATE SET state = excluded.state, at = excluded.at, late = excluded.late WHERE state = 'held'",
-        p.item.id, p.key, state, p.fireAt, t, state === "folded" || t - p.fireAt > FALLBACK_MS ? 1 : 0,
+        p.item.id, p.key, state, p.fireAt, t, state === "folded" || t - p.fireAt > LATE_MS ? 1 : 0,
       );
       if (r.changes === 0) return false; // already claimed (another tick, a restart)
       if (p.kind === "snooze") reopenItem(sc, p.item.id);
@@ -86,13 +87,12 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
     claim(p, t - p.fireAt >= DROP_AFTER_MS ? "folded" : "claimed"); // (two days late: only marked; the item is open and the brief and the look's due list show it)
   }
 
-  // The fallback: a claimed reminder no look has told in time (or a conversation with no look) gets the fixed line, through the conversation's queue like any notice. Quiet hours still hold it.
+  // The fallback, only when no model run is possible (no look, paused, cooldown, budget, key refused): a claimed reminder gets the fixed line, through the conversation's queue like any notice. Quiet hours still hold it.
   let sent = 0;
-  const waiting = db.all<RemRow>("SELECT item_id, key, state, tries, at, fire_at FROM reminders WHERE state IN ('claimed', 'retry') ORDER BY fire_at");
+  const waiting = looks ? [] : db.all<RemRow>("SELECT item_id, key, state, tries, at, fire_at FROM reminders WHERE state IN ('claimed', 'retry') ORDER BY fire_at");
   for (const r of waiting) {
     const it = items.find((i) => i.id === r.item_id);
     if (!it) continue;
-    if (looks && t - r.at < FALLBACK_MS) continue; // (its look has the time to say it)
     if (holding && !it.urgent) continue;
     const res = await postNotice(pipeline, conv, fallbackText(it, { now: t, zone }));
     if (res.error) {
@@ -135,12 +135,12 @@ export function waitingReminders(conv: Pick<Conversation, "key" | "convId">): Wa
 /** Is a reminder waiting that no look has been handed yet? Then the look is due now (look.ts). One small query. */
 export const remindersWaiting = (conv: Pick<Conversation, "convId">): boolean => (peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM reminders WHERE state = 'claimed' AND ts IS NULL") ?? 0) > 0; // (ts: when a look was first handed it)
 
-/** After a look: the reminders it was handed are told when it said something (posted, or sent while it worked; a held post counts unless the item is urgent); else they wait (the fallback comes). */
+/** After a look that ended (the caller leaves an abandoned one alone: the next look is handed them again): the reminders it was handed are told when it said something (posted, held for later, or sent while it worked); else it judged them covered and they are only marked, not journaled. */
 export function afterLook(conv: Pick<Conversation, "key" | "convId">, handed: readonly Waiting[], said: { posted: boolean; held: boolean }, now: number, zone: string): void {
   if (!handed.length) return;
   const db = liveConvDb(conv.convId);
   if (!db) return;
-  const told = handed.filter((w) => said.posted || (said.held && !w.item.urgent));
+  const told = handed.filter(() => said.posted || said.held);
   markTold(conv, told.map((w) => ({ item_id: w.item.id, key: w.key })), now, zone);
-  for (const w of handed) if (!told.includes(w)) db.run("UPDATE reminders SET ts = COALESCE(ts, ?) WHERE item_id = ? AND key = ? AND state IN ('claimed', 'retry')", now, w.item.id, w.key); // (handed, not said: no new look is started for it; the fallback line comes)
+  for (const w of handed) if (!told.includes(w)) db.run("UPDATE reminders SET state = 'folded', ts = COALESCE(ts, ?) WHERE item_id = ? AND key = ? AND state IN ('claimed', 'retry')", now, w.item.id, w.key); // (the look chose to say nothing: nothing was left undone, so no fixed line follows)
 }

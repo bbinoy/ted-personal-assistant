@@ -70,7 +70,7 @@ test("the tick CLAIMS a due reminder, once, and says nothing: the look is due no
   assert.deepEqual(T.waitingReminders(conv).map((w) => w.item.title), ["Call Sam"]);
 });
 
-test("a look that posts tells its reminders: sent, journaled ONCE; a look that stays silent does not, and the fallback line comes after 30 minutes", async () => {
+test("a look that posts tells its reminders: sent, journaled ONCE; a look that stays silent covers them (marked, not journaled) and NO fixed line follows; an abandoned look leaves them", async () => {
   const conv = fresh();
   const a = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - MIN }).item;
   const b = S.addItem(scope(conv.key, NOW - HOUR), { title: "Water plants", remindAt: NOW - MIN }).item;
@@ -80,13 +80,29 @@ test("a look that posts tells its reminders: sent, journaled ONCE; a look that s
   T.afterLook(conv, handed.filter((w) => w.item.id === a.id), { posted: true, held: false }, NOW + MIN, ZONE);
   T.afterLook(conv, handed.filter((w) => w.item.id === b.id), { posted: false, held: false }, NOW + MIN, ZONE);
   assert.deepEqual(rows(conv, a.id).map((x) => x.state), ["sent"]);
+  assert.deepEqual(rows(conv, b.id).map((x) => x.state), ["folded"]);
   assert.deepEqual(reminded(conv), ["Reminded about task #1 'Call Sam'. Why: its reminder time came."]);
   assert.equal(T.remindersWaiting(conv), false, "the silent look's reminder starts no new look");
-  assert.equal(await tick(r, conv, NOW + 10 * MIN), 0, "its look still has time");
-  assert.equal(await tick(r, conv, NOW + 31 * MIN), 1);
-  assert.deepEqual(r.sent, ["⏰ Water plants"], "the fallback, the only fixed text");
-  assert.deepEqual(reminded(conv), ["Reminded about task #1 'Call Sam'. Why: its reminder time came.", "Reminded about task #2 'Water plants'. Why: its reminder time came."]);
-  assert.equal(await tick(r, conv, NOW + 40 * MIN), 0);
+  assert.equal(await tick(r, conv, NOW + 31 * MIN), 0, "the model is fine: no code text, ever");
+  assert.deepEqual(r.sent, []);
+});
+
+test("the trigger line names the event: an own reminder, a snooze end", () => {
+  const conv = fresh();
+  const a = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW }).item;
+  const w = [{ item: a, key: `at:${NOW}`, fireAt: NOW }, { item: { ...a, title: "Nap" }, key: `snooze:${NOW}`, fireAt: NOW }];
+  assert.deepEqual(R.reminderWhy(w, { now: NOW, zone: ZONE }).map((x) => x.replace(/ (at|Thu) .*/, "")), ["Triggered: your task 'Call Sam' has its reminder", "Triggered: your task 'Nap' was snoozed until"]);
+  assert.match(R.reminderWhy(w, { now: NOW, zone: ZONE })[0]!, /has its reminder at .*12:00\.$/);
+});
+
+test("fixed text only when no model run is possible: no look (looks false) sends the line at once; a look that can run waits", async () => {
+  const conv = fresh();
+  S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - MIN });
+  const r = rig();
+  assert.equal(await tick(r, conv, NOW, true), 0);
+  assert.deepEqual(r.sent, [], "a look can run: it decides");
+  assert.equal(await tick(r, conv, NOW + MIN, false), 1, "the model became unavailable: the claimed reminder gets the fixed line");
+  assert.deepEqual(r.sent, ["⏰ Call Sam"]);
 });
 
 test("a send that fails is never journaled as 'Reminded': it is retried, three times at most, then left to the brief", async () => {
@@ -106,14 +122,14 @@ test("a send that fails is never journaled as 'Reminded': it is retried, three t
   assert.equal(reminded(ok).length, 1, "journaled once, after the send that worked");
 });
 
-test("a held look post tells a plain reminder (it goes out with the held messages) but not an urgent one", async () => {
+test("a held look post tells its reminders (they go out with the held messages)", async () => {
   const conv = { ...fresh(), kind: "owner" as const };
   const plain = S.addItem(scope(conv.key, NOW - HOUR), { title: "Plain", remindAt: NOW - MIN }).item;
   const urgent = S.addItem(scope(conv.key, NOW - HOUR), { title: "Urgent", remindAt: NOW - MIN, urgent: true }).item;
   await tick(rig(), conv as never, NOW);
   T.afterLook(conv, T.waitingReminders(conv), { posted: false, held: true }, NOW + MIN, ZONE);
   assert.equal(rows(conv as never, plain.id)[0]!.state, "sent");
-  assert.equal(rows(conv as never, urgent.id)[0]!.state, "claimed", "an urgent one must be said now: the fallback comes");
+  assert.equal(rows(conv as never, urgent.id)[0]!.state, "sent");
 });
 
 test("quiet hours hold a reminder until they end (then it is claimed for the look); an urgent one is claimed at once", async () => {
@@ -137,7 +153,7 @@ test("the facts a look gets: the reminders due now, with when they were due, and
   const c = S.addItem(scope(conv.key), { title: "Dentist", due: "2026-10-23" }).item;
   S.addItem(scope(conv.key), { title: "Far away", due: "2026-11-30" });
   const text = R.reminderFacts([{ item: a, fireAt: NOW - 3 * HOUR }], S.activeItems(conv.key), { now: NOW, zone: ZONE, group: true });
-  assert.match(text, /^Reminders due now \(the person asked to be reminded: say each one in your message now, in your own words, naming who it is for;/);
+  assert.match(text, /^Reminders that came due \(decide what helps: usually a short reminder in your own words, naming who it is for,/);
   assert.match(text, new RegExp(`#${a.id} Call Sam \\(reminder for Thu 22 Oct 09:00; for Anna; due today 14:30\\)`));
   assert.match(text, /Open items due by tomorrow or overdue \(for your awareness/);
   assert.match(text, new RegExp(`#${b.id} Pay rent \\(was due Tue 20 Oct\\)`));
@@ -168,7 +184,8 @@ test("the look: a due reminder makes it run now; its prompt carries the reminder
   const st = { ...lookState([]), wake: { looked: new Date(NOW).toISOString(), next: new Date(NOW + HOUR).toISOString() } } as never; // (not due by its clock: only the reminder makes it due)
   const outcome = await hb.look(c, st, new Date(NOW));
   assert.equal(outcome, "posted");
-  assert.match(prompts[0] ?? "", /Reminders due now[\s\S]*Ring the vet/);
+  assert.match(prompts[0] ?? "", /Reminders that came due[\s\S]*Ring the vet/);
+  assert.match(prompts[0] ?? "", /Triggered: your task 'Ring the vet' has its reminder at/, "the trigger line carries the reason");
   assert.doesNotMatch(prompts[0] ?? "", /⏰/, "a fact for the model, not the code's line");
   assert.equal(ledgerEntries(convPaths(c.convId).messages).filter((e) => e.kind === "journal" && e.text.startsWith(`Reminded about task #${it.id} 'Ring the vet'`)).length, 1);
 });

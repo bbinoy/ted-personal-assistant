@@ -46,11 +46,11 @@ const has = (f: { blocks: string[] }, re: RegExp) => f.blocks.some((b) => re.tes
 test("a chat turn takes a claimed reminder and, once its reply said something, the look after it is not handed it again", async () => {
   const { conv, it } = await claimed();
   const chat = F.factsFor(conv, new Date(NOW), true);
-  assert.ok(has(chat, /Reminders due now[\s\S]*Call Sam/), "the chat turn is told");
+  assert.ok(has(chat, /Reminders that came due[\s\S]*Call Sam/), "the chat turn is told");
   chat.done({ ended: true, said: true });
   assert.equal(state(conv, it.id), "sent");
   const look = F.factsFor(conv, new Date(NOW + MIN), false);
-  assert.ok(!has(look, /Reminders due now/), "told once");
+  assert.ok(!has(look, /Reminders that came due/), "told once");
   look.done({ ended: true, said: false });
 });
 
@@ -58,11 +58,11 @@ test("a run holds what it took: a look in progress keeps a chat turn from the sa
   const { conv, it } = await claimed();
   const look = F.factsFor(conv, new Date(NOW), false);
   assert.ok(has(look, /Call Sam/));
-  assert.ok(!has(F.factsFor(conv, new Date(NOW), true), /Reminders due now/), "pending in the look: not given to the chat turn too");
+  assert.ok(!has(F.factsFor(conv, new Date(NOW), true), /Reminders that came due/), "pending in the look: not given to the chat turn too");
   look.done({ ended: false, said: false, abandoned: true });
   const chat = F.factsFor(conv, new Date(NOW), true);
   assert.ok(has(chat, /Call Sam/), "the look failed: the next run gets it");
-  assert.ok(!has(F.factsFor(conv, new Date(NOW), false), /Reminders due now/), "pending in the chat turn: not given to the look");
+  assert.ok(!has(F.factsFor(conv, new Date(NOW), false), /Reminders that came due/), "pending in the chat turn: not given to the look");
   chat.done({ ended: false, said: false, abandoned: true }); // a silent or failed turn
   assert.equal(state(conv, it.id), "claimed", "nothing was told");
   const again = F.factsFor(conv, new Date(NOW), false);
