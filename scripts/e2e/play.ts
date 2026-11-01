@@ -23,6 +23,7 @@ import { viewDraft } from "../../src/modules/mailbird/proposals.ts";
 import { Mailbird } from "../../src/modules/mailbird/mailbird.ts";
 import { setupItems } from "../../src/modules/index.ts";
 import { addItem, completeItem, dropItem, editItem, listItems, type Scope } from "../../src/tasks/store.ts";
+import { fireReminders } from "../../src/heartbeat/remindtick.ts";
 import { createHeartbeatLook } from "../../src/heartbeat/look.ts";
 import { LOGIN } from "../../src/tenants/payer.ts";
 import { spentToday } from "../../src/core/budget.ts";
@@ -220,6 +221,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         };
         const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (cv, payer, build, extra) => runLook(cv, payer, build, approveIn(cv.key, { background: true }), extra, { now: o.now, io: { query: realQuery } }), may: () => LOGIN, why: () => "refused", notesChangedAt: () => 0 });
         recordMessage("owner", nowMs - 3_600_000, "morning", new Date(nowMs - 3_600_000)); // (a conversation with some history, as a look finds it)
+        await fireReminders(pipeline as never, conv, o.now); // (the wake tick claims a reminder that came due, which is what wakes the look with its reason)
         const outcome = await hb.look(conv, lookState(ledgerEntries(conv.logFile)), o.now);
         if (outcome !== "silent" && outcome !== "posted") error = `the look ended ${outcome}`;
         snapshot("(a look)");

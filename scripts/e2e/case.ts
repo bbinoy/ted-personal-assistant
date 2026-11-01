@@ -20,7 +20,7 @@ export interface Time {
 }
 
 interface World {
-  tasks?: { title: string; due?: string; details?: string; person?: string }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
+  tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
   calendar?: SeedEvent[];
   mail?: SeedMail[];
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)

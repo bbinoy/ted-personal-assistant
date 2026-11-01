@@ -55,6 +55,7 @@ function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, st
       const r = await inner(tool, input, opts);
       return r?.behavior === "allow" ? { ...r, updatedInput: { ...(r.updatedInput ?? input), url: local } } : r;
     }
+    if (tool === "WebSearch" && web) return { behavior: "deny", message: "Web search is not available in this environment; open a page whose address you know with WebFetch." }; // (refused, nothing reaches the net; not a violation when the case has fake pages to open instead)
     if (!isAnswered(tool, fakeTools)) {
       state.violations.push(`un-faked tool call: ${tool}`);
       abort();
