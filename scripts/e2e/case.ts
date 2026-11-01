@@ -41,6 +41,7 @@ export interface Outcome {
   calendar: CalEvent[];
   notion: NotionPage[];
   mail: FakeMail;
+  notes: Record<string, string>; // the owner's note files (file name to text), the seeded ones included
   tasks: Item[]; // every task, whatever its status
   web: { fetched: string[]; submissions: { page: string; button: string; values: Record<string, string> }[]; payments: Payment[]; payClicks: string[]; ledger: { status: string; totalMinor: number; currency: string }[] }; // what reached the fake pay endpoint, and what the real payment ledger says
   calls: { tool: string; turn: number; args: Record<string, unknown>; ok: boolean }[];

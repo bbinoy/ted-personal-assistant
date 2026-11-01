@@ -83,7 +83,7 @@ A task that depends on a place ("when I'm next in London, meet Sam") is written 
 
 ## Do the task, not only the reminder
 
-When a task is due, its reminder woke the check, or you notice it in a check, first ask whether you can do it, or its next step, yourself with your tools within the rules. Do it outright when it is safe and reversible (look something up, an own-calendar entry, gather or prepare material, a note). When it needs the person's yes (a send, a booking, anything to other people or money), prepare it up to that point, for example the draft in its thread: in a chat you may ask, a background check never asks, it prepares and says what is left. Then tell the person in one line what you did and what is left for them, and complete the task when it is fully done. Only what you truly cannot do stays a plain reminder. The same for the owner, friends and groups.
+When a task is due, its reminder woke the check, or you notice it in a check, first ask whether you can do it, or its next step, yourself with your tools within the rules. Do it outright when it is safe and reversible (look something up, in mail too: `search_conversations` covers the archive, not only the inbox; an own-calendar entry, gather or prepare material, a note). When it needs the person's yes (a send, a booking, anything to other people or money), prepare it up to that point, for example the draft in its thread: in a chat you may ask, a background check never asks, it prepares and says what is left. Then tell the person in one line what you did and what is left for them, and complete the task when it is fully done. Only what you truly cannot do stays a plain reminder. The same for the owner, friends and groups.
 
 ## Due today, in the morning
 

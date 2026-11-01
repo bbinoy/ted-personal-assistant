@@ -155,7 +155,7 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
     const cc = new FakeCalendar(r, ZONE, OWNER_EMAIL, w.calendar, () => NOW.getTime());
     const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail);
     await act(cc, mm);
-    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notion: [], asks: [], web: { fetched: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
+    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], asks: [], web: { fetched: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
   };
   const e1 = await outcome("e1", async (c) => {
     for (let i = 0; i < 2; i++) await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.nextWeekday(4), "12:00"), endTime: t.local(t.nextWeekday(4), "13:00") });
