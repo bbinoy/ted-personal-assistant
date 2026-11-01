@@ -10,7 +10,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "connectorback-"));
 
 const { recordConnectors } = await import("../src/modules/connectors.ts");
 
-const srv = (notion: string) => [{ name: "claude.ai Notion", status: notion }, { name: "claude.ai Google Calendar", status: "connected" }];
+const srv = (notion: string, mail = "connected") => [{ name: "claude.ai Notion", status: notion }, { name: "claude.ai Google Calendar", status: "connected" }, { name: "mailbird", status: mail }];
 
 test("connector back: first record, up -> up and up -> down name nothing; down -> up names the connector", () => {
   assert.deepEqual(recordConnectors([], srv("connected")), []); // first ever record
@@ -19,6 +19,8 @@ test("connector back: first record, up -> up and up -> down name nothing; down -
   assert.deepEqual(recordConnectors([], srv("needs-auth")), []);
   assert.deepEqual(recordConnectors([], srv("connected")), ["Notion"]);
   assert.deepEqual(recordConnectors([], srv("connected")), []);
+  assert.deepEqual(recordConnectors([], srv("connected", "failed")), []); // the local mail client counts too
+  assert.deepEqual(recordConnectors([], srv("connected")), ["mail"]);
 });
 
 test("connector back: an offline start-up (every server failed) names nothing", () => {

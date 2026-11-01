@@ -57,7 +57,7 @@ export function recordConnectors(tools: readonly string[], servers?: readonly Se
   const seen = readSeen();
   const added = Object.keys(now).filter((k) => now[k] === true && !seen.includes(k));
   if (added.length) kvSet(SEEN, [...seen, ...added]);
-  return reportable().filter((r) => before?.[r.key] === false && now[r.key] === true).map((r) => r.label); // the connectors that were down and are connected again
+  return Object.keys(now).filter((k) => before?.[k] === false && now[k] === true).map((k) => NAMES[k]); // the connectors that were down and are connected again (every recorded one, the mail client's too)
 }
 export const readConnectors = (): Connectors | undefined => kvGet<Connectors | undefined>(KEY, undefined);
 
