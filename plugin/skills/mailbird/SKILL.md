@@ -29,6 +29,9 @@ holds what is particular to Mailbird.
 - **Reply drafts stay in their thread and are saved quietly:** `reply_to_conversation`
   (or `reply_all_to_conversation` for several recipients), with no `select_conversation`,
   no `showInUi` and no `forceNewWindow` (a popup or window steals focus on the desktop).
+  To add Cc or Bcc (or change the recipients) of a reply, make the reply draft first, then
+  `update_draft` with `cc` / `bcc`: the draft stays in its thread. Never start a new mail
+  with `create_draft` just to set a Cc.
   Show the draft in chat as the mail skill says (the owner does not open Mailbird). `create_draft` only starts a brand-new mail with no
   thread. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
   because plain newlines are flattened when sent. Read the saved draft back before any send.
