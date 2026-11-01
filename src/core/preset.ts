@@ -101,7 +101,7 @@ export const PROMPTS = {
   summary: [],
   identity: ["own", "group", "who", "mail", "personality", "participation", "sources", "reactions", "send", "writes", "channel"],
   capabilities: ["own", "group", "who", "mail", "reads", "asker", "asks", "provider", "mailSkill", "brief", "mailName", "mailFind", "mailSend", "mailEdit", "google", "people", "timed", "browse", "weather", "draw"],
-  shared: ["whose", "asker", "who", "categories", "own", "reads", "mail", "dream", "ownerDir", "logsDir"],
+  shared: ["whose", "asker", "who", "categories", "own", "group", "reads", "mail", "dream", "ownerDir", "logsDir"],
   tasks: ["own", "group", "who", "reads", "mail"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
   background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
