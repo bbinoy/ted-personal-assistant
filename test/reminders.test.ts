@@ -153,7 +153,7 @@ test("the facts a look gets: the reminders due now, with when they were due, and
   const c = S.addItem(scope(conv.key), { title: "Dentist", due: "2026-10-23" }).item;
   S.addItem(scope(conv.key), { title: "Far away", due: "2026-11-30" });
   const text = R.reminderFacts([{ item: a, fireAt: NOW - 3 * HOUR }], S.activeItems(conv.key), { now: NOW, zone: ZONE, group: true });
-  assert.match(text, /^Reminders that came due \(decide what helps: usually a short reminder in your own words, naming who it is for,/);
+  assert.match(text, /^Reminders that came due \(do what you can of the task yourself first and say what is left; for what you cannot do, a plain short reminder in your own words naming who it is for;/);
   assert.match(text, new RegExp(`#${a.id} Call Sam \\(reminder for Thu 22 Oct 09:00; for Anna; due today 14:30\\)`));
   assert.match(text, /Open items due by tomorrow or overdue \(for your awareness/);
   assert.match(text, new RegExp(`#${b.id} Pay rent \\(was due Tue 20 Oct\\)`));

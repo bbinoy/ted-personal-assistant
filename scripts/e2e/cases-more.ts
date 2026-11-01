@@ -352,7 +352,7 @@ const e11: Case = {
       tasks: [{ title: "Send Sam the slides for Thursday's workshop", due: t.today, person: "Sam", remindAt: t.now.getTime() - 60_000 }],
       mail: [
         { from: { email: "sam.keller@example.com", displayName: "Sam Keller" }, subject: "Thursday's workshop", body: "<p>Hi, could you send me your slides before Thursday? Thanks, Sam</p>", receivedAt: ago(72), read: true },
-        { from: { email: "design.team@example.org", displayName: "Design Team" }, subject: "Final slides for Thursday", body: `<p>The final slides are ready: ${SLIDES}</p>`, receivedAt: ago(30), folder: "archive", read: true },
+        { from: { email: "design.team@example.org", displayName: "Design Team" }, subject: "Final slides for Thursday", body: `<p>The final slides are ready: ${SLIDES}</p>`, receivedAt: ago(30), read: true },
       ],
     };
   },
