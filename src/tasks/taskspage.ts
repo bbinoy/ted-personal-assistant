@@ -9,7 +9,7 @@ import { BUCKETS, FOCUS, groupOpen, subGroups, type Bucket } from "./render.ts";
 // The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
 
-const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const KIND = { task: "task", i_owe: "I owe", owed_to_me: "waiting on" } as const;
 const WEEK = 7; // the "done" window, in days
 const DAY = 86_400_000;
@@ -49,6 +49,12 @@ setTimeout(()=>{li.remove();ul.querySelectorAll("li.sub").forEach((h)=>{const x=
 });
 })();`;
 
+/** The look both pages share (the task page and the page of what Ted did): colours that follow light and dark, one column that fits a phone, the header line and the link between the pages. */
+export const BASE_CSS = String.raw`:root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
+body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}.nav{float:right;font-size:.9rem}.nav a{color:inherit}`;
+/** The link in each page's header to the other one. */
+export const navLink = (to: "/tasks" | "/done"): string => `<a class="nav" href="${to}">${to === "/done" ? "What was done" : "Tasks"}</a>`;
+
 /** The whole page for one conversation's list at `now` in `zone`. `token` is the tick-off forms' CSRF token; without it a row has no button. `nonce` (the response's CSP nonce) switches the script on; without it only <noscript>'s meta refresh remains. */
 export function tasksPage(key: string, now: number, zone: string, token?: string, nonce?: string): string {
   const open = listItems(key, { limit: 200 }, now, zone);
@@ -56,8 +62,7 @@ export function tasksPage(key: string, now: number, zone: string, token?: string
   const c = counts(key, now, zone);
   const g = groupOpen(open, now, zone);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><noscript><meta http-equiv="refresh" content="60"></noscript><title>Tasks</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
-:root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
-body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
+${BASE_CSS}
 .h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
 li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;border-top:1px solid #8884;border-left:4px solid transparent}
 li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
@@ -66,7 +71,7 @@ button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}butt
 details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
 li.sub{display:block;border-left-color:transparent;padding:.5rem 0 .1rem .5rem;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#777}li.sub:not(:first-child){margin-top:.3rem}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
-</style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
+</style></head><body><h1>Tasks</h1>${navLink("/done")}<div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
 ${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}${nonce ? `<script nonce="${nonce}">${SCRIPT}</script>` : ""}</body></html>`;
 }
@@ -108,12 +113,18 @@ function tickOff(id: number): boolean {
   return true;
 }
 
+/** The second page, what was done on its own (conversation/donepage.ts): `read` renders it for the CSRF token and nonce; `undo` reverses the journal line made at that time, true when it did. */
+export interface DonePage {
+  read: (token: string, nonce: string) => string;
+  undo: (at: number) => Promise<boolean>;
+}
+
 /**
- * GET /tasks (the page), GET /healthz, HEAD likewise, and POST /tasks/<id>/done (the one action); any other path is 404, any other method 405.
+ * GET /tasks (the page), GET /done (what was done, when `done` is given), GET /healthz, HEAD likewise, and the two actions POST /tasks/<id>/done and POST /done/<at>/undo; any other path is 404, any other method 405.
  * `read` renders the page for this process's CSRF token; `tick` completes one of the owner's open tasks and says whether it did.
  * A POST needs the right Host, an Origin equal to the page's own, a form content type, a tiny body and the token; every CSRF failure gets the same 403.
  */
-export function tasksPageServer(read: (token: string, nonce: string) => string = (t, n) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t, n), tick: (id: number) => boolean = tickOff): Server {
+export function tasksPageServer(read: (token: string, nonce: string) => string = (t, n) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t, n), tick: (id: number) => boolean = tickOff, done?: DonePage): Server {
   const token = randomBytes(32).toString("hex"); // per process: a page from before a restart posts nothing
   return createServer((req, res) => {
     const path = (req.url ?? "").split("?")[0]!;
@@ -125,7 +136,8 @@ export function tasksPageServer(read: (token: string, nonce: string) => string =
     if (!hostAllowed(host, req.socket.localPort)) return send(421, "text/plain", "misdirected request"); // (DNS rebinding: a web page may point its own name at 127.0.0.1)
     if (req.method === "POST") {
       const m = /^\/tasks\/(\d{1,9})\/done$/.exec(path);
-      if (!m) return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
+      const u = done ? /^\/done\/(\d{1,16})\/undo$/.exec(path) : null;
+      if (!m && !u) return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
       const forbidden = (): void => send(403, "text/plain", "forbidden");
       if (req.headers.origin?.toLowerCase() !== ownOrigin(host!)) return forbidden(); // (another website's POST carries its own Origin; none at all is refused too)
       if (!/^application\/x-www-form-urlencoded\s*(;|$)/i.test(req.headers["content-type"] ?? "")) return send(415, "text/plain", "unsupported media type");
@@ -137,26 +149,26 @@ export function tasksPageServer(read: (token: string, nonce: string) => string =
         if (size > BODY_MAX) over = true;
         else chunks.push(c);
       });
-      req.on("end", () => {
+      req.on("end", async () => {
         if (over) return send(413, "text/plain", "too large", { connection: "close" });
         if (!sameToken(new URLSearchParams(Buffer.concat(chunks).toString("utf8")).get("token") ?? "", token)) return forbidden();
         try {
-          if (!tick(Number(m[1]))) return send(404, "text/plain", "not found");
+          if (!(m ? tick(Number(m[1])) : await done!.undo(Number(u![1])))) return send(404, "text/plain", "not found");
         } catch (e) {
           console.error(`tasks page: ${(e as Error).message}`);
           return send(500, "text/plain", "that cannot be done right now");
         }
-        send(303, "text/plain", "done", { location: "/tasks" });
+        send(303, "text/plain", "done", { location: m ? "/tasks" : "/done" });
       });
       return;
     }
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD, POST" });
     if (path === "/favicon.svg" || path === "/favicon.ico") return send(200, "image/svg+xml", FAVICON, { "cache-control": "public, max-age=86400" }); // (browsers ask for the .ico unasked)
     if (path === "/healthz") return send(200, "text/plain", "ok");
-    if (path !== "/tasks") return send(404, "text/plain", "not found");
+    if (path !== "/tasks" && !(done && path === "/done")) return send(404, "text/plain", "not found");
     try {
       const nonce = randomBytes(16).toString("base64"); // per response
-      send(200, "text/html", read(token, nonce), { "content-security-policy": csp(nonce) });
+      send(200, "text/html", (path === "/done" ? done!.read : read)(token, nonce), { "content-security-policy": csp(nonce) });
     } catch (e) {
       console.error(`tasks page: ${(e as Error).message}`);
       send(500, "text/plain", "the list cannot be read right now");
@@ -165,8 +177,8 @@ export function tasksPageServer(read: (token: string, nonce: string) => string =
 }
 
 /** Start it on 127.0.0.1 and nowhere else; a port in use is logged and the agent carries on. */
-export function startTasksPage(port: number): Server {
-  const s = tasksPageServer();
+export function startTasksPage(port: number, done?: DonePage): Server {
+  const s = tasksPageServer(undefined, undefined, done);
   s.on("error", (e) => console.error(`tasks page: ${e.message}`));
   s.listen(port, "127.0.0.1");
   return s;

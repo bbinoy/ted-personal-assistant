@@ -38,7 +38,7 @@ const dayWord = (word: string | undefined, now: number, zone: string): string | 
 };
 
 // The journal lines that match, oldest first. `error` for a date that cannot be read.
-function journalSelect(file: string, a: JournalArgs, now: number, zone: string): { lines: Sent[]; error?: string } {
+export function journalSelect(file: string, a: JournalArgs, now: number, zone: string): { lines: Sent[]; error?: string } {
   const from = a.sinceHours && a.sinceHours > 0 ? now - a.sinceHours * 3_600_000 : whenIn(dayWord(a.since, now, zone), false, zone);
   const to = whenIn(dayWord(a.until, now, zone), true, zone);
   if (from === "bad" || to === "bad") return { lines: [], error: "since and until must be dates like 2026-10-21, or today / yesterday." };
