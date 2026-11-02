@@ -27,7 +27,6 @@ interface World {
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)
   slowMs?: number; // the calendar's reads take this long (a slow service: the owner's next message can arrive while one runs)
   fetch?: Record<string, string>; // pages the built-in WebFetch can open, by their public-looking address (html); served by a local server for the run (fakeweb.ts)
-  firstSearchDenied?: boolean; // the first web search comes back refused with the SDK's "user doesn't want to proceed" text, though the owner said nothing
   web?: Record<string, FakePage>; // the fake web (the browser the browse worker uses); the owner's card is a public test card, set up for the run
   notes?: Record<string, string>; // note files of the owner's notes folder (people-*.md, ...), on top of the setup notes every case gets
 }

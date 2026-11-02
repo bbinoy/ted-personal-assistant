@@ -18,8 +18,6 @@ export interface FakeWeb {
 }
 
 const textOf = (html: string) => html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-// What the SDK says to the model when a tool call is refused without the owner having said anything (a case may play it on the first search).
-const DENIED = "The user doesn't want to proceed with this tool use. The tool use was rejected.";
 const SKIP = new Set(["the", "and", "for", "with", "that", "this", "from", "about", "check", "out", "all", "there", "website", "site", "page"]);
 
 // The web search of the fake web. The built-in WebSearch runs at the provider and cannot be pointed at a local server, so the guard answers it from here (guard.ts): the case's pages that share a word with the query, best first.
@@ -35,7 +33,7 @@ function searchPages(pages: Record<string, string>, query: string): string {
   return `Web search results for "${query}":\n\n${found.map((p, i) => `${i + 1}. ${p.title}\n${p.url}\n${p.body.slice(0, 160)}...`).join("\n\n")}`;
 }
 
-export async function startFakeWeb(pages: Record<string, string>, firstSearchDenied = false): Promise<FakeWeb> {
+export async function startFakeWeb(pages: Record<string, string>): Promise<FakeWeb> {
   const dir = mkdtempSync(join(tmpdir(), "ted-e2e-web-"));
   const keyFile = join(dir, "key.pem");
   const certFile = join(dir, "cert.pem");
@@ -55,7 +53,7 @@ export async function startFakeWeb(pages: Record<string, string>, firstSearchDen
     certFile,
     hits,
     searches,
-    search: (query) => (searches.push(query), firstSearchDenied && searches.length === 1 ? DENIED : searchPages(pages, query)),
+    search: (query) => (searches.push(query), searchPages(pages, query)),
     open: (url) => (pages[url] === undefined ? undefined : (hits.push(url), pages[url])),
     rewrite: (url) => {
       const i = urls.indexOf(url.split("#")[0]!);
