@@ -54,7 +54,8 @@ is a fact, not a filter: nothing is hidden from you.
 - **Keep only today's brief email** (see "For every run that handles mail").
 - **Revisit a decision when something changed**: a reply arrived, a task or the calendar now
   covers it, the owner acted, or **time passed**: a keep whose end (see below) has passed is
-  decided again, now. Inside its window an unchanged keep is not reopened or read again.
+  decided again, now; so is a keep whose reason names no end, or waits for something you
+  cannot observe. Inside its window an unchanged keep is not reopened or read again.
 - **The decision log** (a background look): for every inbox mail it newly decided or whose
   decision changed, one row in the "triage" part of its final answer: id as listed, sender,
   subject, `archive`, `keep`, `task` or `draft`, and a short reason (for a keep: what it needs
