@@ -24,7 +24,7 @@ export const notionRows = (prefix: string, o: Parameters<ReturnType<typeof rowsO
 const sizeNote = (input: Record<string, unknown>): string => {
   const ups = Array.isArray(input.content_updates) ? (input.content_updates as { old_str?: unknown; new_str?: unknown }[]) : [];
   const len = (v: unknown) => (typeof v === "string" ? v.length : 0);
-  if (input.command === "replace_content") return `\nReplaces: the whole page with ${len(input.new_str)} characters`;
+  if (input.command === "replace_content") return `\nReplaces: the whole page (old size unknown) with ${len(input.new_str)} characters`;
   if (ups.length) return `\nReplaces: about ${ups.reduce((n, u) => n + len(u.old_str), 0)} characters with ${ups.reduce((n, u) => n + len(u.new_str), 0)}`;
   return "";
 };
