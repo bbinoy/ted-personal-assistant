@@ -627,7 +627,7 @@ const e17: Case = {
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It says a placeholder 'Call with Mira' is on the calendar at 18:00 or later, with the day.", "It does not say an earlier time was booked.", "It is short (a few lines at most) and asks no question."],
+  reply: ["It says a placeholder 'Call with Mira' is on the calendar at 18:00 or later, with the day.", "It does not say an earlier time was booked.", "It never says the request or a step was declined, refused or rejected.", "It is short (a few lines at most) and asks no question."],
   perfect: async (s) => {
     s.turn(0);
     const day = s.time.nextWeekday(4);
