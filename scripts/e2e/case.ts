@@ -26,6 +26,7 @@ interface World {
   mailAccounts?: string[]; // more accounts in the mail client (account 2, 3...; `account` of a seed mail picks one), by email address
   mailDown?: boolean; // the mail connector is down: every call to it errors
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)
+  notionPages?: { id: string; title: string; content: string }[]; // standalone Notion pages of the owner (found by search, fetched by id)
   slowMs?: number; // the calendar's reads take this long (a slow service: the owner's next message can arrive while one runs)
   fetch?: Record<string, string>; // pages the built-in WebFetch can open, by their public-looking address (html); served by a local server for the run (fakeweb.ts)
   web?: Record<string, FakePage>; // the fake web (the browser the browse worker uses); the owner's card is a public test card, set up for the run

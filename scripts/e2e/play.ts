@@ -103,8 +103,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
+  const notion = new FakeNotion(rec, world.notion, world.notionPages);
   const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown, (world.mailAccounts ?? []).map((email) => ({ email })));
-  const notion = new FakeNotion(rec, world.notion);
   const guard = newGuardState();
   blockRealMailbird(Mailbird, guard);
   // open_file's own connection to Mailbird (runtime.ts) is the one real-client call a run may make: its get_attachment_content is answered from the fake (any other call stays blocked and counted).
