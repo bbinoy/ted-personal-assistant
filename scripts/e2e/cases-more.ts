@@ -775,4 +775,39 @@ const e20b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21];
+// ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
+const TICKET_URL = "https://tickets.example.org/order/TK-5521";
+const e22: Case = {
+  id: "e22",
+  title: "a ticket mail with no date: the link is tried with the browser when the plain fetch is blocked, the trip goes on the calendar",
+  zone: "Europe/Zurich",
+  turns: ["Put the train ticket from last night's mail on my calendar"],
+  world: (t) => ({
+    mail: [{ from: { email: "orders@example.org", displayName: "Example Rail" }, subject: "Your ticket purchase", body: `<p>Thank you for your order TK-5521. Open your ticket: <a href="${TICKET_URL}">${TICKET_URL}</a></p>`, receivedAt: new Date(t.now.getTime() - 10 * 3_600_000).toISOString(), read: false }],
+    fetch: { [TICKET_URL]: "<html><head><title>Access denied</title></head><body><h1>403 Forbidden</h1><p>Your request was blocked.</p></body></html>" },
+    web: { [TICKET_URL]: { url: TICKET_URL, heading: "Order TK-5521", text: [`Outbound ${t.day(9)}: Zurich HB 09:34, arriving Basel SBB 10:54. Seat 41, coach 7.`] } },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const ev = created(o)[0];
+    const said = o.turns.flatMap((t) => t.messages).join("\n");
+    return [
+      check("one event was created", created(o).length === 1, `${created(o).length}`),
+      check("on the date from the order page at 09:34", !!ev && o.time.dateOf(ev.startMs) === o.time.day(9) && o.time.hhmm(ev.startMs) === "09:34", ev && `${o.time.dateOf(ev.startMs)} ${o.time.hhmm(ev.startMs)}`),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+      check("the reply does not ask for the date", !/\?/.test(said), said.slice(0, 200)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says the trip is on the calendar with the date and the time.", "It does not ask for the date, and does not offer to try the browser or the link: it already did.", "It is short."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "ticket" });
+    s.open(TICKET_URL);
+    await s.tool("mcp__browser__browser_navigate", { url: TICKET_URL });
+    await s.tool(`${CAL}create_event`, { summary: "Train Zurich HB to Basel SBB", startTime: s.time.local(s.time.day(9), "09:34"), endTime: s.time.local(s.time.day(9), "10:54"), timeZone: s.time.zone, description: "Order TK-5521, seat 41, coach 7" });
+    s.say(`The train to Basel is on your calendar for ${s.time.day(9)}, 09:34 to 10:54.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22];
