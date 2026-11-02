@@ -856,4 +856,89 @@ const e23: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23];
+// ---- e24: the owner answered by mail and archived the thread; the look reads Sent and updates the tasks ----
+const e24: Case = {
+  id: "e24",
+  title: "a look reads the Sent folder: the reply closes the task and its promise becomes a task",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const ROSA = "rosa.lindqvist@example.org";
+    return {
+      tasks: [{ title: "Send Rosa the venue quote", due: t.day(-1) }],
+      mail: [
+        { from: { email: ROSA, displayName: "Rosa Lindqvist" }, subject: "Venue quote for the offsite", body: "<p>Could you send me the venue quote for the offsite? Rosa</p>", receivedAt: ago(30), folder: "archive" },
+        { from: OWNER_EMAIL, to: [ROSA], subject: "Re: Venue quote for the offsite", body: "<p>Hi Rosa, the quote is attached: GBP 2,400 for the day. I will confirm the headcount with you by Friday.</p>", receivedAt: ago(3), folder: "sent" },
+        { from: { email: "news.weeklyloop@example.com", displayName: "The Weekly Loop" }, subject: "The Weekly Loop #213", body: "<p>This week in climate tech.</p>", receivedAt: ago(5) },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const quote = o.tasks.find((x) => /venue quote/i.test(x.title));
+    const head = o.tasks.filter((x) => /headcount/i.test(`${x.title} ${x.details ?? ""}`) && x.status === "open");
+    return [
+      check("the venue quote task is closed", !!quote && ["done", "dropped"].includes(quote.status), quote?.status),
+      check("one open task for the headcount promised to Rosa", head.length === 1, `${head.length}`),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is short and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 11 });
+    s.tasks.done(s.tasks.find("venue quote"));
+    s.tasks.add({ title: "Confirm the headcount with Rosa", due: s.time.nextWeekday(5) });
+  },
+};
+
+// ---- e25: onboarding week: routine calendar notifications go, the one invitation that needs an answer stays ----
+const e25: Case = {
+  id: "e25",
+  title: "calendar notifications in an onboarding week: routine ones archived, the invitation needing an answer kept",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const inv = (n: string, subject: string, body: string, h: number) => ({ from: { email: "calendar-notification@example.com", displayName: n }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
+    return {
+      notes: { "context-onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. Onboarding sessions land in the calendar all week; I read the calendar directly.\n" },
+      calendar: [
+        { summary: "Onboarding: tools and access", start: t.local(t.day(1), "09:30"), end: t.local(t.day(1), "10:30") },
+        { summary: "Onboarding: security basics", start: t.local(t.day(1), "11:00"), end: t.local(t.day(1), "12:00") },
+        { summary: "Onboarding: meet the team", start: t.local(t.day(2), "10:00"), end: t.local(t.day(2), "11:00") },
+      ],
+      mail: [
+        inv("Acme HR", "Invitation: Onboarding: tools and access", "Acme HR invited you. Onboarding: tools and access, tomorrow 09:30. Already on your calendar.", 20),
+        inv("Acme HR", "Invitation: Onboarding: security basics", "Acme HR invited you. Onboarding: security basics, tomorrow 11:00. Already on your calendar.", 19),
+        inv("Acme HR", "Updated invitation: Onboarding: meet the team", "Acme HR updated the event. Onboarding: meet the team, day after tomorrow 10:00. Already on your calendar.", 18),
+        inv("Acme IT", "Accepted: Onboarding: tools and access", "Acme IT accepted the event Onboarding: tools and access.", 16),
+        inv("Acme HR", "Invitation: Company all-hands with the CEO, please respond by tomorrow noon", `Acme HR invited you to the Company all-hands with the CEO on ${t.day(4)} at 15:00. Please respond by tomorrow noon: yes or no. Not on your calendar yet.`, 10),
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const routine = ["tools and access", "security basics", "meet the team"];
+    const left = routine.filter((r) => o.mail.folderOf(r).some((f) => f !== "archive"));
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("the routine onboarding notifications are archived", left.length === 0, `still in: ${left.join("; ")}`),
+      check("the all-hands invitation needing an answer stays in the inbox", o.mail.folderOf("all-hands").every((f) => f === "inbox")),
+      check("it is mentioned or made a task", /all-hands/i.test(said) || o.tasks.some((x) => /all-hands/i.test(x.title))),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It mentions the all-hands invitation that needs an answer by tomorrow noon, in a line or two.", "It does not list the routine onboarding notifications."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
+    for (const r of rows) if (!/all-hands/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+    s.tasks.add({ title: "Answer the all-hands invitation", due: s.time.day(1) });
+    s.say("The all-hands invitation needs a yes or no by tomorrow noon; I kept it in your inbox.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e24, e25];

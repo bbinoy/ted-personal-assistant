@@ -14,8 +14,8 @@ holds what is particular to Mailbird.
   `list_conversations` (`limit` 200 or the most the tool allows; page or batch by
   date when it is bigger). A look lists the whole inbox, read and unread, this way and decides
   on every conversation; the same list answers a quick "anything new?" in chat.
-  Fire the per-account list calls in one turn. Sent mail: the Sent folder
-  (`list_folders`, then `list_conversations`).
+  Fire the per-account list calls in one turn. Sent mail: each account's Sent folder
+  (`list_folders(accountId)`, then `list_conversations`), every look.
 - **Reading** is `get_message` with the row's `lastMessageId`. Rows carry only a
   short preview.
 - **Attachments.** `list_attachments` (ids as the message gives them; inline images such as

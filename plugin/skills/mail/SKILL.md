@@ -42,6 +42,7 @@ is a fact, not a filter: nothing is hidden from you.
   either side, draft a nudge in the thread (drafts need no asking; never send); reconcile
   the tasks (`ted-personal-assistant:tasks`, "Reconcile") with what the rows and the mails you
   open show; prepare meetings the mail points at.
+- **Always read the Sent folder of every account** for mail sent since the last look (a look and the brief; the owner may have archived the thread by hand, so the inbox alone shows nothing). It is few mails and holds facts: a task the reply or action finished is closed or updated; every promise in them ("I will confirm by Friday") becomes an `i_owe` task with its date, even when the same mail finished another task; waiting for someone becomes an `owed_to_me` task; an agreed meeting gets its calendar entry. Before keeping a task open, or asking the owner about something they may already have answered, check their sent mail.
 - **Cost**: list all, open selectively. Open a mail only when the row is not enough to decide:
   it is new, a date or deadline is coming up, a reply arrived, or the thread changed. Never
   open a mail again just to re-read it when nothing changed since the last look.
@@ -76,14 +77,18 @@ just because you did not read it:** read it, then decide. The cost of one read
 is small next to a mail left in the inbox for weeks. Keep the quote chain out of
 your head: take what decides the case and move on.
 
-2. **Triage: archive unless the mail needs the owner.** The default is
-   *archive*. Everything the owner does not have to act on goes, and goes
-   whether it is unread, new or old. **Anything automated** (notices, security and
-   login alerts, receipts, order and shipping updates, newsletters, promos, the
-   assistant's own older briefs) is archived, from the row when it is clear. Keep only
-   what needs the owner: a person waiting for them, a date or deadline ahead that is
-   not yet on the calendar or a task, something to decide; and say why in the decision
-   log. When a mail needs action, create the task or the draft and archive the mail if
+2. **Triage is a judgement: what does the owner still need this mail for?** Decide it
+   from everything you know: their situation (notes, recent chat), the calendar, the
+   tasks, their sent mail, what they have already seen or done. The answer is *archive*
+   (nothing left for them: the default, unread, new or old), *keep for now* (they may
+   still need it; say what for in the decision log and revisit at the next look), or
+   *surface* (a short message or the brief). The same kind of mail can go either way:
+   in an onboarding week a flood of calendar notifications goes, because they read the
+   calendar itself, but one invitation to an important event that needs an answer stays
+   a few hours until they have seen it (or gets a one-line mention). Neither archive
+   such mail by reflex nor keep it for ever. Keep what needs the owner: a person
+   waiting for them, a date or deadline ahead that is
+   not yet on the calendar or a task, something to decide. When a mail needs action, create the task or the draft and archive the mail if
    the task fully captures it. A look that leaves obvious noise in the inbox is failing
    its job.
    - *Needs the owner* (keep): a reply or a decision is expected from them; a
@@ -135,19 +140,13 @@ your head: take what decides the case and move on.
    - **Automated status notices from a service that notifies the owner itself** (transit
      changes, delivery tracking) are archived, not alerted, even when they report a
      problem.
-   - *Handled, archive from the row:* receipts and payment confirmations, order
-     updates (shipped, dispatched, delivered), booking updates for something already
-     on the calendar or already past, a receipt for a booking already confirmed, verification and confirmation codes, account and
-     security notices (once a day old, unless suspicious: a login the owner did
-     not make stays), past events and finished trips, calendar invitations /
-     updates / accepted / declined notices (judge the event on the calendar),
-     Notion and Google Docs notifications, e-signature *completion* notices (a
-     request to sign is an open matter, above), app/OAuth notices, CI and
-     tool mails (build failures, deploy notices), "RE: Reservation" style booking
-     notifications, review requests, read and concluded threads, and a mail that
-     is now a task (the task holds it).
-   - *Noise, archive from the row:* newsletters, promotions, cold outreach, job-board
-     digests, social nudges, expired invites and event blasts.
+   - *Handled or noise, archive from the row* when nothing is left for the owner: the
+     mail is a record of something done or past (a receipt, a shipped order, a code, a
+     booking already on the calendar, a finished trip, an accepted invite, a completion
+     notice, a CI mail, a notification from an app the owner opens anyway) or it never
+     concerned them (newsletters, promotions, cold outreach, event blasts), or it is
+     now a task (the task holds it). A security notice waits a day, and a login the
+     owner did not make stays. A request to sign is an open matter, above.
    - **For automated mail, unread is not a reason to keep.** Neither is "I have not
      looked at it": decide by what the mail is. **Read** is a signal for the other
      side: an automated mail the owner has opened, older than about 3 days, with
