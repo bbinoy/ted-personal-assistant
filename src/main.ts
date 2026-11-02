@@ -233,7 +233,7 @@ if (ledgerDamage() && !holdStartupFact("ledger", "The ledger database (instance/
 if (registryProblem() !== undefined && !holdStartupFact("registry", "The friends list (tenants.json in the instance folder) can't be read, so friends are paused. It is kept as is; she can repair or move it, then restart.")) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
 rehydrate(); // questions handed off before the stop are open again, with the time they had left (approvals/handoff.ts)
-replayUnanswered({ pipeline, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
+replayUnanswered({ pipeline }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
 { const open = openRequestsFact(); if (open) holdStartupFact("registrations", open); } // requests still open from before this start: a fact for the owner's next run, no second card
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES (settings.ts) idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));

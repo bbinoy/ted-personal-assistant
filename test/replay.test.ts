@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createPipeline, group, owner, type Conversation, type Incoming } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { LATE_NOTE } from "../src/conversation/group.ts";
-import { replayPrompt, replayUnanswered, SORRY, unansweredSince } from "../src/conversation/replay.ts";
+import { actedNote, replayPrompt, replayUnanswered, unansweredSince } from "../src/conversation/replay.ts";
 import { settings } from "../src/core/settings.ts";
 import type { AuditEntry } from "../src/core/audit.ts";
 import { recordMessage, type Sent } from "../src/core/messages.ts";
@@ -63,25 +63,23 @@ function rig(over: { gate?: () => Promise<typeof act | { act: false; delaySecond
 const tenantLike = (): Conversation => ({ ...owner(), kind: "tenant", key: "tenant:t1", convId: "friend-t1" as never, tenantId: "t1", target: "friend-target" });
 
 function run(r: ReturnType<typeof rig>, convs: Conversation[], logs: Record<string, Sent[]>, audit: AuditEntry[] = []) {
-  const told: string[] = [];
   const silence = console.log;
   console.log = () => {};
   let n: number;
   try {
-    n = replayUnanswered({ pipeline: r.pipeline, conversations: () => convs, now: () => NOW, read: (c) => logs[c.key] ?? [], audit: () => audit, tell: async (_c, text) => void told.push(text) });
+    n = replayUnanswered({ pipeline: r.pipeline, conversations: () => convs, now: () => NOW, read: (c) => logs[c.key] ?? [], audit: () => audit });
   } finally {
     console.log = silence;
   }
-  return { n, told };
+  return { n };
 }
 
 test("replay: an addressed group message logged just before a restart is answered once, late", async () => {
   const r = rig({ gate: async () => assert.fail("an address needs no gate") });
   const g = group(GID);
-  const { n, told } = run(r, [g], { [g.key]: [member(5, "@Ted when is the game?", true)] });
+  const { n } = run(r, [g], { [g.key]: [member(5, "@Ted when is the game?", true)] });
   await settle();
   assert.equal(n, 1);
-  assert.deepEqual(told, []);
   assert.equal(r.groupRuns.length, 1, "answered once");
   assert.match(r.groupRuns[0]!, /You were addressed[\s\S]*when is the game\?/);
   assert.ok(r.groupRuns[0]!.includes(LATE_NOTE), "and says it is late");
@@ -124,20 +122,25 @@ test("replay: a burst of group lines is one turn that answers the address", asyn
   assert.equal(r.gates.length, 0, "the address is answered whatever the gate would say");
 });
 
-test("replay: the run may have acted before it died: nothing is run again, and someone who was waiting is told", async () => {
+test("replay: a run that acted before it died is replayed through the model with that fact; nothing fixed is sent; a run that only read is unchanged", async () => {
   const g = group(GID);
   const addressed = rig();
-  const a = run(addressed, [g], { [g.key]: [member(5, "@Ted put the game in the calendar", true)] }, [row(4, "mcp__calendar__create_event", "group")]);
+  run(addressed, [g], { [g.key]: [member(5, "@Ted put the game in the calendar", true)] }, [row(4, "mcp__calendar__create_event", "group")]);
   await settle();
-  assert.deepEqual([addressed.groupRuns.length, addressed.gates.length, a.told], [0, 0, [SORRY]]);
-  const chatter = rig();
-  const c = run(chatter, [g], { [g.key]: [member(5, "so who is bringing the ball?")] }, [row(4, "mcp__calendar__create_event", "group")]);
-  await settle();
-  assert.deepEqual([chatter.groupRuns.length, chatter.gates.length, c.told], [0, 0, []], "nobody waited for chatter: nothing is said");
+  assert.equal(addressed.groupRuns.length, 1);
+  assert.ok(addressed.groupRuns[0]!.includes(LATE_NOTE) && addressed.groupRuns[0]!.includes("do not redo those steps"), "the group turn is told");
   const priv = rig();
-  const p = run(priv, [owner()], { owner: [line(5, "owner", "put dinner in my calendar", { by: OWNER })] }, [row(4, "mcp__calendar__create_event", "chat")]);
+  run(priv, [owner()], { owner: [line(5, "owner", "put dinner in my calendar", { by: OWNER })] }, [row(4, "mcp__calendar__create_event", "chat")]);
   await settle();
-  assert.deepEqual([priv.privateRuns.length, p.told], [0, [SORRY]]);
+  assert.equal(priv.privateRuns.length, 1);
+  assert.match(priv.privateRuns[0]!.prompt, /check whether it was already done[\s\S]*do not redo those steps, finish the rest, then tell them in one line/);
+  assert.deepEqual(priv.sent, ["done"], "only the model's own reply, no fixed line");
+  const read = rig();
+  run(read, [owner()], { owner: [line(5, "owner", "put dinner in my calendar", { by: OWNER })] }, [row(4, "mcp__calendar__list_events", "chat")]);
+  await settle();
+  assert.equal(read.privateRuns.length, 1);
+  assert.doesNotMatch(read.privateRuns[0]!.prompt, /do not redo those steps/);
+  assert.match(actedNote("T"), /journal since T/);
 });
 
 test("replay: the owner's and a friend's lines are one late turn each, as before; answered chats and empty logs do nothing", async () => {

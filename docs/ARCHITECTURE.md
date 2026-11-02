@@ -34,7 +34,7 @@ flowchart LR
 - **Code computes facts, the run decides.** Dates, "is this due" and "what was held" are computed in code and handed to the look as fact blocks. Messages to people are written by the model; fixed texts are the exception (`CLAUDE.md`, principle 4).
 - **Permissions are code, not prompts.** Every tool call passes the floor, then the approval judge, then, in a chat turn only, a question on the phone. Unattended runs never ask. A run that has read mail or a web page is marked untrusted.
 - **One architecture for everyone.** Capabilities decide what a conversation has; there is no owner-only copy of a feature.
-- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` puts what the last 30 left unanswered, in every conversation, back through the intake, unless the audit log shows the run already acted.
+- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` puts what the last 30 left unanswered, in every conversation, back through the intake, through the model; if the audit log shows the run already acted, the replayed turn is told so and finishes the rest without redoing it (its journal and the judge guard against repeats).
 
 ## Where the data lives
 

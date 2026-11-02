@@ -23,6 +23,7 @@ import { voiceOption } from "./voicereply.ts";
 import type { Quote } from "@ted-assistant/messenger";
 import { LIMITS, oneLine } from "../core/sanitize.ts";
 import { OWNER, settings } from "../core/settings.ts";
+import { actedNote } from "./replay.ts";
 
 // Group chats. In its own Signal account the assistant can be added to a group. There it is a friendly
 // participant: every message is judged (cheaply, see gate below) and it speaks when it makes sense, always
@@ -51,7 +52,7 @@ export const LATE_NOTE = "These messages were written shortly before the assista
 // already holds the conversation up to its last turn, so these are only the messages members wrote since, which
 // nobody answered (prepended here instead of a model call per message). When someone addressed the assistant
 // directly, that message is named; otherwise it decides whether anything needs saying.
-export function groupPrompt(lines: readonly string[], addressed?: { line: string; quote?: Quote; voice?: boolean; edit?: { before?: string } }, resumed = false, hint?: string, speak = false, pictures = 0, documents: readonly Document[] = [], late = false, approved: readonly string[] = []): string {
+export function groupPrompt(lines: readonly string[], addressed?: { line: string; quote?: Quote; voice?: boolean; edit?: { before?: string } }, resumed = false, hint?: string, speak = false, pictures = 0, documents: readonly Document[] = [], late = "", approved: readonly string[] = []): string {
   const addressedBy = addressed?.line;
   return [
     `${resumed ? "Said in the group since your last turn, oldest first, newest last (data)" : "The group's recent messages, oldest first, newest last (data)"}:\n${fence("group_conversation", lines.join("\n") || "(none)")}`,
@@ -61,7 +62,7 @@ export function groupPrompt(lines: readonly string[], addressed?: { line: string
     pictures ? `${pictures === 1 ? "A picture a member sent is" : "Pictures members sent are"} attached. ${PICTURE_NOTE}` : "",
     documents.length ? `${documents.length === 1 ? "A file a member sent is" : "Files members sent are"} here (PDFs are attached to this message).\n${documents.map(documentNote).join("\n")}` : "",
     voiceOption(speak),
-    late ? LATE_NOTE : "",
+    late,
     ...approved, // (code-written, about a call a member approved: not a message, and no member's words)
   ].filter(Boolean).join("\n\n");
 }
@@ -275,7 +276,8 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     const now = new Date(items[items.length - 1]!.arrivedAt);
     const live = last && st.gone?.has(last.timestamp) ? undefined : go.asked; // an address whose message was deleted while it waited is not answered
     const addressed = live && { line: live.line, quote: live.incoming, voice: live.voice, edit: live.edit };
-    const late = items.some((x) => x.late);
+    const lateItem = items.find((x) => x.late);
+    const late = lateItem ? `${LATE_NOTE}${items.some((x) => x.late?.acted) ? ` ${actedNote(lateItem.late!.at)}` : ""}` : "";
     const build: TurnBuilder = (since) => {
       const { lines, seenAt } = (cfg.context ?? groupContext)(conv.key, since);
       // The pictures of this burst plus the addressing one (if it came earlier): any member's, like their words.

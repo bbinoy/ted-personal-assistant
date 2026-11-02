@@ -206,7 +206,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
     }
     const late = ms.filter((x) => x.late);
-    const said = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text }))) : ms.length ? ownerPrompt(ms) : "";
+    const said = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text })), late.some((x) => x.late!.acted)) : ms.length ? ownerPrompt(ms) : "";
     const shown = [said, ...cont.map((x) => x.text)].filter(Boolean).join("\n\n");
     await runTurn(conv, {
       run: (hooks) => deps.run(conv, shown, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]?.timestamp, cont[0]?.continuation),
@@ -425,14 +425,13 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   // What a restart lost, found in the log (replay.ts) and put through the chain again from step 6: the same burst, the same answer decision, the same turn. Not step 1 to 5: it is
   // recorded already, and neither a command nor an approval answer is ever replayed (an old "yes" is no new one). In a private chat the lines are one turn. In a group a line is answered only
   // when it addressed us (the log says so) or when the gate, asked again on the tail, says act. The caller has dropped what is too old or may have been done already.
-  // `sorry`: the run may have acted before it died, so nothing is run again; it is said (once) to someone who was waiting, i.e. when a line was for us.
-  async function replay(conv: Conversation, lines: readonly Sent[], sorry?: () => Promise<unknown>): Promise<void> {
+  // `acted`: the run may have acted before it died; the turn is told (replay.ts actedNote) so it finishes the rest and does not redo it.
+  async function replay(conv: Conversation, lines: readonly Sent[], acted = false): Promise<void> {
     const w = waysOf(conv);
     if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
-    if (sorry) return void (lines.some((l) => w.forUs({ addressedToMe: !!l.addressed })) && (await sorry()));
     const t = now();
     const entries = lines
-      .map((l): Entry => ({ from: l.by ?? "", text: l.text, timestamp: l.ts, direct: conv.direct, addressedToMe: !!l.addressed, line: l.text, said: l.text, author: l.by, arrivedAt: t, late: { at: l.at } }))
+      .map((l): Entry => ({ from: l.by ?? "", text: l.text, timestamp: l.ts, direct: conv.direct, addressedToMe: !!l.addressed, line: l.text, said: l.text, author: l.by, arrivedAt: t, late: { at: l.at, ...(acted ? { acted } : {}) } }))
       .filter((e) => w.mayAnswer(e));
     for (const e of entries) w.note(conv, e);
     await Promise.all(entries.map((e) => settle(conv, w, e))); // (all joined into the burst first: the last one settles it)
