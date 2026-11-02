@@ -24,7 +24,6 @@ const { FULL_CAPABILITIES } = await import("@ted-assistant/messenger/testing");
 const usage = { input_tokens: 1, output_tokens: 1 };
 const call = (id: string) => ({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "x", input: {} }], usage }, parent_tool_use_id: null }) as never;
 const back = (id: string) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] }, parent_tool_use_id: null }) as never;
-const marker = { type: "user", message: { content: [{ type: "text", text: "[Request interrupted by user]" }] }, parent_tool_use_id: null } as never;
 
 test("the cut is made at the next tool call: not before a request, not twice, not for a subagent's call", async () => {
   const w = watchTurn("k-basic", true, 0);
@@ -32,7 +31,8 @@ test("the cut is made at the next tool call: not before a request, not twice, no
   w.ask(1);
   assert.equal(await w.cutAt("sub", "agent-1"), false, "a subagent's own call is not the main loop's");
   assert.equal(await w.cutAt("a"), true);
-  assert.equal(await w.cutAt("b"), false, "only once");
+  assert.equal(await w.cutAt("b"), true, "once cut, every further call of the closing turn is denied too");
+  assert.equal(await w.cutAt("sub", "agent-1"), false);
   w.end();
 });
 
@@ -75,10 +75,13 @@ test("a turn that began because of a cut is not cut again", async () => {
   w.end();
 });
 
-test("our cut is recognised by the SDK's interrupt marker after our denial; any other error stays an error", () => {
+test("the cut is ours only after our denial; the denial has no interrupt flag and says it is not a decline", async () => {
   const w = watchTurn("k-marker", true, 0);
-  w.see(marker);
-  assert.equal(w.landed, false, "a marker without our denial is not ours");
+  assert.equal(w.landed, false);
+  w.ask(1);
+  await w.cutAt("a");
+  assert.equal(w.landed, true);
+  assert.match(CUT_DENIED, /not declined/);
   w.end();
 });
 
@@ -91,7 +94,6 @@ test("forgetCutShort: the message that cut the turn was taken back", async () =>
   const v = watchTurn("k-forget2", true, 0);
   v.ask(8);
   assert.equal(await v.cutAt("a"), true);
-  v.see(marker);
   v.cut();
   forgetCutShort("k-forget2", [9]);
   assert.equal(takeCutShort("k-forget2"), true, "another message: unchanged");
@@ -124,8 +126,7 @@ test("run path: the denied call ends the turn with no reply, the session is kept
     yield back("t1");
     yield call("t2");
     seen.denial = await ask(o, "t2");
-    yield marker;
-    yield result("error_during_execution");
+    yield result("success", "I will stop here.");
   })()) as never;
   const turn = runConversation(conv, {}, chatTurn(conv, { prompt: "find a slot" }), undefined, { query: first });
   await tick();
@@ -134,8 +135,8 @@ test("run path: the denied call ends the turn with no reply, the session is kept
   assert.equal(seen.denial, undefined, "the call is still running: nothing is cut");
   toolRunning.resolve();
   const reply = await turn;
-  assert.deepEqual([(seen as typeof seen).denial?.behavior, (seen as typeof seen).denial?.interrupt, (seen as typeof seen).denial?.message], ["deny", true, CUT_DENIED]);
-  assert.equal(reply.text, "", "nothing is said for the cut turn");
+  assert.deepEqual([(seen as typeof seen).denial?.behavior, (seen as typeof seen).denial?.interrupt, (seen as typeof seen).denial?.message], ["deny", undefined, CUT_DENIED]);
+  assert.equal(reply.text, "", "nothing is said for the cut turn: the closing text is dropped");
 
   let again: string | undefined;
   const second = ((o: Opts) => (async function* () {
@@ -154,7 +155,7 @@ test("run path: the denied call ends the turn with no reply, the session is kept
   assert.ok(prompts[1]!.indexOf(CUT_FACT) < prompts[1]!.indexOf("also: only after 18:00"));
   assert.deepEqual(resumes, ["sess-0", "sess-0"], "the same session");
 
-  const third = await runConversation(conv, {}, chatTurn(conv, { prompt: "thanks" }), undefined, { query: second });
+  const third = await runConversation(conv, {}, chatTurn(conv, { prompt: "thanks" }), undefined, { query: ((o: Opts) => (async function* () { prompts.push(await textOf(o.prompt)); yield result("success", "done"); })()) as never });
   assert.equal(third.text, "done");
   assert.ok(!prompts[2]!.includes(CUT_FACT), "told once");
 });

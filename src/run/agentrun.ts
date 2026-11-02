@@ -264,9 +264,9 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   };
 }
 
-// A chat turn that a newer message of its conversation has asked to stop is cut at the next call the model asks for (interrupt.ts): denied, not run, and the turn ends. Found by the conversation's key
+// A chat turn that a newer message of its conversation has asked to stop is cut at the next call the model asks for (interrupt.ts): denied with our own wording (never the SDK's interrupt flag: the history would then read as a decline), not run, and the turn closes. Found by the conversation's key
 // at call time, so a warm process (built before the message that uses it) is cut the same way.
-const cuttable = (conversation: string | undefined, attended: boolean, inner: CanUseTool): CanUseTool => (!conversation || !attended ? inner : async (tool, input, o) => (await cutBefore(conversation, o.toolUseID, o.agentID) ? { behavior: "deny", message: CUT_DENIED, interrupt: true } : inner(tool, input, o)));
+const cuttable = (conversation: string | undefined, attended: boolean, inner: CanUseTool): CanUseTool => (!conversation || !attended ? inner : async (tool, input, o) => (await cutBefore(conversation, o.toolUseID, o.agentID) ? { behavior: "deny", message: CUT_DENIED } : inner(tool, input, o)));
 
 // Pure. The tools a user message's results say do not exist ("No such tool available: <name>"): names only.
 export function missingTools(content: unknown): string[] {
@@ -318,7 +318,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       writeSession(opts.sessionConv, next);
     }
     charge(payer, turnCostUsd, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
-    if (message.subtype === "error_during_execution" && opts.watch?.landed) { // cut short at a tool boundary by a newer message: not a failure, the session keeps what was done and the message is the next turn
+    if (message.subtype === "success" && opts.watch?.landed) { // cut short at a tool boundary by a newer message: not a failure, the closing text is dropped, the session keeps what was done and the message is the next turn
       opts.watch.cut();
       succeeded(payer);
       return { text: "", costUsd: turnCostUsd };
