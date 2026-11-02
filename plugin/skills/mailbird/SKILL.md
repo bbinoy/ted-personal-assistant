@@ -14,8 +14,8 @@ holds what is particular to Mailbird.
   `list_conversations` (`limit` 200 or the most the tool allows; page or batch by
   date when it is bigger). A look lists the whole inbox, read and unread, this way and decides
   on every conversation; the same list answers a quick "anything new?" in chat.
-  Fire the per-account list calls in one turn. Sent mail: the Sent folder
-  (`list_folders`, then `list_conversations`).
+  Fire the per-account list calls in one turn. Sent mail: each account's Sent folder
+  (`list_folders(accountId)`, then `list_conversations`), every look.
 - **Reading** is `get_message` with the row's `lastMessageId`. Rows carry only a
   short preview.
 - **Attachments.** `list_attachments` (ids as the message gives them; inline images such as
@@ -34,7 +34,7 @@ holds what is particular to Mailbird.
   `update_draft` with `cc` / `bcc`: the draft stays in its thread. Never start a new mail
   with `create_draft` just to set a Cc.
   Show the draft in chat as the mail skill says (the owner does not open Mailbird). `create_draft` only starts a brand-new mail with no
-  thread. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
+  thread; pass the `accountId` it should leave from (`list_accounts`), never the default by habit. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
   because plain newlines are flattened when sent. Read the saved draft back before any send.
 - **Sending** follows the mail skill's guardrails. `confirm: true` on `send_message_now`
   is Mailbird's own safety check, not the owner's approval.
