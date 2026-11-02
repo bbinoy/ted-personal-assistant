@@ -26,8 +26,9 @@ export class FakeNotion {
   readonly service: FakeService;
   private next = 1;
 
-  constructor(rec: Recorder, databases: SeedDatabase[] = []) {
+  constructor(rec: Recorder, databases: SeedDatabase[] = [], pages: { id: string; title: string; content: string }[] = []) {
     this.databases = databases;
+    this.pages = pages.map((p) => ({ ...p, properties: {}, createdByCall: false }));
     const dbText = (d: SeedDatabase) =>
       [
         `<database url="https://notion.example.com/${d.id}" inline="false">`,
@@ -95,6 +96,7 @@ export class FakeNotion {
           const p = this.pages.find((x) => x.id === a.page_id);
           if (!p) throw new Error(`Could not find page with ID: ${a.page_id}`);
           Object.assign(p.properties, a.properties ?? {});
+          if (a.command === "replace_content" && a.new_str !== undefined) p.content = a.new_str;
           for (const u of a.content_updates ?? []) p.content = p.content.replace(u.old_str, u.new_str);
           return { page_id: p.id };
         },

@@ -104,7 +104,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
   const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown);
-  const notion = new FakeNotion(rec, world.notion);
+  const notion = new FakeNotion(rec, world.notion, world.notionPages);
   const guard = newGuardState();
   blockRealMailbird(Mailbird, guard);
   setDraftReader(async (id) => viewDraft(mail.readDraft(id))); // the approval of a send reads the draft back from the fake, not from Mailbird
