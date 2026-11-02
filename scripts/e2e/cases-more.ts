@@ -1,5 +1,5 @@
 // More end-to-end cases (see cases.ts): tasks, the inbox, a booking, a look under injection, and the payment guard. Fictional people, places and addresses (example.com / example.org); every date is relative to the case's clock.
-import { CAL, MB, OWNER_EMAIL, check, created, deletes, sends } from "./checks.ts";
+import { CAL, MB, OWNER_EMAIL, check, created, deletes, plain, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
 import type { Case, Outcome, Time } from "./case.ts";
 
@@ -627,7 +627,7 @@ const e17: Case = {
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It says a placeholder 'Call with Mira' is on the calendar at 18:00 or later, with the day.", "It does not say an earlier time was booked.", "It is short (a few lines at most) and asks no question."],
+  reply: ["It says a placeholder 'Call with Mira' is on the calendar at 18:00 or later, with the day.", "It does not say an earlier time was booked.", "It never says the request or a step was declined, refused or rejected.", "It is short (a few lines at most) and asks no question."],
   perfect: async (s) => {
     s.turn(0);
     const day = s.time.nextWeekday(4);
@@ -775,6 +775,172 @@ const e20b: Case = {
   },
 };
 
+// ---- e26: a work account next to the private one: the reply goes out of the account the thread arrived in ----
+const WORK = "owner.work@example.org";
+const DANA_W = "dana.reyes@example.org";
+const e26: Case = {
+  id: "e26",
+  title: "a reply to a colleague is drafted in the work account, not the private one",
+  turns: ["Draft a reply to Dana: Thursday afternoon works for the roadmap review."],
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    return {
+      mailAccounts: [WORK],
+      mail: [
+        { account: 2, from: { email: DANA_W, displayName: "Dana Reyes" }, subject: "Roadmap review: when can you do it?", body: "<p>Hi, we need 45 minutes for the Q4 roadmap review with the Acme platform team this week. When suits you? Dana</p>", receivedAt: ago(5) },
+        { from: { email: "sam.weller@example.com", displayName: "Sam Weller" }, subject: "Thursday drinks?", body: "<p>Are you around Thursday evening? Sam</p>", receivedAt: ago(7) },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const drafts = o.mail.drafts();
+    const d = drafts[0];
+    return [
+      check("exactly one draft", drafts.length === 1, `${drafts.length} drafts`),
+      check("it is in the work account (sent from the work address)", d?.from.email === WORK, d?.from.email),
+      check("it goes to Dana", !!d && d.to.length === 1 && d.to[0]!.email === DANA_W, JSON.stringify(d?.to)),
+      check("it says Thursday", !!d && /thursday/i.test(plain(d.body)), d && plain(d.body).slice(0, 100)),
+      check("no private mail was drafted", !drafts.some((x) => x.to.some((p) => /sam\.weller/.test(p.email)))),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It shows the draft text to Dana in full and says how to send it.", "The draft is in a professional tone (no slang, no private chatter).", "It does not claim the mail was sent and asks nothing beyond whether to send it."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 20 })) as { conversationId: string }[];
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hi Dana,</p><p>Thursday afternoon works for me for the roadmap review.</p><p>Best</p>" });
+    s.say("Here is the reply to Dana, in your work account:\n\nHi Dana,\nThursday afternoon works for me for the roadmap review.\nBest\n\nSay send to send it.");
+  },
+};
+
+// ---- e27: the date is only in the attachment: open it, do not ask ----
+const longDate = (d: string): string => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const e27: Case = {
+  id: "e27",
+  title: "a booking whose date is only in the attached ticket goes on the calendar without a question",
+  turns: ["I booked the train to Bristol, put it in my calendar"],
+  world: (t) => ({
+    mail: [
+      {
+        from: { email: "tickets.lumenrail@example.com", displayName: "Lumen Rail" },
+        subject: "Your Lumen Rail booking is confirmed",
+        body: "<p>Thank you for booking your trip to Bristol with Lumen Rail. Your e-ticket with the travel details is attached. Have a good journey.</p>",
+        receivedAt: new Date(t.now.getTime() - 3_600_000).toISOString(),
+        attachments: [{ name: "eticket.txt", text: `LUMEN RAIL E-TICKET\nBooking reference LR-90417\nLondon Paddington to Bristol Temple Meads\nDeparts ${longDate(t.day(12))} 08:12, arrives 09:35\nCoach C, seat 41\n` }],
+      },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const t = o.time;
+    const mine = created(o);
+    const ev = mine[0];
+    return [
+      check("exactly one event was created", mine.length === 1, `${mine.length} created`),
+      check("on the date printed in the ticket", !!ev && t.dateOf(ev.startMs) === t.day(12), ev && t.dateOf(ev.startMs)),
+      check("at 08:12", !!ev && t.hhmm(ev.startMs) === "08:12", ev && t.hhmm(ev.startMs)),
+      check("with the booking reference", !!ev && `${ev.summary} ${ev.description ?? ""}`.includes("LR-90417")),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says the train is on the calendar with the date and the departure time.", "It does not ask the owner for the date or the time.", "It is short: three lines at most."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { lastMessageId: number }[];
+    await s.tool(`${MB}list_attachments`, { messageId: rows[0]!.lastMessageId });
+    const d = s.time.day(12);
+    await s.tool(`${CAL}create_event`, { summary: "Train London Paddington -> Bristol Temple Meads", startTime: s.time.local(d, "08:12"), endTime: s.time.local(d, "09:35"), timeZone: s.time.zone, description: "Booking reference LR-90417. Coach C, seat 41." });
+    s.say(`The train to Bristol is on your calendar: ${longDate(d)}, 08:12 from London Paddington. Booking reference LR-90417.`);
+  },
+};
+
+// ---- e28: the owner answered by mail and archived the thread; the look reads Sent and updates the tasks ----
+const e28: Case = {
+  id: "e28",
+  title: "a look reads the Sent folder: the reply closes the task and its promise becomes a task",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const ROSA = "rosa.lindqvist@example.org";
+    return {
+      tasks: [{ title: "Send Rosa the venue quote", due: t.day(-1) }],
+      mail: [
+        { from: { email: ROSA, displayName: "Rosa Lindqvist" }, subject: "Venue quote for the offsite", body: "<p>Could you send me the venue quote for the offsite? Rosa</p>", receivedAt: ago(30), folder: "archive" },
+        { from: OWNER_EMAIL, to: [ROSA], subject: "Re: Venue quote for the offsite", body: "<p>Hi Rosa, the quote is attached: GBP 2,400 for the day. I will confirm the headcount with you by Friday.</p>", receivedAt: ago(3), folder: "sent" },
+        { from: { email: "news.weeklyloop@example.com", displayName: "The Weekly Loop" }, subject: "The Weekly Loop #213", body: "<p>This week in climate tech.</p>", receivedAt: ago(5) },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const quote = o.tasks.find((x) => /venue quote/i.test(x.title));
+    const head = o.tasks.filter((x) => /headcount/i.test(`${x.title} ${x.details ?? ""}`) && x.status === "open");
+    return [
+      check("the venue quote task is closed", !!quote && ["done", "dropped"].includes(quote.status), quote?.status),
+      check("one open task for the headcount promised to Rosa", head.length === 1, `${head.length}`),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is short and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 11 });
+    s.tasks.done(s.tasks.find("venue quote"));
+    s.tasks.add({ title: "Confirm the headcount with Rosa", due: s.time.nextWeekday(5) });
+  },
+};
+
+// ---- e29: onboarding week: routine calendar notifications go, the one invitation that needs an answer stays ----
+const e29: Case = {
+  id: "e29",
+  title: "calendar notifications in an onboarding week: routine ones archived, the invitation needing an answer kept",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const inv = (n: string, subject: string, body: string, h: number) => ({ from: { email: "calendar-notification@example.com", displayName: n }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
+    return {
+      notes: { "context-onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. Onboarding sessions land in the calendar all week; I read the calendar directly.\n" },
+      calendar: [
+        { summary: "Onboarding: tools and access", start: t.local(t.day(1), "09:30"), end: t.local(t.day(1), "10:30") },
+        { summary: "Onboarding: security basics", start: t.local(t.day(1), "11:00"), end: t.local(t.day(1), "12:00") },
+        { summary: "Onboarding: meet the team", start: t.local(t.day(2), "10:00"), end: t.local(t.day(2), "11:00") },
+      ],
+      mail: [
+        inv("Acme HR", "Invitation: Onboarding: tools and access", "Acme HR invited you. Onboarding: tools and access, tomorrow 09:30. Already on your calendar.", 20),
+        inv("Acme HR", "Invitation: Onboarding: security basics", "Acme HR invited you. Onboarding: security basics, tomorrow 11:00. Already on your calendar.", 19),
+        inv("Acme HR", "Updated invitation: Onboarding: meet the team", "Acme HR updated the event. Onboarding: meet the team, day after tomorrow 10:00. Already on your calendar.", 18),
+        inv("Acme IT", "Accepted: Onboarding: tools and access", "Acme IT accepted the event Onboarding: tools and access.", 16),
+        inv("Acme HR", "Invitation: Company all-hands with the CEO, please respond by tomorrow noon", `Acme HR invited you to the Company all-hands with the CEO on ${t.day(4)} at 15:00. Please respond by tomorrow noon: yes or no. Not on your calendar yet.`, 10),
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const routine = ["tools and access", "security basics", "meet the team"];
+    const left = routine.filter((r) => o.mail.folderOf(r).some((f) => f !== "archive"));
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("the routine onboarding notifications are archived", left.length === 0, `still in: ${left.join("; ")}`),
+      check("the all-hands invitation needing an answer stays in the inbox", o.mail.folderOf("all-hands").every((f) => f === "inbox")),
+      check("it is mentioned or made a task", /all-hands/i.test(said) || o.tasks.some((x) => /all-hands/i.test(x.title))),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It mentions the all-hands invitation that needs an answer by tomorrow noon, in a line or two.", "It does not list the routine onboarding notifications."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
+    for (const r of rows) if (!/all-hands/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+    s.tasks.add({ title: "Answer the all-hands invitation", due: s.time.day(1) });
+    s.say("The all-hands invitation needs a yes or no by tomorrow noon; I kept it in your inbox.");
+  },
+};
+
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
 const e22: Case = {
@@ -870,4 +1036,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29];

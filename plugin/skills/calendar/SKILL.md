@@ -17,6 +17,8 @@ or `MEMORY.md`). Use exactly those; do not guess calendar ids.
 - in chat, load `ted-personal-assistant:setup` and set it up with the owner now;
 - in an unattended run, call `list_calendars` and save the `setup-calendars` note yourself, as the setup skill says, then carry on and say so in one line.
 
+A work calendar shared into the owner's Google account is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one; which is which follows the mail skill's "Work and private accounts".
+
 Google Calendar via MCP. Call `list_events` with an explicit start/end range and
 the owner's time zone, for **all of the listed calendars in the same turn** (they
 are independent). The note may list calendars that are **not** connected (a work
@@ -59,8 +61,10 @@ event, restaurant and venue reservations, appointments, flights, trains, hotels,
 buses. The daily brief also scans recent booking confirmations via
 `ted-personal-assistant:mail` `search_conversations`. For each one:
 
+- "I booked X": find the mail in the newest inbox rows (`list_conversations`) as well as by keyword; the sender rarely uses the owner's words.
+- If the date or time is only in the mail's attachment (a ticket, a confirmation PDF), open it first (`ted-personal-assistant:mail`) and never ask the owner for it.
 - `create_event` on the calendar the setup note names for bookings (else the primary
-  one), with no guests: clear title ("Startup Nights 2026", "Flight ZRH -> BCN LX123",
+  one; a work trip on the work calendar), with no guests: clear title ("Startup Nights 2026", "Flight ZRH -> BCN LX123",
   "Hotel: <name>, <city>", "Train <A> -> <B>", "Dinner at <place>"),
   correct start/end, location, and confirmation number + one-line summary in the
   description. Times: write each of `startTime` and `endTime` as a full ISO time with

@@ -23,6 +23,7 @@ interface World {
   tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
   calendar?: SeedEvent[];
   mail?: SeedMail[];
+  mailAccounts?: string[]; // more accounts in the mail client (account 2, 3...; `account` of a seed mail picks one), by email address
   mailDown?: boolean; // the mail connector is down: every call to it errors
   notion?: SeedDatabase[]; // Notion databases (the owner has the connector in every case; most cases have none)
   notionPages?: { id: string; title: string; content: string }[]; // standalone Notion pages of the owner (found by search, fetched by id)
