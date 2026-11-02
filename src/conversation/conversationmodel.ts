@@ -100,8 +100,8 @@ export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; docum
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };
 
 // What a message is while it waits for its turn (the burst, the queue): the message once prepared, plus what every conversation's turn needs of it. `line`: how it reads in the history (a voice
-// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `continuation`: not a message at all but the code-written turn for a call the person approved (or a reply to re-propose from), with the provenance of the turn that asked; it has no author, quote or timestamp to answer; `late`: it was found in the log after a restart (replay.ts), written at `at`.
-export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; reaction?: { emoji: string; on: string; journal?: string[] }; continuation?: { provenance?: RunProvenance } };
+// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `continuation`: not a message at all but the code-written turn for a call the person approved (or a reply to re-propose from), with the provenance of the turn that asked; it has no author, quote or timestamp to answer; `late`: it was found in the log after a restart (replay.ts), written at `at`; `acted`: the run that died had already done something.
+export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string; acted?: true }; reaction?: { emoji: string; on: string; journal?: string[] }; continuation?: { provenance?: RunProvenance } };
 
 // What a group's turn is made of beyond the shared pipeline.
 export interface GroupDeps {
