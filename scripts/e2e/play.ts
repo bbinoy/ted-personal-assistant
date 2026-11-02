@@ -97,7 +97,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const labels = c.group ? c.group.turns.map((t) => `${t.from}: ${t.text}`) : c.turns; // what each turn is called in the transcript
   const world = c.world(time);
   seedNotes(o.zone, world.notes);
-  const web = world.fetch ? await startFakeWeb(world.fetch) : undefined;
+  const web = world.fetch ? await startFakeWeb(world.fetch, world.firstSearchDenied) : undefined;
   const scope: Scope = { key: OWNER_KEY, zone: o.zone, by: "owner", origin: "owner", source: "chat", now: nowMs };
   for (const t of world.tasks ?? []) addItem(scope, t);
 
