@@ -32,7 +32,6 @@ const { convDbRule } = await import("../src/heartbeat/convretention.ts");
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
-s.maxUnpromptedPerDay = 2;
 s.prepMinutes = 15;
 
 const berlin = (date: string, time: string): number => Date.parse(`${date}T${time}:00+02:00`); // (CEST until 25 Oct)
@@ -55,7 +54,6 @@ function reset(): void {
   resetHeld(conv);
   clearQuiet(conv);
   s.prepMinutes = 15;
-  s.maxUnpromptedPerDay = 2;
 }
 
 // ---- recording: validation ----

@@ -273,28 +273,6 @@ test("owner's look at night: the posts are HELD in code, an urgent one goes at o
   assert.equal(seen.prompts[seen.prompts.length - 1]!.split("Held back and not sent").length - 1, 2, "both held posts are in the morning look's prompt");
 });
 
-test("owner's look in the day: the daily cap holds the posts past it (urgent ones exempt)", async () => {
-  s.maxUnpromptedPerDay = 2;
-  try {
-    let urgent = false;
-    const { w, conv, seen, at } = rig(() => ({ message: `msg #${seen.recorded.length + seen.posted.length + 1}`, nextCheckMinutes: 10, urgent }));
-    const outcomes: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      const t = min(DAY, i * 11);
-      at(t);
-      outcomes.push(await w.look(conv, t));
-    }
-    urgent = true;
-    const t = min(DAY, 40);
-    at(t);
-    outcomes.push(await w.look(conv, t));
-    assert.deepEqual(outcomes, ["posted", "posted", "silent", "posted"]);
-    assert.equal(seen.posted.length, 3);
-  } finally {
-    s.maxUnpromptedPerDay = 12;
-  }
-});
-
 test("owner's look: due only when the chosen time has come, the owner wrote or a note changed", async () => {
   const { w, conv, seen, at } = rig(() => ({ nextCheckMinutes: 30 }));
   assert.equal(await w.look(conv, DAY), "silent");

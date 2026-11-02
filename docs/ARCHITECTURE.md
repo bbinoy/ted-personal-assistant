@@ -68,7 +68,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | table(s) | holds |
 |---|---|
 | `session`, `dream`, `quiet`, `reset` | the resumed SDK chat session, cost, untrusted taint, what it was shown; the dream's day; `/quiet`; the mark after a damaged file was replaced |
-| `hold`, `held_posts` | day's count of unprompted posts; posts held for quiet hours or the cap (newest 30) |
+| `held_posts` | posts held for quiet hours (newest 30) |
 | `mail_decisions` | the looks' last decision per inbox mail: archive, keep, task or draft, with the reason (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (a routine note), keyed by the note's file name |
@@ -217,7 +217,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 | fact | built by | handed over |
 |---|---|---|
 | the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (3 in a row over 2 h awake) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
-| held posts (quiet hours, `/quiet`, the day's cap), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over and the cap has room; deleted only when the run ends well; nothing older than 36 h |
+| held posts (quiet hours, `/quiet`), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over; deleted only when the run ends well; nothing older than 36 h |
 | reminders due | `waitingReminders`, `reminderFacts` (and the trigger line, `reminderWhy`) | claimed by the tick; settled when a look ended well: told if it said something (or held it), only marked if it stayed silent; a failed or called-off look leaves them for the next |
 | meetings claimed for prep | `waitingMeetings`, `meetingFacts` (and the trigger line, `meetingWhy`) | `PREP_MINUTES` before the start; told when the run said something |
 | routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |
@@ -233,7 +233,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - The default is to archive unless the mail needs the owner; the owner's triage notes win.
 - `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or ask Ted in chat to bring it back).
 
-**Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (12) is held (`submitPost`) unless the run marked it `urgent`.
+**Quiet hours** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), or during `/quiet`, is held (`submitPost`) unless the run marked it `urgent`; a post of a look running a due routine ignores the window, not `/quiet`.
 
 - Code never rewrites a held post. There is no fixed text to the owner. Every system matter (the shared key, the spend warnings, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
 - People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `takeCapNotice` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`). A run that merely failed (timeout, connector, other) gets one line for a group or a friend, "⚠️ Something went wrong, try again." (no cause: the log and `npm run doctor` say it); the owner's own failure notices keep their text because they end with the one step she must take.

@@ -11,8 +11,8 @@ import { writeFileAtomic } from "./state.ts";
 // A conversation's state is in ITS file and nowhere else: a query cannot reach another conversation's rows because it has no connection to them (test/convdb.test.ts), and forgetting a conversation is
 // still deleting its folder (the connection is closed first: forgetConv / closeConvDb).
 //
-//   session / dream / hold / quiet / friend   ONE row each (id = 1): a CHECK keeps it so
-//   held_posts       the posts quiet hours or the day's cap kept back, oldest first (bounded where they are written)
+//   session / dream / quiet / friend   ONE row each (id = 1): a CHECK keeps it so
+//   held_posts       the posts quiet hours kept back, oldest first (bounded where they are written)
 //   mail_decisions   the look's last decision per inbox mail (id, archive/keep/task/draft, reason, sender, subject, when), oldest first: seq orders them, the bound (2000) is a query (trimDecisions), also a retention rule
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
@@ -63,7 +63,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TABLE held_posts (
         seq       INTEGER PRIMARY KEY AUTOINCREMENT,                -- oldest first
         text      TEXT NOT NULL,
-        why       TEXT NOT NULL,                                    -- quiet, cap
+        why       TEXT NOT NULL,                                    -- quiet (older rows may say cap)
         at        INTEGER
       );
 
@@ -311,6 +311,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     version: 30,
     name: "focus today: a task can carry the local day it is a focus item for (it lapses by itself when the day is over)",
     up: `ALTER TABLE items ADD COLUMN focus_on TEXT CHECK (focus_on IS NULL OR focus_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'); -- the local day (YYYY-MM-DD); focus today iff it is today`,
+  },
+  {
+    version: 31,
+    name: "no daily cap on unprompted posts: the day's count (`hold`) is gone",
+    up: `DROP TABLE hold;`,
   },
 ];
 

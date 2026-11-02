@@ -25,7 +25,6 @@ const ZONE = "Europe/Berlin";
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
-s.maxUnpromptedPerDay = 3;
 const berlin = (date: string, time: string): number => Date.parse(`${date}T${time}:00${date < "2026-10-25" && date > "2026-03-29" ? "+02:00" : "+01:00"}`);
 const NOW = berlin("2026-10-22", "12:00"); // Thu, CEST
 const MIN = 60_000;

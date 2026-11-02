@@ -27,8 +27,8 @@ export type SendSink = (c: Content) => Promise<string>;
 
 const sinks = new Map<string, SendSink>();
 
-// An unattended run's sink may have a GATE (heartbeat/look.ts): asked with each text before it is delivered, it returns what the model is told when the text is HELD instead (quiet hours,
-// the day's cap: heartbeat/notices.ts), or undefined to let it go. Tied to the run's own sink, so a chat turn of the same conversation (another sink) is never held.
+// An unattended run's sink may have a GATE (heartbeat/look.ts): asked with each text before it is delivered, it returns what the model is told when the text is HELD instead (quiet hours:
+// heartbeat/notices.ts), or undefined to let it go. Tied to the run's own sink, so a chat turn of the same conversation (another sink) is never held.
 export type SendGate = (text: string, urgent: boolean) => string | undefined;
 const gates = new WeakMap<SendSink, SendGate>();
 export function gateSink(key: string, gate: SendGate): void {
@@ -59,7 +59,7 @@ export interface SendArgs {
   file?: string;
   caption?: string;
   react?: string;
-  urgent?: boolean; // a background look only: time-critical, goes out at once also in quiet hours and past the day's cap
+  urgent?: boolean; // a background look only: time-critical, goes out at once also in quiet hours
 }
 
 // The tool body, apart from the server so tests can call it. Checks which combination makes sense, then hands the content to the turn's sink.

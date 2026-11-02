@@ -161,7 +161,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       const log = logSince(conv, since);
       return { prompt: lookPrompt(instruction, log.lines, !!since), seenAt: log.seenAt };
     };
-    let held = false; // something this look said was held for later (quiet hours, the day's cap)
+    let held = false; // something this look said was held for later (quiet hours)
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -179,12 +179,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       reply = await pipeline.sendWhile(
         conv,
         () => {
-          // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent or a routine is due (notices.ts).
+          // What the run sends with the send tool is held like its final answer (quiet hours) unless it says urgent or a routine is due (notices.ts).
           gateSink(conv.key, (text, urgent) => {
             if (submitPost(conv, text, urgent, now, routineDue) !== "held") return undefined;
             held = true;
             emit({ type: "notice", state: "held", conv: conv.key, text, source: auditSource({ who: conv.kind, attended: false }) });
-            return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
+            return "Not sent now: it is quiet hours, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
           return deps.run(conv, access, build, {
             facts,
@@ -226,7 +226,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     if (answer?.message && !stale) {
       const message = answer.message;
-      // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent or a routine is due (the people asked for that time).
+      // Quiet hours are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent or a routine is due (the people asked for that time).
       if (submitPost(conv, message, answer.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);

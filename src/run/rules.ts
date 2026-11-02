@@ -19,7 +19,7 @@ export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
     properties: {
       message: { type: "string" }, // the message to the owner, or [[silent]]
       nextCheckMinutes: { type: "integer", minimum: MIN_LOOK_MINUTES, maximum: MAX_LOOK_MINUTES },
-      urgent: { type: "boolean" }, // truly time-critical: code then posts it also in quiet hours and past the day's cap (heartbeat/notices.ts)
+      urgent: { type: "boolean" }, // truly time-critical: code then posts it also in quiet hours (heartbeat/notices.ts)
       triage: { type: "array", maxItems: MAX_TRIAGE, items: { type: "object", additionalProperties: false, required: ["id", "decision", "reason"], properties: { id: { type: "string" }, from: { type: "string" }, subject: { type: "string" }, decision: { type: "string", enum: [...TRIAGE_DECISIONS] }, reason: { type: "string" } } } }, // one row per inbox mail the look considered: the decision log (journal category "triage")
     },
   },

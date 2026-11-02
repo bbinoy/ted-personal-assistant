@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { owner } from "../src/conversation/conversationmodel.ts";
+import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
@@ -22,7 +23,6 @@ import { groupConvId } from "../src/core/convpaths.ts";
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
-s.maxUnpromptedPerDay = 3;
 const DAY = new Date(2026, 9, 14, 14, 0, 0);
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const MORNING = new Date(2026, 9, 15, 7, 30, 0);
@@ -30,32 +30,28 @@ const EARLY = new Date(2026, 9, 15, 5, 30, 0); // quiet hours on the morning's o
 const reset = () => resetHeld(owner());
 const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 
-test("planPost: urgent always goes, the quiet window holds, then the day's cap", () => {
-  assert.equal(planPost({ urgent: true, night: true, posted: 99, cap: 6 }), "post");
-  assert.equal(planPost({ urgent: false, night: true, posted: 0, cap: 6 }), "hold-quiet");
-  assert.equal(planPost({ urgent: false, night: false, posted: 5, cap: 6 }), "post");
-  assert.equal(planPost({ urgent: false, night: false, posted: 6, cap: 6 }), "hold-cap");
-  assert.equal(planPost({ urgent: false, night: true, posted: 6, cap: 6 }), "hold-quiet");
+test("planPost: urgent always goes, the quiet window holds", () => {
+  assert.equal(planPost({ urgent: true, night: true }), "post");
+  assert.equal(planPost({ urgent: false, night: true }), "hold");
+  assert.equal(planPost({ urgent: false, night: false }), "post");
 });
 
-test("planPost: a scheduled post (a due routine) goes in quiet hours and past the cap; the same post unscheduled is held", () => {
-  assert.equal(planPost({ urgent: false, scheduled: true, night: true, posted: 99, cap: 6 }), "post");
-  assert.equal(planPost({ urgent: false, scheduled: true, night: false, posted: 6, cap: 6 }), "post");
-  assert.equal(planPost({ urgent: false, scheduled: false, night: true, posted: 0, cap: 6 }), "hold-quiet");
+test("a scheduled post (a due routine) goes in the quiet window, not under /quiet; an ordinary one is held; there is no daily limit", () => {
   const c = owner();
   reset();
   assert.equal(submitPost(c, "the 22:00 quiz", false, NIGHT, true), "post");
   assert.equal(submitPost(c, "other news", false, NIGHT), "held");
-  assert.equal(submitPost(c, "q2", false, DAY, true) && submitPost(c, "q3", false, DAY, true) && submitPost(c, "q4", false, DAY, true), "post", "past the cap (3)");
-  assert.equal(submitPost(c, "more news", false, DAY), "held", "scheduled posts count toward the cap");
+  for (let i = 0; i < 30; i++) assert.equal(submitPost(c, `news ${i}`, false, DAY), "post", "no cap");
+  setQuiet(c, new Date(NIGHT.getTime() + 3_600_000).toISOString());
+  assert.equal(submitPost(c, "the 22:00 quiz again", false, NIGHT, true), "held", "/quiet holds a scheduled post too");
+  clearQuiet(c);
   reset();
 });
 
-test("planFlush: only outside the quiet window, with something held and the cap not spent", () => {
-  assert.equal(planFlush({ night: false, posted: 0, cap: 6, held: 2 }), true);
-  assert.equal(planFlush({ night: true, posted: 0, cap: 6, held: 2 }), false);
-  assert.equal(planFlush({ night: false, posted: 6, cap: 6, held: 2 }), false);
-  assert.equal(planFlush({ night: false, posted: 0, cap: 6, held: 0 }), false);
+test("planFlush: only outside the quiet window and with something held", () => {
+  assert.equal(planFlush({ night: false, held: 2 }), true);
+  assert.equal(planFlush({ night: true, held: 2 }), false);
+  assert.equal(planFlush({ night: false, held: 0 }), false);
 });
 
 test("the heartbeat answer's urgent flag: only a literal true on a real message", () => {
@@ -65,7 +61,7 @@ test("the heartbeat answer's urgent flag: only a literal true on a real message"
   assert.equal(parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, urgent: true }, "").urgent, false);
 });
 
-test("held posts: night holds, day posts, the cap holds the rest; at the end of quiet the look is due and gets all of them once, newest first", () => {
+test("held posts: night holds, day posts; at the end of quiet the look is due and gets all of them once, newest first", () => {
   reset();
   const c = owner();
   assert.equal(submitPost(c, "mail from the bank", false, EARLY), "held");
@@ -83,18 +79,6 @@ test("held posts: night holds, day posts, the cap holds the rest; at the end of 
   assert.deepEqual(takeHeld(c, MORNING).held, [], "exactly once");
   assert.equal(heldWaiting(c, MORNING), false);
   assert.deepEqual(heldPosts(c), []);
-});
-test("the day's cap: the posts past it are held for the next day, urgent ones are exempt, every post, also one sent while working, counts", () => {
-  reset();
-  const c = owner();
-  assert.equal(submitPost(c, "one", false, DAY), "post");
-  assert.equal(submitPost(c, "two", false, DAY), "post");
-  assert.equal(submitPost(c, "three", false, DAY), "post");
-  assert.equal(submitPost(c, "four", false, DAY), "held", "3 a day in this test");
-  assert.equal(submitPost(c, "urgent", true, DAY), "post");
-  assert.equal(heldWaiting(c, new Date(2026, 9, 14, 15, 0)), false, "the same day: the cap is still spent");
-  assert.deepEqual(takeHeld(c, new Date(2026, 9, 14, 15, 0)).held, []);
-  assert.deepEqual(takeHeld(c, new Date(2026, 9, 15, 9, 0)).held.map((h) => h.text), ["four"], "the next day it goes to the look");
 });
 test("held posts as facts: written-when wording, capped, trimmed; a conversation without a look drops them with a journal line", () => {
   reset();
@@ -200,7 +184,7 @@ test("held items are checked before they are handed over: anything held for over
   const old = [{ text: "x", why: "quiet" as const, at: NIGHT.getTime() }];
   assert.equal(stillTrue(old, NIGHT.getTime() + 37 * 3_600_000).length, 0);
   assert.equal(stillTrue(old, NIGHT.getTime() + 3_600_000).length, 1);
-  assert.equal(stillTrue([{ text: "y", why: "quiet" as const }], 1e15).length, 1, "a row without a time is kept");
+  assert.equal(stillTrue([{ text: "y" as const }], 1e15).length, 1, "a row without a time is kept");
 });
 test("the send tool of an unattended look is held at 02:00 unless urgent; a chat turn's sink is never gated", async () => {
   reset();
