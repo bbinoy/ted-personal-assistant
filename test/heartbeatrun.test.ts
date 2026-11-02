@@ -204,6 +204,24 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 60]]);
 });
 
+test("a routine due inside quiet hours is delivered (posts and sends are not held); a look without a due routine still holds", async () => {
+  const QUIZ = new Date(2026, 9, 14, 22, 5, 0);
+  const quiz = (m: string) => {
+    const r = rig(() => ({ message: m, nextCheckMinutes: 60 }));
+    writeFileSync(join(r.conv.notesDir, "routine-quiz.md"), "---\nwhen: every day at 22:00\n---\nPost the evening quiz.\n");
+    return r;
+  };
+  const due = quiz("Quiz time: what is the capital of Peru?");
+  liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-quiz', ?)", new Date(2026, 9, 1).getTime());
+  due.at(QUIZ);
+  assert.equal(await due.w.look(due.conv, QUIZ), "posted");
+  assert.deepEqual(due.seen.posted, ["Quiz time: what is the capital of Peru?"]);
+  liveConvDb(owner().convId)!.run("DELETE FROM routine_runs");
+  const plain = rig(() => ({ message: "Some news.", nextCheckMinutes: 60 }));
+  plain.at(QUIZ);
+  assert.equal(await plain.w.look(plain.conv, QUIZ), "silent", "no routine due: held by quiet hours");
+});
+
 test("the incident: a post held at 22:35 is not sent at 07:00; the morning look gets it once as a fact, a second look does not", async () => {
   const EVENING = new Date(2026, 9, 22, 22, 35, 0);
   const TEXT = "Evening, Alex. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";

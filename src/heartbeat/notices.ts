@@ -16,15 +16,16 @@ import { auditSource } from "../core/runkind.ts";
 //   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY, is HELD
 //      (state, per conversation). Code never words it again: when quiet is over (and the cap has room) the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts),
 //      each handed over exactly once, and says again in today's words only what is still true. A conversation without a look drops what it held (dropUnreachable). The run marks a post `urgent`
-//      (rules.ts) only when it is time-critical: that is exempt from all of it.
+//      (rules.ts) only when it is time-critical: that is exempt from all of it. So is a post of a look that runs a DUE ROUTINE (`scheduled`, decided by code in look.ts, never by the run): the people
+//      asked for it at that time, so it is neither held at night nor by the day's cap (it still counts toward the cap, which then limits only Ted's other unprompted posts).
 
 // ---- the pure planners ----
 
 export type Plan = "post" | "hold-quiet" | "hold-cap";
 
-// Urgent posts always go. Otherwise the quiet window holds, then the day's cap (a quiet-hours post is held even if the cap is also spent: it is delivered in the morning, within the cap).
-export function planPost(i: { urgent: boolean; night: boolean; posted: number; cap: number }): Plan {
-  if (i.urgent) return "post";
+// Urgent and scheduled posts always go (scheduled: the people asked for it at this time, a due routine). Otherwise the quiet window holds, then the day's cap (a quiet-hours post is held even if the cap is also spent: it is delivered in the morning, within the cap).
+export function planPost(i: { urgent: boolean; scheduled?: boolean; night: boolean; posted: number; cap: number }): Plan {
+  if (i.urgent || i.scheduled) return "post";
   if (i.night) return "hold-quiet";
   return i.posted >= i.cap ? "hold-cap" : "post";
 }
@@ -137,11 +138,11 @@ const holding = (conv: Conversation, now: Date, zone: string): boolean => isNigh
 // Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own waits by this.
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
-// A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
-export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date): "post" | "held" {
+// A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it). `scheduled`: the look is running a due routine.
+export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date, scheduled = false): "post" | "held" {
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
-  const plan = planPost({ urgent, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
+  const plan = planPost({ urgent, scheduled, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
   if (plan === "post") {
     if (!urgent) st.posted++;
     save(conv, st);

@@ -38,6 +38,19 @@ test("planPost: urgent always goes, the quiet window holds, then the day's cap",
   assert.equal(planPost({ urgent: false, night: true, posted: 6, cap: 6 }), "hold-quiet");
 });
 
+test("planPost: a scheduled post (a due routine) goes in quiet hours and past the cap; the same post unscheduled is held", () => {
+  assert.equal(planPost({ urgent: false, scheduled: true, night: true, posted: 99, cap: 6 }), "post");
+  assert.equal(planPost({ urgent: false, scheduled: true, night: false, posted: 6, cap: 6 }), "post");
+  assert.equal(planPost({ urgent: false, scheduled: false, night: true, posted: 0, cap: 6 }), "hold-quiet");
+  const c = owner();
+  reset();
+  assert.equal(submitPost(c, "the 22:00 quiz", false, NIGHT, true), "post");
+  assert.equal(submitPost(c, "other news", false, NIGHT), "held");
+  assert.equal(submitPost(c, "q2", false, DAY, true) && submitPost(c, "q3", false, DAY, true) && submitPost(c, "q4", false, DAY, true), "post", "past the cap (3)");
+  assert.equal(submitPost(c, "more news", false, DAY), "held", "scheduled posts count toward the cap");
+  reset();
+});
+
 test("planFlush: only outside the quiet window, with something held and the cap not spent", () => {
   assert.equal(planFlush({ night: false, posted: 0, cap: 6, held: 2 }), true);
   assert.equal(planFlush({ night: true, posted: 0, cap: 6, held: 2 }), false);
