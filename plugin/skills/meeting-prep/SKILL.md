@@ -31,6 +31,8 @@ The message is a phone chat message, plain text, at most about 8 short lines: a 
 intro / pitch / customer or investor call, an interview, a presentation,
 a decision meeting, anything with an agenda or pre-read.
 
+Work meetings count the same, on the work calendar: customer and team meetings, and a 1:1 with a manager or report (agenda, open items, last thread).
+
 **No prep** - 1:1 personal catch-ups, standups / recurring team syncs,
 socials, blocked focus time, travel, all-day markers.
 

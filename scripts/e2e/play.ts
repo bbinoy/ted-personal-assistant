@@ -103,10 +103,15 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
-  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown);
+  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown, (world.mailAccounts ?? []).map((email) => ({ email })));
   const notion = new FakeNotion(rec, world.notion);
   const guard = newGuardState();
   blockRealMailbird(Mailbird, guard);
+  // open_file's own connection to Mailbird (runtime.ts) is the one real-client call a run may make: its get_attachment_content is answered from the fake (any other call stays blocked and counted).
+  const blocked = Mailbird.prototype.content;
+  Mailbird.prototype.content = function (this: Mailbird, name: string, args: Record<string, unknown> = {}) {
+    return name === "get_attachment_content" ? Promise.resolve(mail.attachmentContent(Number(args.messageId), Number(args.attachmentId))) : blocked.call(this, name, args);
+  } as typeof blocked;
   setDraftReader(async (id) => viewDraft(mail.readDraft(id))); // the approval of a send reads the draft back from the fake, not from Mailbird
 
   // The fake web (e8, e2): the browse entry tool and the browse worker's browser are Ted's own code, so they stay real; what is swapped is what reaches out. The worker's browser server is the fake one, the card
@@ -156,7 +161,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   setContinuation((_scope, prompt, provenance) => void continuations.push({ prompt, provenance }));
 
   const fakes = { [cal.service.server]: cal.service.config, [mail.service.server]: mail.service.config, [notion.service.server]: notion.service.config };
-  const fakeTools = new Set([...cal.service.tools, ...mail.service.tools, ...notion.service.tools, ...(fb ? ["mcp__browse__browse"] : [])]);
+  const fakeTools = new Set([...cal.service.tools, ...mail.service.tools, ...notion.service.tools, ...(fb ? ["mcp__browse__browse"] : []), ...(world.mail?.some((m) => m.attachments?.length) ? ["mcp__files__open_file"] : [])]); // (open_file reads the fake's attachments, above)
   const conv = owner();
   const turns: PlayResult["turns"] = [];
   const snapshots: Outcome["turns"] = [];

@@ -6,7 +6,8 @@ import { fakeService, type FakeService, type Recorder, type ToolDef } from "./fa
 export const MAILBIRD_SERVER = "mailbird";
 
 export type Folder = "inbox" | "sent" | "drafts" | "archive" | "trash";
-const FOLDER_ID: Record<Folder, number> = { inbox: 10, sent: 11, drafts: 12, archive: 13, trash: 14 };
+const FOLDER_BASE: Record<Folder, number> = { inbox: 10, sent: 11, drafts: 12, archive: 13, trash: 14 };
+const folderId = (account: number, f: Folder): number => FOLDER_BASE[f] + (account - 1) * 10; // folder ids are per account
 const FOLDER_NAME: Record<Folder, string> = { inbox: "Inbox", sent: "Sent", drafts: "Drafts", archive: "Archive", trash: "Trash" };
 
 export interface Person {
@@ -22,6 +23,8 @@ export interface SeedMail {
   receivedAt: string; // ISO
   folder?: Folder; // default inbox
   read?: boolean; // default false in the inbox
+  account?: number; // 1 = the owner's own mailbox (default), 2 = the second account (FakeMail `extra`)
+  attachments?: { name: string; text: string }[]; // text files on the mail; open_file reads them (play.ts)
 }
 
 export interface Message {
@@ -33,11 +36,12 @@ export interface Message {
   subject: string;
   body: string;
   receivedAtUtc: string;
-  attachments: unknown[];
+  attachments: { id: number; fileName: string; mimeType: string; size: number; isInline: boolean; text: string }[];
 }
 export interface Conversation {
   conversationId: string;
   folder: Folder;
+  account: number;
   subject: string;
   read: boolean;
   messages: Message[];
@@ -67,39 +71,46 @@ export class FakeMail {
 
   readonly owner: Person;
 
-  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = [], down = false) {
+  readonly accounts: Person[]; // account n is accounts[n - 1]
+
+  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = [], down = false, extra: Person[] = []) {
     this.owner = owner;
+    this.accounts = [owner, ...extra];
     for (const s of seed) {
-      const m = this.message(person(s.from), (s.to ?? [owner]).map(person), s.subject, s.body, s.receivedAt);
-      this.conversations.push({ conversationId: this.newConv(), folder: s.folder ?? "inbox", subject: s.subject, read: s.read ?? (s.folder ?? "inbox") !== "inbox", messages: [m] });
+      const account = s.account ?? 1;
+      const m = this.message(person(s.from), (s.to ?? [this.accounts[account - 1]!]).map(person), s.subject, s.body, s.receivedAt);
+      m.attachments = (s.attachments ?? []).map((a, i) => ({ id: m.id * 10 + i, fileName: a.name, mimeType: "text/plain", size: a.text.length, isInline: false, text: a.text }));
+      this.conversations.push({ conversationId: this.newConv(), folder: s.folder ?? "inbox", account, subject: s.subject, read: s.read ?? (s.folder ?? "inbox") !== "inbox", messages: [m] });
     }
     const row = (c: Conversation) => {
       const last = c.messages[c.messages.length - 1]!;
-      return { conversationId: c.conversationId, folderId: FOLDER_ID[c.folder], subject: c.subject, lastSender: last.from.email, receivedAtUtc: last.receivedAtUtc, isRead: c.read, messageCount: c.messages.length, isStarred: false, isImportant: false, lastMessageId: last.id, messages: [] };
+      return { conversationId: c.conversationId, folderId: folderId(c.account, c.folder), subject: c.subject, lastSender: last.from.email, receivedAtUtc: last.receivedAtUtc, isRead: c.read, messageCount: c.messages.length, isStarred: false, isImportant: false, lastMessageId: last.id, messages: [] };
     };
-    const inFolder = (id: number) => this.conversations.filter((c) => FOLDER_ID[c.folder] === id).sort((a, b) => b.messages.at(-1)!.receivedAtUtc.localeCompare(a.messages.at(-1)!.receivedAtUtc));
+    const inFolder = (id: number) => this.conversations.filter((c) => folderId(c.account, c.folder) === id).sort((a, b) => b.messages.at(-1)!.receivedAtUtc.localeCompare(a.messages.at(-1)!.receivedAtUtc));
     const conv = (id: string) => this.conversations.find((c) => c.conversationId === id) ?? (() => { throw new Error(`Conversation not found: ${id}`); })();
     const msg = (id: number) => {
       for (const c of this.conversations) for (const m of c.messages) if (m.id === id) return { c, m };
       throw new Error(`Message not found: ${id}`);
     };
-    const shownMessage = (m: Message) => ({ body: m.body, attachments: m.attachments, id: m.id, from: m.from, subject: m.subject, receivedAtUtc: m.receivedAtUtc, bodyPreview: null, to: m.to, cc: m.cc, bcc: m.bcc, attachmentCount: m.attachments.length });
+    const shownAtt = (m: Message) => m.attachments.map(({ text: _t, ...a }) => a);
+    const mine = (p: Person) => this.accounts.some((a) => a.email === p.email);
+    const shownMessage = (m: Message) => ({ body: m.body, attachments: shownAtt(m), id: m.id, from: m.from, subject: m.subject, receivedAtUtc: m.receivedAtUtc, bodyPreview: null, to: m.to, cc: m.cc, bcc: m.bcc, attachmentCount: m.attachments.length });
     const matches = (c: Conversation, query: string) => {
       const hay = c.messages.map((m) => `${m.subject} ${m.body} ${m.from.email} ${m.from.displayName ?? ""} ${m.to.map((t) => `${t.email} ${t.displayName ?? ""}`).join(" ")}`).join(" ").toLowerCase();
       return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => (w.startsWith("from:") ? c.messages.some((m) => `${m.from.email} ${m.from.displayName ?? ""}`.toLowerCase().includes(w.slice(5))) : hay.includes(w)));
     };
-    const draft = (inConv: Conversation | undefined, to: Person[], subject: string, body: string, cc: Person[] = []) => {
-      const m = this.message(owner, to, subject, body, new Date().toISOString());
+    const draft = (inConv: Conversation | undefined, to: Person[], subject: string, body: string, cc: Person[] = [], account = 1) => {
+      const m = this.message(this.accounts[account - 1] ?? owner, to, subject, body, new Date().toISOString());
       m.cc = cc;
       if (inConv) inConv.messages.push(m);
-      else this.conversations.push({ conversationId: this.newConv(), folder: "drafts", subject, read: true, messages: [m] });
+      else this.conversations.push({ conversationId: this.newConv(), folder: "drafts", account, subject, read: true, messages: [m] });
       return m;
     };
     const replyDraft = (a: Record<string, any>, all: boolean) => {
       const c = conv(a.conversationId);
-      const last = [...c.messages].reverse().find((m) => m.from.email !== owner.email) ?? c.messages.at(-1)!;
-      const to = [last.from, ...(all ? [...last.to, ...last.cc].filter((p) => p.email !== owner.email) : [])];
-      const m = draft(undefined, to, c.subject.startsWith("Re:") ? c.subject : `Re: ${c.subject}`, a.body ?? "", all ? last.cc.filter((p) => p.email !== owner.email) : []);
+      const last = [...c.messages].reverse().find((m) => !mine(m.from)) ?? c.messages.at(-1)!;
+      const to = [last.from, ...(all ? [...last.to, ...last.cc].filter((p) => !mine(p)) : [])];
+      const m = draft(undefined, to, c.subject.startsWith("Re:") ? c.subject : `Re: ${c.subject}`, a.body ?? "", all ? last.cc.filter((p) => !mine(p)) : [], c.account);
       return { messageId: m.id, conversationId: c.conversationId, mode: all ? "reply_all" : "reply", status: "draft_created", note: "Draft saved. Review it, then send it with send_message_now (confirm: true)." };
     };
     const draftOf = (id: number) => {
@@ -109,8 +120,8 @@ export class FakeMail {
     };
 
     const defs: Record<string, ToolDef> = {
-      list_accounts: { description: "List the mail accounts.", shape: {}, run: () => [{ id: 1, senderName: owner.displayName ?? "Owner", email: owner.email, unreadConversations: inFolder(10).filter((c) => !c.read).length }] },
-      list_folders: { description: "List an account's folders.", shape: { accountId: z.number() }, run: () => (Object.keys(FOLDER_ID) as Folder[]).map((f) => ({ id: FOLDER_ID[f], name: FOLDER_NAME[f], identity: f, parentId: null, unreadConversations: f === "inbox" ? inFolder(10).filter((c) => !c.read).length : 0 })) },
+      list_accounts: { description: "List the mail accounts.", shape: {}, run: () => this.accounts.map((p, i) => ({ id: i + 1, senderName: p.displayName ?? "Owner", email: p.email, unreadConversations: inFolder(folderId(i + 1, "inbox")).filter((c) => !c.read).length })) },
+      list_folders: { description: "List an account's folders.", shape: { accountId: z.number() }, run: (a) => (Object.keys(FOLDER_BASE) as Folder[]).map((f) => ({ id: folderId(a.accountId, f), name: FOLDER_NAME[f], identity: f, parentId: null, unreadConversations: f === "inbox" ? inFolder(folderId(a.accountId, f)).filter((c) => !c.read).length : 0 })) },
       list_conversations: { description: "List the conversations of a folder, newest first.", shape: { folderId: z.number(), limit: z.number().optional() }, run: (a) => inFolder(a.folderId).slice(0, a.limit ?? 50).map(row) },
       search_conversations: {
         description: "Search conversations in every folder (words in the subject, body, sender; from:name).",
@@ -119,7 +130,7 @@ export class FakeMail {
       },
       get_message: { description: "Read one message (or draft) by its id.", shape: { messageId: z.number() }, run: (a) => shownMessage(msg(a.messageId).m) },
       get_conversation: { description: "A conversation's messages (without bodies).", shape: { conversationId: z.string() }, run: (a) => ({ ...row(conv(a.conversationId)), messages: conv(a.conversationId).messages.map(({ body: _b, ...m }) => ({ ...m, attachmentCount: m.attachments.length })) }) },
-      list_attachments: { description: "List a message's attachments.", shape: { messageId: z.number() }, run: (a) => msg(a.messageId).m.attachments },
+      list_attachments: { description: "List a message's attachments.", shape: { messageId: z.number() }, run: (a) => shownAtt(msg(a.messageId).m) },
       archive_conversation: {
         description: "Move a conversation to the Archive. Its id changes.",
         shape: { conversationId: z.string() },
@@ -148,7 +159,7 @@ export class FakeMail {
         description: "Start a new mail (no thread) as a draft. The body is HTML.",
         shape: { accountId: z.number().optional(), to: z.array(recipient).optional(), cc: z.array(recipient).optional(), bcc: z.array(recipient).optional(), subject: z.string().optional(), body: z.string().optional(), attachments: z.array(z.string()).optional(), showInUi: z.boolean().optional() },
         run: (a) => {
-          const m = draft(undefined, (a.to ?? []).map(personOf), a.subject ?? "", a.body ?? "", (a.cc ?? []).map(personOf));
+          const m = draft(undefined, (a.to ?? []).map(personOf), a.subject ?? "", a.body ?? "", (a.cc ?? []).map(personOf), a.accountId ?? 1);
           m.bcc = (a.bcc ?? []).map(personOf);
           return { messageId: m.id, status: "draft_created", note: "Draft saved." };
         },
@@ -180,7 +191,7 @@ export class FakeMail {
         shape: { conversationId: z.string(), body: z.string().optional() },
         run: (a) => {
           const c = conv(a.conversationId);
-          const m = draft(undefined, [], `Fwd: ${c.subject}`, `${a.body ?? ""}<hr>${c.messages.at(-1)!.body}`);
+          const m = draft(undefined, [], `Fwd: ${c.subject}`, `${a.body ?? ""}<hr>${c.messages.at(-1)!.body}`, [], c.account);
           return { messageId: m.id, conversationId: c.conversationId, mode: "forward", status: "draft_created", note: "Draft saved with no recipients." };
         },
       },
@@ -224,8 +235,15 @@ export class FakeMail {
 
   // What the approval of a send reads back (runtime.ts MAIL.mailbird.start sets this over a real Mailbird connection): the draft as get_message gives it. Not recorded as a call of the run.
   readDraft = (id: number): unknown => {
-    for (const c of this.conversations) for (const m of c.messages) if (m.id === id) return { body: m.body, attachments: m.attachments, id: m.id, from: m.from, subject: m.subject, to: m.to, cc: m.cc, bcc: m.bcc };
+    for (const c of this.conversations) for (const m of c.messages) if (m.id === id) return { body: m.body, attachments: m.attachments.map(({ text: _t, ...a }) => a), id: m.id, from: m.from, subject: m.subject, to: m.to, cc: m.cc, bcc: m.bcc };
     return undefined;
+  };
+
+  // get_attachment_content as the real client returns it (a metadata item, then the file as a resource item): what open_file reads (play.ts patches the blocked client with it).
+  attachmentContent = (messageId: number, attachmentId: number): unknown[] => {
+    const a = this.conversations.flatMap((c) => c.messages).find((m) => m.id === Number(messageId))?.attachments.find((x) => x.id === Number(attachmentId));
+    if (!a) throw new Error("Attachment not found");
+    return [{ type: "text", text: JSON.stringify({ attachmentId: a.id, fileName: a.fileName, mimeType: a.mimeType, size: a.size }) }, { type: "resource", resource: { uri: `attachment://${a.id}`, mimeType: a.mimeType, blob: Buffer.from(a.text).toString("base64") } }];
   };
 
   // For the state checks.
