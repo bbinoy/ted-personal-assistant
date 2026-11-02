@@ -94,7 +94,7 @@ export function project(e: Event, why: (conv: string, run: string | undefined, t
     case "notice":
       if (e.conv === undefined) return [];
       if (e.state === "dropped") return [{ conv: e.conv, cat: "notice", text: journalText({ what: flat(e.text, 160), why: { text: "they were held overnight and are not sent as they were written; nothing here can say them again in today's words" } }) }];
-      return e.state === "held" ? [{ conv: e.conv, cat: "notice", text: journalText({ what: `Held a message for later: ${flat(e.text, 160)}`, why: { text: "quiet hours or today's limit of unprompted messages" } }) }] : [];
+      return e.state === "held" ? [{ conv: e.conv, cat: "notice", text: journalText({ what: `Held a message for later: ${flat(e.text, 160)}`, why: { text: "quiet hours" } }) }] : [];
     case "expired":
       return e.conv !== undefined ? [{ conv: e.conv, cat: "approval", text: journalText({ what: `Asked about ${flat(e.label, 160)}; no answer within ${e.wait}, so nothing was done`, why: { text: "a question nobody answered lapses on its own, without a message" } }) }] : [];
     case "payment":

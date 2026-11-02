@@ -123,12 +123,13 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     const looker0 = lookerOf(conv);
     // Why it is due (held posts: due once quiet ends; a reminder that came due, a meeting to prepare or a routine whose time has come: at once). The reasons are told to the look.
+    const routineDue = routinesWaiting(conv, now); // the people asked for this at this time: its posts are not held (notices.ts scheduled)
     const due = [
       lookWhy(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }),
       heldWaiting(conv, now) && "Posts you held back are waiting.",
       ...(looker0.tasks && remindersWaiting(conv) ? reminderWhy(waitingReminders(conv), { now: now.getTime(), zone: looker0.zone }) : []), // (wake with a reason: the event itself, in the trigger line)
       ...(looker0.meetings && meetingsWaiting(conv) ? meetingWhy(waitingMeetings(conv), { now: now.getTime(), zone: looker0.zone }) : []),
-      routinesWaiting(conv, now) && "A routine is due.",
+      routineDue && "A routine is due.",
     ].filter((r): r is string => typeof r === "string");
     if (!due.length) return "not-due";
     if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
@@ -160,7 +161,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       const log = logSince(conv, since);
       return { prompt: lookPrompt(instruction, log.lines, !!since), seenAt: log.seenAt };
     };
-    let held = false; // something this look said was held for later (quiet hours, the day's cap)
+    let held = false; // something this look said was held for later (quiet hours)
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -178,12 +179,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       reply = await pipeline.sendWhile(
         conv,
         () => {
-          // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent (notices.ts).
+          // What the run sends with the send tool is held like its final answer (quiet hours) unless it says urgent or a routine is due (notices.ts).
           gateSink(conv.key, (text, urgent) => {
-            if (submitPost(conv, text, urgent, now) !== "held") return undefined;
+            if (submitPost(conv, text, urgent, now, routineDue) !== "held") return undefined;
             held = true;
             emit({ type: "notice", state: "held", conv: conv.key, text, source: auditSource({ who: conv.kind, attended: false }) });
-            return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
+            return "Not sent now: it is quiet hours, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
           return deps.run(conv, access, build, {
             facts,
@@ -225,8 +226,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     if (answer?.message && !stale) {
       const message = answer.message;
-      // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
+      // Quiet hours are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent or a routine is due (the people asked for that time).
+      if (submitPost(conv, message, answer.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);

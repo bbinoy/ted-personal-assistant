@@ -162,8 +162,7 @@ test("a tenant's suspension, cooldown and a missing instance key each stop her l
   await nokey.wakeups.tick(NOON);
   await nokey.wakeups.tick(NOON);
   assert.deepEqual(tenantRuns(nokey), []);
-  assert.equal(nokey.alerts.length, 1);
-  assert.match(nokey.alerts[0]!, /TENANT_ANTHROPIC_API_KEY/);
+  assert.equal(nokey.seen.runs.filter((r) => r.prompt.includes("TENANT_ANTHROPIC_API_KEY")).length, 1, "the owner's look is handed the notice once, however many tenants and ticks");
   assert.equal(allows({ kind: "tenant", tenantId: bea.id }, "wake"), true);
 });
 

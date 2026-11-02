@@ -20,7 +20,6 @@ const friendConv = { kind: "tenant", key: `tenant:${friend.id}`, convId: friendC
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
-s.maxUnpromptedPerDay = 6;
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
 const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
@@ -109,7 +108,7 @@ test("the switch is a file per conversation: set, read, expire, clear; /status s
   clean();
 });
 
-test("while quiet: unprompted posts are held (urgent goes), the heartbeat's cap is untouched, and when quiet ends the look is due and gets them all", () => {
+test("while quiet: unprompted posts are held (urgent goes), and when quiet ends the look is due and gets them all", () => {
   clean();
   const c = owner();
   setQuiet(ownerConv, new Date(NOW.getTime() + 2 * 3_600_000).toISOString());

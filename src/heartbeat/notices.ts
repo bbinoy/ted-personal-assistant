@@ -3,7 +3,7 @@ import { MAX_HELD, holdFact } from "../core/ownerfact.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
-import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
+import { inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -13,28 +13,24 @@ import { auditSource } from "../core/runkind.ts";
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Small, separate mechanisms, all pure planners over a little state:
 //   1. system matters (the damaged database (1b), the shared key, spend warnings) are a FACT for her next run (core/ownerfact.ts holdFact), which says it in its own words; there is no fixed text to her.
 //   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
-//   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY, is HELD
-//      (state, per conversation). Code never words it again: when quiet is over (and the cap has room) the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts),
-//      each handed over exactly once, and says again in today's words only what is still true. A conversation without a look drops what it held (dropUnreachable). The run marks a post `urgent`
-//      (rules.ts) only when it is time-critical: that is exempt from all of it.
+//   3. quiet hours and /quiet, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on) is HELD (state, per conversation). Code never words it
+//      again: when quiet is over the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts), each handed over exactly once, and says again in today's words
+//      only what is still true. A conversation without a look drops what it held (dropUnreachable). The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from it.
+//      A post of a look that runs a DUE ROUTINE (`scheduled`, decided by code in look.ts, never by the run) is exempt from the quiet window (the people asked for it at that time), not from
+//      /quiet: that is an explicit "leave me alone". There is no daily limit on posts.
 
 // ---- the pure planners ----
 
-export type Plan = "post" | "hold-quiet" | "hold-cap";
+export type Plan = "post" | "hold";
 
-// Urgent posts always go. Otherwise the quiet window holds, then the day's cap (a quiet-hours post is held even if the cap is also spent: it is delivered in the morning, within the cap).
-export function planPost(i: { urgent: boolean; night: boolean; posted: number; cap: number }): Plan {
-  if (i.urgent) return "post";
-  if (i.night) return "hold-quiet";
-  return i.posted >= i.cap ? "hold-cap" : "post";
-}
+// Urgent posts always go; otherwise the quiet window (or /quiet) holds. (`night` is decided by the caller: for a scheduled post, a due routine, only /quiet counts.)
+export const planPost = (i: { urgent: boolean; night: boolean }): Plan => (i.urgent || !i.night ? "post" : "hold");
 
-// Is it time to deliver what was held? Outside the quiet window and with the cap not yet spent today (a cap-held post therefore waits for the next day).
-export const planFlush = (i: { night: boolean; posted: number; cap: number; held: number }): boolean => i.held > 0 && !i.night && i.posted < i.cap;
+// Is it time to deliver what was held? Outside the quiet window and with something held.
+export const planFlush = (i: { night: boolean; held: number }): boolean => i.held > 0 && !i.night;
 
 export interface Held {
   text: string;
-  why: "quiet" | "cap";
   at?: number; // when it was held (epoch ms); older rows have none and are kept as they were
 }
 
@@ -94,39 +90,23 @@ export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {
 
 // ---- the state: two tables of the conversation's assistant.db (`hold`: the day's count; `held_posts`: what is held, oldest first) ----
 
-interface HoldState {
-  day: string; // the conversation's own day the count belongs to
-  posted: number; // unprompted posts so far that day (urgent and system notices not counted)
-  held: Held[];
-}
-
-type HeldRow = { text: string; why: string; at: number | null };
-const heldOf = (r: HeldRow): Held => ({ text: r.text, why: r.why === "cap" ? "cap" : "quiet", ...(r.at !== null ? { at: r.at } : {}) });
-const HELD_SQL = "SELECT text, why, at FROM held_posts ORDER BY seq";
+type HeldRow = { text: string; at: number | null };
+const heldOf = (r: HeldRow): Held => ({ text: r.text, ...(r.at !== null ? { at: r.at } : {}) });
+const HELD_SQL = "SELECT text, at FROM held_posts ORDER BY seq";
 
 /** How many posts are held (the usual tick: one small query, nothing more). */
 const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
 /** The held posts, oldest first (a read for the tests and the doctor). */
 export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>(HELD_SQL).map(heldOf);
-/** Forget the day's count and everything held (tests). */
-export function resetHeld(conv: Pick<Conversation, "convId">): void {
-  const db = convDb(conv.convId);
-  db.tx(() => (db.run("DELETE FROM held_posts"), db.run("DELETE FROM hold")));
-}
+/** Forget everything held (tests). */
+export const resetHeld = (conv: Pick<Conversation, "convId">): void => void convDb(conv.convId).run("DELETE FROM held_posts");
 
-function load(conv: Conversation, now: Date, zone: string): HoldState {
-  const db = convDb(conv.convId);
-  const raw = db.get<{ day: string; posted: number }>("SELECT day, posted FROM hold WHERE id = 1");
-  const day = dayIn(now, zone);
-  return { day, posted: raw?.day === day ? raw.posted : 0, held: db.all<HeldRow>(HELD_SQL).map(heldOf) };
-}
-// The whole state in one transaction (the file was one atomic write): the count, and the held posts, newest MAX_HELD.
-function save(conv: Conversation, st: HoldState): void {
+// The held posts in one transaction, newest MAX_HELD (the old `why` column is written as "quiet": rows from the time of a daily cap read the same).
+function save(conv: Conversation, held: Held[]): void {
   const db = convDb(conv.convId);
   db.tx(() => {
-    db.run("INSERT INTO hold (id, day, posted) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET day = excluded.day, posted = excluded.posted", st.day, st.posted);
     db.run("DELETE FROM held_posts");
-    for (const h of st.held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, at) VALUES (?, ?, ?)", h.text, h.why, h.at ?? null);
+    for (const h of held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, at) VALUES (?, 'quiet', ?)", h.text, h.at ?? null);
   });
 }
 const zoneFor = (conv: Conversation): string => zoneOf(conv);
@@ -137,18 +117,12 @@ const holding = (conv: Conversation, now: Date, zone: string): boolean => isNigh
 // Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own waits by this.
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
-// A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
-export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date): "post" | "held" {
+// A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it). `scheduled`: the look is running a due routine.
+export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date, scheduled = false): "post" | "held" {
   const zone = zoneFor(conv);
-  const st = load(conv, now, zone);
-  const plan = planPost({ urgent, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
-  if (plan === "post") {
-    if (!urgent) st.posted++;
-    save(conv, st);
-    return "post";
-  }
-  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime() });
-  save(conv, st);
+  if (planPost({ urgent, night: scheduled ? isQuiet(conv, now) : holding(conv, now, zone) }) === "post") return "post";
+  const held = heldPosts(conv);
+  if (!held.some((h) => h.text === text)) save(conv, [...held, { text, at: now.getTime() }]);
   return "held";
 }
 
@@ -156,9 +130,8 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
 export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, text: string, costUsd?: number) =>
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
 
-// What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet) and the day's cap has room (a
-// cap-held post therefore waits for the next day).
-const ready = (conv: Conversation, now: Date, st: HoldState): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: stillTrue(st.held, now.getTime()).length });
+// What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet).
+const ready = (conv: Conversation, now: Date, held: readonly Held[]): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), held: stillTrue(held, now.getTime()).length });
 
 // All the held posts, newest first, for the conversation's next look. They are PENDING while that look runs (like seen_mail): `done()` deletes them (and what was stale), and the look calls it only
 // when it ended well (posted or silent); a failed or called-off look leaves them for the next one, so each is told at most once yet not lost (the 36 hours of stillTrue end a stuck item).
@@ -166,15 +139,15 @@ const ready = (conv: Conversation, now: Date, st: HoldState): boolean => planFlu
 export function takeHeld(conv: Conversation, now: Date): { held: Held[]; done: () => void } {
   const none = { held: [], done: () => {} };
   if (heldCount(conv) === 0) return none;
-  const st = load(conv, now, zoneFor(conv));
-  if (!ready(conv, now, st)) return none;
+  const held = heldPosts(conv);
+  if (!ready(conv, now, held)) return none;
   const db = convDb(conv.convId);
   const upTo = db.num("SELECT COALESCE(MAX(seq), 0) FROM held_posts"); // (posts held while the look runs are not part of it)
-  return { held: stillTrue(st.held, now.getTime()).reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
+  return { held: stillTrue(held, now.getTime()).reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
 }
 
 // Is something held that may be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
-export const heldWaiting = (conv: Conversation, now: Date): boolean => heldCount(conv) > 0 && ready(conv, now, load(conv, now, zoneFor(conv)));
+export const heldWaiting = (conv: Conversation, now: Date): boolean => heldCount(conv) > 0 && ready(conv, now, heldPosts(conv));
 
 // A conversation with no look (its capabilities, as wake.ts asks them) has nobody to hand held posts to: they are dropped, never sent as they were written.
 export function dropUnreachable(conv: Conversation): void {

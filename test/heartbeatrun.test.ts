@@ -204,6 +204,24 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 60]]);
 });
 
+test("a routine due inside quiet hours is delivered (posts and sends are not held); a look without a due routine still holds", async () => {
+  const QUIZ = new Date(2026, 9, 14, 22, 5, 0);
+  const quiz = (m: string) => {
+    const r = rig(() => ({ message: m, nextCheckMinutes: 60 }));
+    writeFileSync(join(r.conv.notesDir, "routine-quiz.md"), "---\nwhen: every day at 22:00\n---\nPost the evening quiz.\n");
+    return r;
+  };
+  const due = quiz("Quiz time: what is the capital of Peru?");
+  liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-quiz', ?)", new Date(2026, 9, 1).getTime());
+  due.at(QUIZ);
+  assert.equal(await due.w.look(due.conv, QUIZ), "posted");
+  assert.deepEqual(due.seen.posted, ["Quiz time: what is the capital of Peru?"]);
+  liveConvDb(owner().convId)!.run("DELETE FROM routine_runs");
+  const plain = rig(() => ({ message: "Some news.", nextCheckMinutes: 60 }));
+  plain.at(QUIZ);
+  assert.equal(await plain.w.look(plain.conv, QUIZ), "silent", "no routine due: held by quiet hours");
+});
+
 test("the incident: a post held at 22:35 is not sent at 07:00; the morning look gets it once as a fact, a second look does not", async () => {
   const EVENING = new Date(2026, 9, 22, 22, 35, 0);
   const TEXT = "Evening, Alex. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";
@@ -253,28 +271,6 @@ test("owner's look at night: the posts are HELD in code, an urgent one goes at o
   await w.tick(morning); // the look is due at once: it is handed what was held (and posts its own urgent news)
   assert.equal(seen.posted.length, 2, "nothing held is sent as it was written");
   assert.equal(seen.prompts[seen.prompts.length - 1]!.split("Held back and not sent").length - 1, 2, "both held posts are in the morning look's prompt");
-});
-
-test("owner's look in the day: the daily cap holds the posts past it (urgent ones exempt)", async () => {
-  s.maxUnpromptedPerDay = 2;
-  try {
-    let urgent = false;
-    const { w, conv, seen, at } = rig(() => ({ message: `msg #${seen.recorded.length + seen.posted.length + 1}`, nextCheckMinutes: 10, urgent }));
-    const outcomes: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      const t = min(DAY, i * 11);
-      at(t);
-      outcomes.push(await w.look(conv, t));
-    }
-    urgent = true;
-    const t = min(DAY, 40);
-    at(t);
-    outcomes.push(await w.look(conv, t));
-    assert.deepEqual(outcomes, ["posted", "posted", "silent", "posted"]);
-    assert.equal(seen.posted.length, 3);
-  } finally {
-    s.maxUnpromptedPerDay = 12;
-  }
 });
 
 test("owner's look: due only when the chosen time has come, the owner wrote or a note changed", async () => {

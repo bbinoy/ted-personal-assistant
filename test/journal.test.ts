@@ -70,7 +70,7 @@ test("journal sink: the sentence says what, why and the undo; the model's own re
   assert.deepEqual(journalProject({ type: "done", conv: "owner", tool: "mcp__browser__browser_click", source: "browse", input: {}, what: "Clicked", cat: "browse" }), [], "a browser click nobody was asked about is no action worth a line");
   assert.equal(journalProject({ type: "done", conv: "owner", tool: "mcp__browser__browser_click", source: "browse", input: {}, what: "Clicked", cat: "browse", why: { text: "approved", asked: true } }).length, 1);
   assert.deepEqual(journalProject({ type: "done", tool: "t", source: "chat", input: {}, what: "x", cat: "other" }), [], "no conversation, no line");
-  assert.match(journalProject({ type: "notice", state: "held", conv: "tenant:ann", text: "Eve is waiting", source: "group" })[0]!.text, /^Held a message for later: Eve is waiting\. Why: quiet hours or today's limit/);
+  assert.match(journalProject({ type: "notice", state: "held", conv: "tenant:ann", text: "Eve is waiting", source: "group" })[0]!.text, /^Held a message for later: Eve is waiting\. Why: quiet hours/);
   assert.deepEqual(journalProject({ type: "notice", state: "sent", conv: "owner", text: "hi", source: "background" }), [], "a sent notice is in the log as a notice already");
   assert.deepEqual(journalProject({ type: "removal", tool: "group_forget", decision: "removed", source: "chat", meta: {}, text: "Forgot the group G" }).map((l) => [l.conv, l.cat]), [["owner", "removal"]], "a removed conversation's record is the owner's");
   assert.equal(journalProject({ type: "dream", result: "no-change", source: "dream", conv: "owner", meta: {} }).length, 0);

@@ -23,7 +23,7 @@ import { claimPreps } from "./preptick.ts";
 //   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has both, unless the instance switches one off), while she is active, the key is out of a cooldown and
 //             she is within her day's budget; the run is on the instance key, billed to her, her approvals go to her chat and the answer to her chat only
 // Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown; for a friend the shared key) and runs on the Payer it returns: no per-conversation branches here.
-// The model decides; THESE are the guards, in code: pause, the next look clamped to 10..60 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
+// The model decides; THESE are the guards, in code: pause, the next look clamped to 10..60 minutes, and a failed run is logged and silent. Quiet hours are code too, in the look's post (notices.ts holds
 // an unprompted post and the tick delivers what was held as one message); looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
 
 interface WakeDeps {

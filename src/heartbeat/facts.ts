@@ -71,7 +71,7 @@ function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): st
   return `Questions that were declined or lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
 }
 
-// Everything held back (notices.ts takeHeld, newest first: quiet hours, /quiet or the day's cap) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
+// Everything held back (notices.ts takeHeld, newest first: quiet hours or /quiet) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
 // each trimmed. The run says again only what is still true today, in today's words; "" when there is none.
 export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date, zone: string): string {
   if (held.length === 0) return "";
