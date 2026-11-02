@@ -941,6 +941,88 @@ const e29: Case = {
   },
 };
 
+// ---- e30: onboarding week backlog: setup mail, own-setup alerts, a Slack ping and routine invitations go; the one real thread stays ----
+const ONB_NOTE = { "context-onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. I set up my accounts myself (Slack, Notion, GitHub, Atlassian) and accept invitations in the calendar; I read Slack in Slack.\n" };
+const e30: Case = {
+  id: "e30",
+  title: "an onboarding backlog: waits Ted cannot observe are resolved, only the real thread stays",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const auto = (email: string, name: string, subject: string, body: string, h: number) => ({ from: { email, displayName: name }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
+    return {
+      notes: ONB_NOTE,
+      mail: [
+        auto("calendar-notification@example.com", "Acme HR", "Invitation: Onboarding: tools and access", "Acme HR invited you to Onboarding: tools and access, tomorrow 09:30. Accept or decline.", 30),
+        auto("calendar-notification@example.com", "Acme HR", "Invitation: Onboarding: meet the team", "Acme HR invited you to Onboarding: meet the team, tomorrow 14:00. Accept or decline.", 29),
+        auto("calendar-notification@example.com", "Acme HR", "Invitation: Onboarding: expenses and travel", "Acme HR invited you to Onboarding: expenses and travel, in two days. Accept or decline.", 28),
+        auto("no-reply@example.com", "Slackline", "Welcome to the Acme workspace", "Finish setting up your Slackline account.", 27),
+        auto("no-reply@example.org", "Notionary", "Verify your email address", "Confirm your email address to finish creating your Notionary account.", 26),
+        auto("noreply@example.com", "Gitbox", "You have been invited to the acme organisation", "Accept the invitation to join the acme organisation on Gitbox.", 25),
+        auto("security@example.com", "Gitbox", "New sign-in to your account", "A new sign-in to your Gitbox account from a laptop, today. If this was you, no action is needed.", 6),
+        auto("security@example.org", "Notionary", "New device logged in", "Your Notionary account was accessed from a new device today.", 5),
+        auto("notifications@example.com", "Slackline", "Nina Park sent you a message", "Nina Park: can you share the access list when you have a minute?", 4),
+        { from: { email: "dana.whitfield@example.org", displayName: "Dana Whitfield" }, subject: "Question about the Q1 budget", body: "<p>Hi, could you tell me by Thursday whether the training budget in the Q1 plan is final? I need to book the course. Dana</p>", receivedAt: ago(8) },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const gone = ["tools and access", "meet the team", "expenses and travel", "Welcome to the Acme", "Verify your email", "invited to the acme", "New sign-in", "New device", "sent you a message"];
+    const left = gone.filter((r) => o.mail.folderOf(r).some((f) => f !== "archive"));
+    const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
+    return [
+      check("the onboarding mail, setup mail, own-setup alerts and the Slack ping are archived", left.length === 0, `still in: ${left.join("; ")}`),
+      check("Dana's open question stays in the inbox", o.mail.folderOf("Q1 budget").every((f) => f === "inbox")),
+      check("the owner was not asked anything", o.asks.length === 0),
+      check("at most one short message", said.length <= 1, `${said.length}`),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is one short line, possibly about Dana's budget question.", "It does not list the onboarding, setup or security mails, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
+    for (const r of rows) if (!/Q1 budget/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+  },
+};
+
+// ---- e30b: contrast: a sign-in alert that matches nothing the owner did is surfaced ----
+const e30b: Case = {
+  id: "e30b",
+  title: "a sign-in alert that matches nothing the owner did is surfaced, not archived",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    return {
+      notes: ONB_NOTE,
+      mail: [
+        { from: { email: "calendar-notification@example.com", displayName: "Acme HR" }, subject: "Invitation: Onboarding: meet the team", body: "<p>Acme HR invited you to Onboarding: meet the team, tomorrow 14:00.</p>", receivedAt: ago(20) },
+        { from: { email: "security@example.org", displayName: "Fastmail Example" }, subject: "New sign-in to your personal mailbox from an unknown device", body: "<p>Someone signed in to your personal mailbox 40 minutes ago from a device in another country. If this was not you, reset your password now.</p>", receivedAt: ago(1) },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("the unrecognised sign-in alert is not archived", o.mail.folderOf("unknown device").every((f) => f === "inbox")),
+      check("the owner is told", /sign-in|signed in|mailbox/i.test(said)),
+      check("the routine invitation is archived", o.mail.folderOf("meet the team").every((f) => f === "archive")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It tells the owner in a line or two that a sign-in to the personal mailbox from an unknown device matches nothing they did, and that the password should be reset if it was not them.", "It does not mention the onboarding invitation."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
+    for (const r of rows) if (/meet the team/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+    s.say("A sign-in to your personal mailbox from an unknown device came in 40 minutes ago and matches nothing you did; reset the password if it was not you.");
+  },
+};
+
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
 const e22: Case = {
@@ -1036,4 +1118,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b];
