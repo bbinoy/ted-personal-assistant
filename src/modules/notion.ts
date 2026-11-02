@@ -20,7 +20,15 @@ export const notionRows = (prefix: string, o: Parameters<ReturnType<typeof rowsO
 // The floor of Notion's tools, shared by the owner's connector and a friend's own Notion (modules/notionhosted.ts spreads it): moving a page is always the
 // person's call (never judged). A page sent to the bin (notion-update-page with in_trash or archived true) is a destructive action the judge handles with care (neverallowed.ts
 // ConfirmDelete): never free, never fixed. The same flags on any other tool, and allow_deleting_content (it deletes child pages), stay never allowed.
-export const NOTION_FLOOR: ModuleFloor = { judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] }, creates: (name) => name === "notion-create-pages" };
+// The judge sees only the new text, so code says how much a page edit replaces (a tidy and a loss look alike otherwise): a whole-page replace, or the sizes of a pair of old/new strings.
+const sizeNote = (input: Record<string, unknown>): string => {
+  const ups = Array.isArray(input.content_updates) ? (input.content_updates as { old_str?: unknown; new_str?: unknown }[]) : [];
+  const len = (v: unknown) => (typeof v === "string" ? v.length : 0);
+  if (input.command === "replace_content") return `\nReplaces: the whole page with ${len(input.new_str)} characters`;
+  if (ups.length) return `\nReplaces: about ${ups.reduce((n, u) => n + len(u.old_str), 0)} characters with ${ups.reduce((n, u) => n + len(u.new_str), 0)}`;
+  return "";
+};
+export const NOTION_FLOOR: ModuleFloor = { judgeNote: { "page-write": sizeNote }, judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] }, creates: (name) => name === "notion-create-pages" };
 export const NOTION_UPDATE_TITLE = { icon: "📝", title: "Change Notion page", whenDeleting: "Move Notion page to the bin", labels: { page_id: "Page", in_trash: "In the bin", archived: "Archived" } } as const;
 
 export const notionModule: ToolModule = {

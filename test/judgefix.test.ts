@@ -131,3 +131,10 @@ test("follow-through: the judge is told the notification facts and the guidance 
   assert.match(judgePrompt({ description: j.seen[0]!, provenance: { kind: "owner", message: "where is the Balboa course?" } }), /Förrlibuckstrasse/);
   assert.equal((await judgeAction({ description: "x", provenance: { kind: "owner", message: "add my flight" } }, async () => ({ decision: "fix", reason: "times" }))).decision, "fix");
 });
+
+test("a Notion page edit tells the judge how much it replaces", () => {
+  const N = "mcp__claude_ai_Notion__notion-update-page";
+  assert.match(notifyNote(N, { command: "replace_content", new_str: "abc" }), /whole page with 3 characters/);
+  assert.match(notifyNote(N, { content_updates: [{ old_str: "four", new_str: "5" }] }), /about 4 characters with 1/);
+  assert.equal(notifyNote(N, { command: "insert_content_after", new_str: "x" }), "");
+});
