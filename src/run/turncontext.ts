@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isSilent } from "../core/silent.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 
 // What a conversation's session has been told at the start of a turn (runoptions.ts turnContext: what is connected, the last brief, the recent notices, a friend's
@@ -37,4 +38,4 @@ export const turnFactsFrom = (fn: typeof provider): void => void (provider = fn)
 export const turnFacts = (conv: Conversation, now: Date): TurnFacts | undefined => provider?.(conv, now);
 
 // Did a turn's reply say something to the person? [[silent]] and a bare reaction ([[react: 👍]]) say nothing, and so tell nothing.
-export const spoke = (text: string): boolean => text.replace(/\[\[(silent|react:[^\]]*)\]\]/gi, "").trim() !== "";
+export const spoke = (text: string): boolean => !isSilent(text) && text.replace(/\[\[(silent|react:[^\]]*)\]\]/gi, "").trim() !== "";

@@ -105,7 +105,7 @@ test("the next look is clamped to 10..60 minutes, whatever the model says, and f
 test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
   assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false, triage: [] });
   assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 60, urgent: false, triage: [] });
-  for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
+  for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say", "SILENT", "**[[SILENT]]**", "(silent)"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
   assert.equal(parseHeartbeatAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
   assert.equal(parseHeartbeatAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
   assert.equal(parseHeartbeatAnswer(undefined, "").nextCheckMinutes, 30);

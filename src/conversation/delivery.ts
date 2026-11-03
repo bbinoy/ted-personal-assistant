@@ -7,6 +7,7 @@ import { RunStopped } from "../run/ceiling.ts";
 import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
 import { isPicture } from "./openbytes.ts";
 import { withTempFile } from "../modules/send/shots.ts";
+import { isSilent } from "../core/silent.ts";
 import { splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { stripWhole } from "./split.ts";
@@ -21,7 +22,6 @@ import { takeCapNotice } from "../core/capnotice.ts";
 import { causeOf, reportReconnect } from "../tenants/errors.ts";
 
 const VOICE_TIMEOUT_SECONDS = 75; // ONE deadline for a whole voice reply, from the start of the synthesis to the hand-over to the messenger; over it the reply goes out as text
-const SILENT = /^\s*\[\[silent\]\]\s*$/i;
 
 // Everything the assistant says or shows while a conversation is being answered: the delivery of a reply (text, voice, picture, reaction), "typing…", the failure notice, and the run of one turn.
 // This module owns the typing holds and the once-per-interval notice record.
@@ -101,20 +101,20 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         told = "Reacted.";
       } else if (c.kind === "picture") {
         const caption = c.caption.trim();
-        await out.sendAttachment({ file: c.file, kind: "picture" }, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target });
+        await out.sendAttachment({ file: c.file, kind: "picture" }, isSilent(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target });
         state.spoke = true;
         state.pieces++;
         console.log(`${conv.kind} picture sent (${c.id}, ${c.size} bytes)`);
         told = `Sent ${c.id} as a picture.`;
       } else if (c.kind === "file") {
         const caption = c.caption.trim();
-        await withTempFile(c.held, (file) => out.sendAttachment({ file, kind: isPicture(c.held.bytes) ? "picture" : "file" }, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target })); // (the temp copy signal-cli reads is deleted right after)
+        await withTempFile(c.held, (file) => out.sendAttachment({ file, kind: isPicture(c.held.bytes) ? "picture" : "file" }, isSilent(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target })); // (the temp copy signal-cli reads is deleted right after)
         state.spoke = true;
         state.pieces++;
         console.log(`${conv.kind} file sent (${c.id}, ${c.size} bytes)`);
         told = `Sent ${c.id} (${c.held.name}) as ${isPicture(c.held.bytes) ? "a picture" : "a file"}.`;
       } else {
-        const words = SILENT.test(c.text) ? "" : c.text.trim(); // (a text goes out as one message per paragraph, outbound.ts reply; a voice note speaks the whole)
+        const words = isSilent(c.text) ? "" : c.text.trim(); // (a text goes out as one message per paragraph, outbound.ts reply; a voice note speaks the whole)
         let spoken = false;
         let speechFailed = false;
         if (c.voice && !!words && canSpeak() && words.length <= MAX_SPOKEN_CHARS) {

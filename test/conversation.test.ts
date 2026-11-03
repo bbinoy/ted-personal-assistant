@@ -180,7 +180,7 @@ test("private chat: [[react]] alone reacts and sends nothing; with words it does
 });
 
 test("private chat: [[silent]] and an empty answer send nothing", async () => {
-  for (const reply of ["[[silent]]", "  [[SILENT]]  ", ""]) {
+  for (const reply of ["[[silent]]", "  [[SILENT]]  ", "SILENT", "*silent*", ""]) {
     const { r, pipeline } = rig({ run: async () => reply });
     await pipeline.handleIncoming(owner(), msg());
     assert.equal(r.sent.length, 0, reply);

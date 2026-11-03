@@ -725,6 +725,7 @@ src/core/paths.ts  repo root and default data dir
 src/core/pause.ts  the pause switch (a kv row, fails safe)
 src/core/preset.ts  preset loader, validation, templates
 src/core/reaction.ts  `[[react: 👍]]` markers
+src/core/silent.ts  the `[[silent]]` marker and its slipped forms (`SILENT`, `(silent)`)
 src/core/redact.ts  keeps numbers and credentials out of logs
 src/core/requirelayout.ts  layout guard for CLIs and the intake page
 src/core/retention.ts  retention registry and scheduler
