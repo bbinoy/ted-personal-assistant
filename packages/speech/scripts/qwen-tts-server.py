@@ -2,7 +2,7 @@
 # It clones the voice of a reference recording you provide (never shipped with this repo) and keeps the model loaded.
 # usage: qwen-tts-server.py MODEL REF_AUDIO     reference text: environment QWEN_TTS_REF_TEXT; request key: QWEN_TTS_NONCE
 # Listens on 127.0.0.1 only, on a free port, and prints "READY <port>" when the model is loaded and warmed up.
-# Exits when its parent goes away (stdin closes). POST /say {"text": ...} -> audio/wav; GET /health -> ok.
+# Exits when its parent goes away (stdin closes). POST /say {"text": ...} -> audio/wav; POST /warm {"voice": ...} encodes that voice's reference; GET /health -> ok.
 import json
 import os
 import re
@@ -58,7 +58,17 @@ def speak(text, voice=None):
     return np.concatenate(parts), model.sample_rate
 
 
-speak("Ready.")  # warm-up: also caches the reference codes for this recording
+warmed = set()
+
+
+def warm(voice=None):
+    """Encode a reference ahead of its first reply (once per voice and server start)."""
+    if voice not in warmed:
+        speak("Ready.", voice)
+        warmed.add(voice)
+
+
+warm()  # warm-up: also caches the reference codes for the default recording
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,7 +86,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, b"ok") if self.path == "/health" else self._send(404, b"not found")
 
     def do_POST(self):
-        if self.path != "/say":
+        if self.path not in ("/say", "/warm"):
             return self._send(404, b"not found")
         if nonce and self.headers.get("x-qwen-key") != nonce:
             return self._send(403, b"forbidden")
@@ -85,6 +95,9 @@ class Handler(BaseHTTPRequestHandler):
             if n <= 0 or n > 64 * 1024:
                 return self._send(400, b"bad length")
             body = json.loads(self.rfile.read(n))
+            if self.path == "/warm":
+                warm(body.get("voice"))
+                return self._send(200, b"ok")
             text = str(body["text"]).strip()
             voice = body.get("voice")
             if not text or len(text) > MAX_CHARS:

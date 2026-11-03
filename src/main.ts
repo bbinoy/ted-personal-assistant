@@ -140,7 +140,7 @@ const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hook
 };
 // The cloned voice takes 5 to 50 s to load: have it ready for the first spoken reply, at start-up and when a voice note comes in (it is stopped again after
 // WARM_IDLE_MINUTES (settings.ts) idle; warmQwen is idempotent while a start is under way or the server is up).
-const warmVoice = () => void (settings.tts.provider === "qwen" && warmQwen(settings.tts.qwen).then((err) => err && console.log(`Qwen voice not warmed up: ${err}`)));
+const warmVoice = (conversation?: string) => void (settings.tts.provider === "qwen" && warmQwen(settings.tts.qwen, conversation).then((err) => err && console.log(`Qwen voice not warmed up: ${err}`)));
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,

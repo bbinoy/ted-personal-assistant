@@ -42,7 +42,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   const canSpeak = () => deps.speech.ready();
   // A voice note in is likely answered by voice: start the voice server now, so its cold start overlaps the model run. Idempotent. Text turns and looks do not warm it (the server would never
   // idle out); their cold start is covered by the voice deadline (limits.ts) and no longer eats the generation time.
-  const warmVoice = () => canSpeak() && deps.speech.warm?.();
+  const warmVoice = (conv: Conversation) => canSpeak() && deps.speech.warm?.(conv.convId); // also encodes the conversation's own voice, which would cost its first reply
 
   // Checks the language, speaks and sends: "spoken", "text" (the voice does not speak this language: the words go out as text, as they are) or "failed" (the words go out
   // as text with a note that the voice did not work).
@@ -205,7 +205,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // enqueue(). It never throws: a failure becomes a notice (if someone is waiting) and a result.
   async function runTurn(conv: Conversation, turn: Turn): Promise<TurnResult> {
     const started = now();
-    if (turn.voiceIn) warmVoice();
+    if (turn.voiceIn) warmVoice(conv);
     const background = !!turn.reaction || !!turn.background; // a reaction or a wake-up is no conversation: no typing, no icons
     if (!background) status(conv, "👀", turn.target); // 👀 working, ✅ answered, ⚠️ failed, each replacing the last
     const typing = background ? undefined : holdTyping(conv, turn.timing); // already showing if the decision to answer came earlier
