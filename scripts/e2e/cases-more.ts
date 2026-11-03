@@ -1023,6 +1023,49 @@ const e30b: Case = {
   },
 };
 
+// ---- e31: a lesson note from a correction keeps only what it needed: routine onboarding notices go, the mail with the link still needed stays ----
+const e31: Case = {
+  id: "e31",
+  title: "a lesson note from one incident (not a blanket rule): routine onboarding notices are archived, the setup mail whose link is still needed stays",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    const auto = (email: string, name: string, subject: string, body: string, h: number) => ({ from: { email, displayName: name }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
+    return {
+      notes: {
+        "context-onboarding-links.md": "---\nname: context-onboarding-links\ndescription: Needed the links of two archived onboarding mails; still setting up accounts\n---\nAsked for two archived onboarding mails back because the links in them were still needed to finish the account setup, so those were kept until used. Routine notices of the same kind (welcome, tips, digests, sign-in alerts) do not need that.\n",
+        "context-onboarding.md": "---\nname: context-onboarding\ndescription: Started a new job; still setting up accounts\n---\nStarted a new job this month and sets up the accounts by hand. Asked for two archived onboarding mails back because the links in them were still needed. Said the Gitbox invitation link is the one still to use, so that mail must stay in the inbox until then.\n",
+      },
+      mail: [
+        auto("no-reply@example.com", "Slackline", "Your first week on Slackline", "Your weekly Slackline digest: three channels you might like.", 30),
+        auto("no-reply@example.com", "Slackline", "Welcome to the Acme workspace", "You are all set. Browse the Slackline tips.", 28),
+        auto("security@example.com", "Gitbox", "New sign-in to your account", "A new sign-in to your Gitbox account from a laptop, today. If this was you, no action is needed.", 6),
+        auto("security@example.org", "Notionary", "New device logged in", "Your Notionary account was accessed from a new device today.", 5),
+        auto("noreply@example.com", "Notionary", "Tips to get started", "Five tips to get the most out of Notionary.", 4),
+        auto("noreply@example.com", "Gitbox", "You have been invited to the acme organisation", "Accept the invitation to join the acme organisation on Gitbox: https://gitbox.example.com/invite/abc123 (valid for 7 days).", 20),
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const gone = ["first week on Slackline", "Welcome to the Acme", "New sign-in", "New device", "Tips to get started"];
+    const left = gone.filter((r) => o.mail.folderOf(r).some((f) => f !== "archive"));
+    return [
+      check("the routine onboarding notices are archived", left.length === 0, `still in: ${left.join("; ")}`),
+      check("the Gitbox invitation, whose link is still needed, stays in the inbox", o.mail.folderOf("invited to the acme").every((f) => f === "inbox")),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is one short line, possibly about the Gitbox invitation being kept.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
+    for (const r of rows) if (!/invited to the acme/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+  },
+};
+
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
 const e22: Case = {
@@ -1118,4 +1161,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31];
