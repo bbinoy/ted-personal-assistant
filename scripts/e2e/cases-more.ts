@@ -1023,10 +1023,10 @@ const e30b: Case = {
   },
 };
 
-// ---- e31: a lesson note from a correction keeps only what it needed: routine onboarding notices go, the mail with the link still needed stays ----
-const e31: Case = {
-  id: "e31",
-  title: "a lesson note from one incident (not a blanket rule): routine onboarding notices are archived, the setup mail whose link is still needed stays",
+// ---- e31 / e31b: a lesson note (e31) or an old rigid rule (e31b) from a correction keeps only what it needed: routine onboarding notices go, the mail with the link still needed stays ----
+const e31 = (rigid: boolean): Case => ({
+  id: rigid ? "e31b" : "e31",
+  title: `${rigid ? "an old rigid never-archive note" : "a lesson note from one incident (not a blanket rule)"}: routine onboarding notices are archived, the setup mail whose link is still needed stays`,
   turns: [],
   look: true,
   world: (t) => {
@@ -1034,6 +1034,7 @@ const e31: Case = {
     const auto = (email: string, name: string, subject: string, body: string, h: number) => ({ from: { email, displayName: name }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
     return {
       notes: {
+        ...(rigid ? { "triage-onboarding.md": "---\nname: triage-onboarding\ndescription: Onboarding mail\n---\nNever archive onboarding mail until he acted.\n" } : {}),
         "context-onboarding-links.md": "---\nname: context-onboarding-links\ndescription: Needed the links of two archived onboarding mails; still setting up accounts\n---\nAsked for two archived onboarding mails back because the links in them were still needed to finish the account setup, so those were kept until used. Routine notices of the same kind (welcome, tips, digests, sign-in alerts) do not need that.\n",
         "context-onboarding.md": "---\nname: context-onboarding\ndescription: Started a new job; still setting up accounts\n---\nStarted a new job this month and sets up the accounts by hand. Asked for two archived onboarding mails back because the links in them were still needed. Said the Gitbox invitation link is the one still to use, so that mail must stay in the inbox until then.\n",
       },
@@ -1064,7 +1065,7 @@ const e31: Case = {
     const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
     for (const r of rows) if (!/invited to the acme/.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
   },
-};
+});
 
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
@@ -1161,4 +1162,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true)];

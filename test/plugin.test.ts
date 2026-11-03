@@ -95,7 +95,7 @@ test("daily-brief skill: one archive list read from the journal, no inbox sweep,
   const read = (n: string) => readFileSync(join(skillsDir, n, "SKILL.md"), "utf8");
   assert.match(s, /use what the looks did[\s\S]*do \*\*not\*\* list or re-sweep the inbox/); // the looks are the only triage of new mail
   assert.doesNotMatch(s, /WHOLE inbox|archive_conversation/);
-  assert.match(s, /triage notes win/);
+  assert.match(s, /notes are the strongest context/);
   assert.match(s, /call the `journal` tool \*\*once, early\*\*/);
   assert.match(s, /Tidied tasks: closed/); // one line of what the looks tidied, from the journal
   assert.doesNotMatch(s, /Reconcile tasks|"Reconcile" section/);
@@ -125,7 +125,7 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.doesNotMatch(mb, /Old briefs are never archived/);
   assert.match(mb, /still need this mail for[\s\S]*next 7 days[\s\S]*For automated mail, unread is not a reason to keep/);
   assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(a plain read, cheap\)\s+before deciding/);
-  assert.match(mb, /triage notes win/);
+  assert.match(mb, /notes are the strongest context/);
   const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
   assert.match(hb, /Decision log: in the "triage" part of your final answer/); // the persona points at the skill; the rules live in the skill (asserted above)
   assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
