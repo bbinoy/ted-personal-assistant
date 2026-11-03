@@ -103,11 +103,9 @@ test("http: errors, quota, non-audio and timeouts throw, and a secret never appe
   await assert.rejects(synthesizeHttp("x", { ...cfg, fetchImpl: down.fetchImpl }), (e: Error) => /network error/.test(e.message) && !e.message.includes("TOKEN"));
 });
 
-test("provider: a remote failure is an error (text is sent) unless the fallback is kokoro and Kokoro is set up", async () => {
+test("provider: a remote failure is an error (text is sent); no other engine is tried", async () => {
   const bad = mock(() => new Response("", { status: 500 }));
-  const base = { kokoro: { dir: "/nonexistent-kokoro", voice: "am_onyx", speed: 1 }, provider: "http" as const, http: { url: "https://tts.example.com/say", timeoutMs: 5000, fetchImpl: bad.fetchImpl } };
-  await assert.rejects(synthesizeWith("x", { ...base, fallback: "none" }), /HTTP 500/);
-  // fallback asked for, but Kokoro is not installed here: still the remote error, so the caller sends text
-  await assert.rejects(synthesizeWith("x", { ...base, fallback: "kokoro" }), /HTTP 500/);
-  assert.equal(bad.calls.length, 2);
+  const base = { provider: "http" as const, http: { url: "https://tts.example.com/say", timeoutMs: 5000, fetchImpl: bad.fetchImpl } };
+  await assert.rejects(synthesizeWith("x", base), /HTTP 500/);
+  assert.equal(bad.calls.length, 1);
 });

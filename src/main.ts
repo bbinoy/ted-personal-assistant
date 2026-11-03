@@ -138,6 +138,9 @@ const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hook
   } else turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
   return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents, !!continuation) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents, untrusted: !!continuation }), hooks?.firstOutput)).finally(() => turn.end());
 };
+// The cloned voice takes 5 to 50 s to load: have it ready for the first spoken reply, at start-up and whenever a run that may speak begins (it is stopped again after
+// WARM_IDLE_MINUTES (settings.ts) idle; warmQwen is idempotent while a start is under way or the server is up).
+const warmVoice = () => void (settings.tts.provider === "qwen" && warmQwen(settings.tts.qwen).then((err) => err && console.log(`Qwen voice not warmed up: ${err}`)));
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
@@ -149,6 +152,7 @@ const pipeline: Pipeline = createPipeline({
   transcript,
   speech: {
     ready: () => settings.voiceReplies && messenger.capabilities.voice && providerReady(settings.tts).ok,
+    warm: warmVoice, // at the start of every run that may speak (delivery.ts): the cold start overlaps the model run
     synth: (words, conversation, limits) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat, limits), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
@@ -235,8 +239,7 @@ welcomeStart(); // a fresh data folder is marked once: its first run (chat turn 
 rehydrate(); // questions handed off before the stop are open again, with the time they had left (approvals/handoff.ts)
 replayUnanswered({ pipeline }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
 { const open = openRequestsFact(); if (open) holdStartupFact("registrations", open); } // requests still open from before this start: a fact for the owner's next run, no second card
-// The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES (settings.ts) idle, and the next reply restarts it).
-if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
+if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) warmVoice();
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => dreamConversations().forEach((conv) => prepare(conv, { refresh: true })), WARM_REFRESH_MS).unref(); // (every conversation that holds a process: it renews only those)

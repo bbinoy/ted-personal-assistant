@@ -12,9 +12,9 @@ import { VOICE_FAILED_NOTE } from "../src/conversation/voicereply.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 import type { SynthLimits } from "@ted-assistant/speech/tts";
 
-// The overall deadline of a voice reply (VOICE_TIMEOUT_SECONDS): fake clock, fake engine, fake messenger. Over it the engine is aborted, a stale file is never sent, the words go out as text.
+// The overall deadline of a voice reply (voiceDeadlineMs; the rig sets 75 s): fake clock, fake engine, fake messenger. Over it the engine is aborted, a stale file is never sent, the words go out as text.
 
-function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) => Promise<string>; sendVoice?: () => Promise<void>; foreign?: (words: string, conversation: string) => Promise<string | undefined> }) {
+function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) => Promise<string>; sendVoice?: () => Promise<void>; foreign?: (words: string, conversation: string) => Promise<string | undefined>; warm?: () => void; ready?: boolean }) {
   const sent: string[] = [];
   const voices: string[] = [];
   const dir = mkdtempSync(join(tmpdir(), "voicedl-"));
@@ -52,7 +52,8 @@ function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) =
     document: async () => assert.fail("no document"),
     transcript: async () => "",
     speech: {
-      ready: () => true,
+      ready: () => o.ready ?? true,
+      warm: o.warm,
       synth: (_w, _c, limits) => o.synth(limits, makeFile),
       foreign: o.foreign ?? (async () => undefined),
       timeoutMs: 75_000,
@@ -97,7 +98,7 @@ test("voice deadline: when it runs out the engine is aborted, the words go out a
   });
   const turn = say(r);
   await new Promise((res) => setTimeout(res, 20));
-  assert.equal(limits!.remainingMs!(), 75_000);
+  assert.ok(limits!.signal && !limits!.signal.aborted);
   r.clock.advance(76_000);
   r.clock.tick!();
   const logged = await turn;
@@ -243,4 +244,18 @@ test("a voice file made in time is still on disk when the messenger sends it, an
   assert.deepEqual(r.voices, [made], "sent as a voice note");
   assert.equal(logged.some((l) => /voice reply failed|No such file/.test(l)), false, logged.join("\n"));
   assert.equal(existsSync(dirname(made)), false, "removed after the send");
+});
+
+test("a run that may speak pre-warms the voice server at its start: chat turn and look, not a reaction, not without speech", async () => {
+  let warms = 0;
+  const r = rig({ synth: async (_l, file) => file(), warm: () => void warms++ });
+  await r.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: "" }) });
+  assert.equal(warms, 1, "a chat turn");
+  await r.pipeline.sendWhile(owner(), async () => "done"); // a look
+  assert.equal(warms, 2, "a look");
+  await r.pipeline.runTurn(owner(), { announce: false, reaction: true, run: async () => ({ text: "" }) });
+  assert.equal(warms, 2, "a reaction never speaks");
+  const mute = rig({ synth: async (_l, file) => file(), warm: () => void warms++, ready: false });
+  await mute.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: "" }) });
+  assert.equal(warms, 2, "no speech set up: nothing is started");
 });

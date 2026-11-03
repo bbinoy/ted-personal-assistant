@@ -196,7 +196,7 @@ test("the names of members are remembered whatever the voice provider, so the ta
   const { group } = await import("../src/conversation/conversation.ts");
   const { FULL_CAPABILITIES } = await import("@ted-assistant/messenger/testing");
   const tts = settings.tts;
-  (settings as { tts: unknown }).tts = { provider: "kokoro", fallback: "none" }; // (not qwen: the names used to be remembered only for it)
+  (settings as { tts: unknown }).tts = { provider: "http" }; // (not qwen: the names used to be remembered only for it)
   const messenger = { name: "fake", summary: "fake", self: "+10000000001", capabilities: FULL_CAPABILITIES, react: async () => {}, typing: async () => {}, markRead: async () => {}, send: async () => 1 };
   const seen: string[] = [];
   const pipeline = createPipeline({
