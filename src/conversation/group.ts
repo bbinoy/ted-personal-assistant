@@ -302,6 +302,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
         // The reaction and status icons go on the message that addressed us, not on a later one that was answered with it.
         target: live?.quote.author ? { author: live.quote.author, timestamp: live.quote.timestamp } : last?.author ? { author: last.author, timestamp: last.timestamp } : undefined,
         threadUnder: live?.quote,
+        voiceIn: !!live?.voice,
         announce: !!go.asked,
       })
       .finally(() => {

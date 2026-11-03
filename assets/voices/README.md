@@ -9,8 +9,8 @@ It is a **synthetic voice with no real person behind it**. It is not derived fro
 | | |
 |---|---|
 | Generated | 2026-10-17 |
-| Model | Kokoro v1.0 (`kokoro-v1.0.onnx`, run with `kokoro-onnx`), the same local engine as Ted's default speech |
-| Voice | stock preset `am_onyx` (American English, male), speed 0.95, the project defaults |
+| Model | Kokoro v1.0 (`kokoro-v1.0.onnx`, run with `kokoro-onnx`), a stock model used once to make this sample (Ted itself no longer ships Kokoro) |
+| Voice | stock preset `am_onyx` (American English, male), speed 0.95 |
 | Text | `default.txt`, written for this repo (original, not from any show, film or book) |
 | Conversion | `ffmpeg -i raw.wav -ac 1 -ar 24000 -c:a pcm_s16le default.wav` |
 | Format | mono, 24 kHz, 16-bit PCM WAV, about 10.7 s, about 500 KB |
@@ -24,11 +24,7 @@ A Qwen3-TTS VoiceDesign model (a voice made from a text description only) was co
 
 ## How it was generated
 
-```
-K=~/.cache/ted-personal-assistant/kokoro      # from scripts/setup-tts.sh
-$K/venv/bin/python packages/speech/scripts/kokoro-say.py $K/kokoro-v1.0.onnx $K/voices-v1.0.bin am_onyx 0.95 raw.wav < assets/voices/default.txt
-ffmpeg -i raw.wav -ac 1 -ar 24000 -c:a pcm_s16le assets/voices/default.wav
-```
+Once, with the stock Kokoro `am_onyx` voice (speed 0.95) reading `default.txt` into `raw.wav`, then `ffmpeg -i raw.wav -ac 1 -ar 24000 -c:a pcm_s16le assets/voices/default.wav`. The tool for this is no longer part of the repo.
 
 ## Replacing it
 

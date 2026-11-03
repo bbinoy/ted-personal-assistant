@@ -4,6 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onPath, toolEnv } from "./internal/exec.ts";
+import { qwenGenerationMs } from "./limits.ts";
 import { synthesizeRemote, type Fetch } from "./tts-remote.ts";
 import type { VoiceFormat } from "./voiceformat.ts";
 import { activeVoiceRel, OWNER_SCOPE } from "./voices.ts";
@@ -25,9 +26,9 @@ export interface QwenConfig {
   refText: string; // what is said in it
   builtIn?: boolean; // the reference is the synthetic sample that ships in assets/voices/ (TTS_REF_AUDIO and TTS_REF_TEXT unset)
   voiceRoot?: string; // the voice library (voices.ts): each scope (conversation) can have its own cloned voice there, <voiceRoot>/<scope>/voices/; the reference above is the default one
-  timeoutMs: number; // per reply, including a cold start
   idleMs: number; // the server is stopped after this long without a request (0: kept until Ted stops)
   startTimeoutMs?: number;
+  generationMs?: (chars: number) => number; // tests: replaces qwenGenerationMs
   command?: string[]; // tests: replaces `venv/bin/python script model refAudio`
   fetchImpl?: Fetch;
 }
@@ -146,7 +147,7 @@ class QwenServer {
     this.#touch();
   }
 
-  // The server speaks one text at a time, so replies queue here: a reply's timeout runs from its turn, not while it waits behind another.
+  // The server speaks one text at a time, so replies queue here: a reply's generation time (qwenGenerationMs, by text length) runs from its turn, not while it waits behind another or for the start.
   async say(text: string, scope: string = OWNER_SCOPE, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
     this.#busy++;
     clearTimeout(this.#idle);
@@ -164,15 +165,13 @@ class QwenServer {
   }
 
   async #speak(text: string, scope: string, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
-    const started = Date.now();
     let up = false;
     try {
-      const { port, key } = await (signal ? raceAbort(this.ensure(), signal) : this.ensure()); // a cold start is not waited for past the caller's deadline (it goes on, for the next reply)
+      const { port, key } = await (signal ? raceAbort(this.ensure(), signal) : this.ensure()); // a cold start (bounded by START_TIMEOUT_MS, not by the generation time) is not waited for past the caller's deadline (it goes on, for the next reply)
       up = true;
       const voice = this.c.voiceRoot ? activeVoiceRel(this.c.voiceRoot, scope) : undefined; // read per reply: a switch needs no restart
-      const left = Math.max(1000, this.c.timeoutMs - (Date.now() - started));
       return await synthesizeRemote(
-        { url: `http://127.0.0.1:${port}/say`, headers: { "x-qwen-key": key }, body: voice ? { text, voice } : { text }, secrets: [key], timeoutMs: left, fetchImpl: this.c.fetchImpl, format, signal },
+        { url: `http://127.0.0.1:${port}/say`, headers: { "x-qwen-key": key }, body: voice ? { text, voice } : { text }, secrets: [key], timeoutMs: (this.c.generationMs ?? qwenGenerationMs)(text.length), fetchImpl: this.c.fetchImpl, format, signal },
         "Qwen voice server",
       );
     } catch (e) {

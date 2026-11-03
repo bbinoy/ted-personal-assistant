@@ -7,11 +7,9 @@ import { join } from "node:path";
 import { loadSettings, WARM_IDLE_MINUTES } from "../src/core/settings.ts";
 import { qwenReference } from "../src/doctor.ts";
 
-test("settings: Qwen is the default speech provider, with Kokoro standing in; Kokoro alone has no fallback", () => {
-  const s = loadSettings({});
-  assert.equal(s.tts.provider, "qwen");
-  assert.equal(s.tts.fallback, "kokoro");
-  assert.equal(loadSettings({ TTS_PROVIDER: "kokoro" }).tts.fallback, "none");
+test("settings: Qwen is the default speech provider; Kokoro is gone and is refused at start-up", () => {
+  assert.equal(loadSettings({}).tts.provider, "qwen");
+  assert.throws(() => loadSettings({ TTS_PROVIDER: "kokoro" }), /TTS_PROVIDER must be one of elevenlabs, http, qwen/);
 });
 
 test("settings: remote speech needs its keys and a safe address, or the agent does not start", () => {
@@ -22,7 +20,7 @@ test("settings: remote speech needs its keys and a safe address, or the agent do
   assert.equal(out.trim(), JSON.stringify([null, null, "key-123456"]));
   assert.throws(() => loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k" }), /ELEVENLABS_VOICE_ID/);
   const e = loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k", ELEVENLABS_VOICE_ID: "v" }).tts;
-  assert.ok(e.provider === "elevenlabs" && e.elevenlabs.modelId === "eleven_multilingual_v2" && e.fallback === "none");
+  assert.ok(e.provider === "elevenlabs" && e.elevenlabs.modelId === "eleven_multilingual_v2");
   assert.throws(() => loadSettings({ TTS_PROVIDER: "http" }), /TTS_HTTP_URL/);
   assert.throws(() => loadSettings({ TTS_PROVIDER: "http", TTS_HTTP_URL: "http://example.com/tts" }), /https/);
   const h = loadSettings({ TTS_PROVIDER: "http", TTS_HTTP_URL: "http://localhost:8787/tts", TTS_HTTP_REFERENCE_ID: "r1" }).tts;
@@ -30,12 +28,11 @@ test("settings: remote speech needs its keys and a safe address, or the agent do
   assert.throws(() => loadSettings({ TTS_PROVIDER: "other" }), /TTS_PROVIDER/);
 });
 
-test("settings: the local cloned voice (qwen) takes its reference from paths, falls back to Kokoro by default", () => {
+test("settings: the local cloned voice (qwen) takes its reference from paths", () => {
   const dir = mkdtempSync(join(tmpdir(), "ref-"));
   writeFileSync(join(dir, "ref.txt"), "  Words spoken in the reference.\n");
   const q = loadSettings({ TTS_PROVIDER: "qwen", HARNESS_DATA_DIR: dir, TTS_REF_AUDIO: "ref.wav", TTS_REF_TEXT: "ref.txt" }).tts;
   assert.ok(q.provider === "qwen");
-  assert.equal(q.fallback, "kokoro");
   assert.equal(q.qwen.refAudio, join(dir, "ref.wav"));
   assert.equal(q.qwen.refText, "Words spoken in the reference.");
   assert.equal(q.qwen.dir, join(dir, "state/tts-qwen"));

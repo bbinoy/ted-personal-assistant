@@ -1,5 +1,5 @@
 import { LIMITS } from "./core/sanitize.ts";
-import { providerReady, qwenReady } from "@ted-assistant/speech/tts";
+import { providerReady } from "@ted-assistant/speech/tts";
 import { voiceReady } from "@ted-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
@@ -442,10 +442,8 @@ export async function doctor() {
   line(voice.ok ? true : "warn", "voice messages", voice.ok ? "transcribed locally with whisper.cpp" : `not available, missing: ${voice.missing.join("; ")}`);
 
   const tts = providerReady(settings.tts);
-  const remote = settings.tts.provider === "elevenlabs" || settings.tts.provider === "http";
-  const qwen = settings.tts.provider === "qwen" ? qwenReady(settings.tts.qwen) : undefined;
-  const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
-  line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
+  const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)})`;
+  line(tts.ok || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `${settings.tts.provider === "qwen" ? "Qwen voice not ready" : "not set up"}, missing: ${tts.missing.join(", ")}; replies go out as text (${settings.tts.provider === "qwen" ? "npm run setup:tts-qwen, optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice" : "install ffmpeg"})`);
 
   // Scheduled items (tasks/routines.ts): every routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
   for (const last of scheduleLines(OWNER_CONV, { notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {

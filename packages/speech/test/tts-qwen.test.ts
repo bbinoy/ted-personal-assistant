@@ -1,12 +1,12 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { qwenReady, stopQwen, synthesizeQwen, warmQwen, type QwenConfig } from "../src/tts-qwen.ts";
-import { synthesizeWith } from "../src/tts-provider.ts";
+import { providerReady, synthesizeWith } from "../src/tts-provider.ts";
 
 // The Python server is replaced by a small fake (a node script with the same protocol); no model is loaded.
 
@@ -22,13 +22,6 @@ const skip = !hasFfmpeg && "ffmpeg is not installed";
 
 const tmp = mkdtempSync(join(tmpdir(), "qwen-test-"));
 after(() => (stopQwen(), rmSync(tmp, { recursive: true, force: true })));
-
-function wav(samples: number): Buffer {
-  const b = Buffer.alloc(44 + samples * 2);
-  b.write("RIFF", 0); b.writeUInt32LE(36 + samples * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
-  b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(samples * 2, 40);
-  return b;
-}
 
 const fake = join(tmp, "fake.mjs");
 writeFileSync(fake, `
@@ -52,14 +45,15 @@ else {
       res.writeHead(200, { "content-type": "audio/wav" }); res.end(b);
     });
   });
-  srv.listen(0, "127.0.0.1", () => console.log("READY " + srv.address().port));
+  const up = () => srv.listen(0, "127.0.0.1", () => console.log("READY " + srv.address().port));
+  if (mode === "cold") setTimeout(up, 2500); else up(); // "cold": a slow start (the model loads)
   process.stdin.on("end", () => process.exit(0)); process.stdin.resume();
 }
 `);
 
 let n = 0;
 const cfg = (mode: string, o: Partial<QwenConfig> = {}): QwenConfig => ({
-  dir: tmp, model: "m", refAudio: fake, refText: `ref ${++n}`, timeoutMs: 20_000, idleMs: 0, startTimeoutMs: 5000,
+  dir: tmp, model: "m", refAudio: fake, refText: `ref ${++n}`, idleMs: 0, startTimeoutMs: 5000,
   command: [process.execPath, fake, mode], ...o,
 });
 const gone = (f: string) => rmSync(dirname(f), { recursive: true, force: true });
@@ -107,7 +101,7 @@ test("qwen: a server that never gets ready times out", async () => {
 });
 
 test("qwen: a slow answer times out, and a server error is named", { skip }, async () => {
-  await assert.rejects(synthesizeQwen("Hi.", cfg("slow", { timeoutMs: 1500 })), /timeout after/);
+  await assert.rejects(synthesizeQwen("Hi.", cfg("slow", { generationMs: () => 1500 })), /timeout after/);
   await assert.rejects(synthesizeQwen("Hi.", cfg("bad")), /HTTP 500.*out of memory/);
 });
 
@@ -174,34 +168,20 @@ test("qwen: an idle server is stopped, the next reply starts a new one", { skip 
   assert.notEqual(ports[0], ports[1]);
 });
 
-test("provider: falls back to Kokoro (and logs) when the Qwen voice is not set up or fails", { skip }, async () => {
-  // a fake "Kokoro": its python is a script that copies a prepared wav to the output path
-  const kdir = join(tmp, "kokoro");
-  mkdirSync(join(kdir, "venv/bin"), { recursive: true });
-  const w = join(tmp, "k.wav");
-  writeFileSync(w, wav(800));
-  writeFileSync(join(kdir, "venv/bin/python"), `#!/bin/sh\ncat >/dev/null; cp "${w}" "$6"\n`);
-  chmodSync(join(kdir, "venv/bin/python"), 0o755);
-  writeFileSync(join(kdir, "kokoro-v1.0.onnx"), "");
-  writeFileSync(join(kdir, "voices-v1.0.bin"), "");
-  const warns: string[] = [];
-  const log = { warn: (...a: unknown[]) => warns.push(a.join(" ")), error() {}, info() {}, log() {} } as never;
-  const kokoro = { dir: kdir, voice: "am_onyx", speed: 1 };
+test("qwen: a slow cold start does not take time from the generation", { skip }, async () => {
+  // the generation limit (1.5 s here) is shorter than the start (2.5 s): counted from the call, the request would have timed out
+  const f = await synthesizeQwen("Hi.", cfg("cold", { generationMs: () => 1500 }));
+  assert.ok(f.endsWith("voice.m4a"));
+  gone(f);
+});
 
-  const notSetUp = { provider: "qwen", fallback: "kokoro", kokoro, qwen: cfg("ok", { dir: join(tmp, "missing"), command: undefined }) } as const;
-  const f1 = await synthesizeWith("Hi.", notSetUp, log);
-  assert.ok(readFileSync(f1).length > 0);
+test("provider: Qwen not set up or failing is an error (the words go out as text); no other voice is tried", { skip }, async () => {
+  const notSetUp = { provider: "qwen", qwen: cfg("ok", { dir: join(tmp, "missing"), command: undefined }) } as const;
+  await assert.rejects(synthesizeWith("Hi.", notSetUp), /Qwen voice not set up/);
+  assert.equal(providerReady(notSetUp).ok, false);
   mkdirSync(join(tmp, "venv/bin"), { recursive: true });
   writeFileSync(join(tmp, "venv/bin/python"), ""); // the Qwen environment "exists"; the fake command then crashes
-  const failing = { provider: "qwen", fallback: "kokoro", kokoro, qwen: cfg("crash") } as const;
-  const f2 = await synthesizeWith("Hi.", failing, log);
-  assert.ok(readFileSync(f2).length > 0);
-  assert.equal(warns.length, 2);
-  assert.ok(warns.every((x) => x.includes("qwen speech failed, using Kokoro")));
-  // no fallback: the error reaches the caller (which sends text instead)
-  await assert.rejects(synthesizeWith("Hi.", { ...failing, fallback: "none" }, log), /Qwen voice server/);
-  gone(f1);
-  gone(f2);
+  await assert.rejects(synthesizeWith("Hi.", { provider: "qwen", qwen: cfg("crash") }), /Qwen voice server/);
 });
 
 test("the Python server binds to loopback only and checks the key", () => {

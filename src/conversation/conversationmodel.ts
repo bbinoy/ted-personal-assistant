@@ -126,6 +126,7 @@ export interface Turn {
   announce: boolean; // somebody is waiting: a failure is explained to them
   reaction?: boolean; // the turn answers a reaction: no typing, no status icons, no apology
   background?: boolean; // nobody wrote: a wake-up (wake.ts). Like a reaction, no typing, icons or apology; the answer is still compacted after
+  voiceIn?: boolean; // the message answered is a voice note: a spoken reply is likely, so the voice server is started now (delivery.ts)
   kind?: Kind; // how the reply is logged (default "chat"); the owner's wake-ups are "notice", which the chat is told about
 }
 
@@ -149,7 +150,7 @@ export interface PipelineDeps {
   longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/conversation/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
-  speech: { ready: () => boolean; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string, conversation: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
+  speech: { ready: () => boolean; warm?: () => void; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string, conversation: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
   vouch: (groupId: string) => Promise<boolean>; // is this group's sponsor (the owner, or a friend who may add us to her groups) in it?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;

@@ -15,7 +15,7 @@
     <true/>
     <key>ThrottleInterval</key>
     <integer>30</integer>
-    <!-- No ProcessType=Background: macOS would throttle everything the agent starts, and local speech (Kokoro)
+    <!-- No ProcessType=Background: macOS would throttle everything the agent starts, and local speech (Qwen)
          and transcription (whisper) then crawl or hang. Standard is fine, the agent is idle most of the time. -->
     <!-- The agent writes its own rotating, redacted log (logs/agent.log).
          launchd only keeps raw crash output that never reached that logger. -->

@@ -16,12 +16,10 @@ import { settings } from "../core/settings.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
 import type { Quote } from "@ted-assistant/messenger";
-import { MAX_SPOKEN_CHARS, VoiceAbort } from "@ted-assistant/speech/tts";
+import { MAX_SPOKEN_CHARS, voiceDeadlineMs, VoiceAbort } from "@ted-assistant/speech/tts";
 import { startDeadline } from "../core/deadline.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
 import { causeOf, reportReconnect } from "../tenants/errors.ts";
-
-const VOICE_TIMEOUT_SECONDS = 75; // ONE deadline for a whole voice reply, from the start of the synthesis to the hand-over to the messenger; over it the reply goes out as text
 
 // Everything the assistant says or shows while a conversation is being answered: the delivery of a reply (text, voice, picture, reaction), "typing…", the failure notice, and the run of one turn.
 // This module owns the typing holds and the once-per-interval notice record.
@@ -42,16 +40,17 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   };
 
   const canSpeak = () => deps.speech.ready();
+  // A voice note in is likely answered by voice: start the voice server now, so its cold start overlaps the model run. Idempotent. Text turns and looks do not warm it (the server would never
+  // idle out); their cold start is covered by the voice deadline (limits.ts) and no longer eats the generation time.
+  const warmVoice = () => canSpeak() && deps.speech.warm?.();
 
   // Checks the language, speaks and sends: "spoken", "text" (the voice does not speak this language: the words go out as text, as they are) or "failed" (the words go out
   // as text with a note that the voice did not work).
-  // ONE deadline (VOICE_TIMEOUT_SECONDS) covers the whole of it, from here to the hand-over of the file to the messenger: the language check, every engine and the
-  // fallback, the conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never
+  // ONE deadline (voiceDeadlineMs, by text length) covers the whole of it, from here to the hand-over of the file to the messenger: the language check, the engine, the
+  // conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never
   // sent, and the words go out as text.
-  const voiceDeadlineMs = (chars: number): number => Math.max(VOICE_TIMEOUT_SECONDS, 30 + Math.ceil(chars * 0.15)) * 1000;
-
   async function speak(conv: Conversation, words: string): Promise<"spoken" | "text" | "failed"> {
-    // The deadline grows with the text: a long pep talk on a busy Mac takes longer than a one-liner (828 characters took 47 s unloaded). VOICE_TIMEOUT_SECONDS is the floor.
+    // The deadline grows with the text: a long pep talk takes longer than a one-liner, and a cold start of the voice is in it (limits.ts).
     const ms = deps.speech.timeoutMs ?? voiceDeadlineMs(words.length);
     const deadline = (deps.speech.deadline ?? startDeadline)(ms);
     let file: string | undefined;
@@ -63,7 +62,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         console.error(`voice skipped: reply looks ${foreign}, the voice speaks ${settings.ttsLanguages.join("/")}; sending text`);
         return "text";
       }
-      const made = deps.speech.synth(words, conv.convId, { signal: deadline.signal, remainingMs: deadline.remainingMs }); // the voice active in THIS conversation (its library: voices/ in its folder)
+      const made = deps.speech.synth(words, conv.convId, { signal: deadline.signal }); // the voice active in THIS conversation (its library: voices/ in its folder)
       // A file that finishes after we gave up is deleted, not kept. This handler runs BEFORE the await below assigns `file`, so it must not look at `file`:
       // it only acts once speak() is over (gaveUp), which a file that arrived in time never sees (it is removed in `finally` after the send).
       void made.then((f) => gaveUp && rmSync(dirname(f), { recursive: true, force: true }), () => {});
@@ -206,6 +205,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // enqueue(). It never throws: a failure becomes a notice (if someone is waiting) and a result.
   async function runTurn(conv: Conversation, turn: Turn): Promise<TurnResult> {
     const started = now();
+    if (turn.voiceIn) warmVoice();
     const background = !!turn.reaction || !!turn.background; // a reaction or a wake-up is no conversation: no typing, no icons
     if (!background) status(conv, "👀", turn.target); // 👀 working, ✅ answered, ⚠️ failed, each replacing the last
     const typing = background ? undefined : holdTyping(conv, turn.timing); // already showing if the decision to answer came earlier

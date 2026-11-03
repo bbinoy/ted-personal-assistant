@@ -8,7 +8,7 @@ test("helper processes get no credentials: keys, tokens, secrets, passwords and 
   assert.deepEqual(Object.keys(env).sort(), ["HOME", "LANG", "PATH"]);
 });
 
-test("toolEnv: no credentials from this process reach ffmpeg, whisper or Kokoro, and the Homebrew directories are on PATH", () => {
+test("toolEnv: no credentials from this process reach ffmpeg, whisper or Qwen, and the Homebrew directories are on PATH", () => {
   process.env.FAKE_SPEECH_API_KEY = "must-not-leak";
   try {
     const env = toolEnv();

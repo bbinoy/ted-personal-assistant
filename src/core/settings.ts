@@ -97,29 +97,27 @@ function list(env: Env, name: string, fallback: readonly string[], valid: RegExp
   return items;
 }
 
-// The speech engine (TTS_PROVIDER): the local Qwen voice (Kokoro stands in when it is not set up), or an optional remote one. Remote settings are checked at start-up:
+// The speech engine (TTS_PROVIDER): the local Qwen cloned voice (when it is not set up, replies go out as text: never another voice in its place), or an optional remote one. Remote settings are checked at start-up:
 // a missing key or a plain-http address to another machine stops the agent instead of leaking text or failing later.
-function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: number }, dataDir: string): TtsProviderConfig {
-  const provider = oneOf(env, "TTS_PROVIDER", "qwen", ["kokoro", "elevenlabs", "http", "qwen"] as const);
-  // The local cloned voice falls back to the local Kokoro (nothing leaves the Mac); a remote one never switches: the words go out as text.
-  const fallback = provider === "qwen" ? "kokoro" : "none";
-  const timeoutMs = 60_000;
+function ttsProvider(env: Env, dataDir: string): TtsProviderConfig {
+  const provider = oneOf(env, "TTS_PROVIDER", "qwen", ["elevenlabs", "http", "qwen"] as const);
+  const timeoutMs = 60_000; // a remote request (the local voice gets its time from the text length: limits.ts)
   const need = (name: string): string => {
     const v = env[name]?.trim();
     if (!v) throw new Error(`${name} is required with TTS_PROVIDER=${provider}`);
     return v;
   };
   if (provider === "elevenlabs") {
-    return { provider, fallback, kokoro, elevenlabs: { apiKey: need("ELEVENLABS_API_KEY"), voiceId: need("ELEVENLABS_VOICE_ID"), modelId: env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2", timeoutMs } };
+    return { provider, elevenlabs: { apiKey: need("ELEVENLABS_API_KEY"), voiceId: need("ELEVENLABS_VOICE_ID"), modelId: env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2", timeoutMs } };
   }
   if (provider === "http") {
     const url = need("TTS_HTTP_URL");
     if (!isSafeUrl(url)) throw new Error("TTS_HTTP_URL must be an https:// address (http:// only for localhost)");
-    return { provider, fallback, kokoro, http: { url, token: env.TTS_HTTP_TOKEN?.trim() || undefined, voice: env.TTS_HTTP_VOICE?.trim() || undefined, referenceId: env.TTS_HTTP_REFERENCE_ID?.trim() || undefined, timeoutMs } };
+    return { provider, http: { url, token: env.TTS_HTTP_TOKEN?.trim() || undefined, voice: env.TTS_HTTP_VOICE?.trim() || undefined, referenceId: env.TTS_HTTP_REFERENCE_ID?.trim() || undefined, timeoutMs } };
   }
-  if (provider === "qwen") {
+  {
     // The reference recording and its text are yours and stay outside the repo (the data folders are ignored by version control). TTS_REF_TEXT is the words
-    // themselves or the path of a text file; a missing file or text is reported by `npm run doctor`, and Ted then speaks with Kokoro.
+    // themselves or the path of a text file; a missing file or text is reported by `npm run doctor`, and replies then go out as text.
     const path = (v: string | undefined) => (v?.trim() ? resolve(dataDir, v.trim().replace(/^~(?=\/)/, env.HOME ?? "")) : "");
     const textRaw = env.TTS_REF_TEXT?.trim() ?? "";
     const textFile = textRaw && !textRaw.includes("\n") ? path(textRaw) : "";
@@ -130,7 +128,7 @@ function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: numb
     const builtIn = !env.TTS_REF_AUDIO?.trim() && !textRaw;
     const sampleDir = VOICES_DIR;
     return {
-      provider, fallback, kokoro,
+      provider,
       qwen: {
         dir: path(env.TTS_QWEN_DIR) || layout(dataDir).instance.ttsQwen,
         model: env.TTS_QWEN_MODEL?.trim() || "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
@@ -138,12 +136,10 @@ function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: numb
         refText: builtIn ? (() => { try { return readFileSync(join(sampleDir, "default.txt"), "utf8").trim(); } catch { return ""; } })() : isFile ? readFileSync(textFile, "utf8").trim() : textRaw,
         builtIn,
         voiceRoot: layout(dataDir).conversations, // the folder of the conversations: each has its own voices/ library (voices.ts scopeRoot); the reference above is the default voice
-        timeoutMs,
         idleMs,
       },
     };
   }
-  return { provider, fallback, kokoro };
 }
 
 // The configured list, e.g. "en, de" -> ["en","de"]. Region suffixes are dropped ("en-US" -> "en"). Empty means en.
@@ -157,11 +153,6 @@ export function loadSettings(env: Env) {
   rejectArchiveSwitches(env);
   const rhythm = presetFor(env).rhythm;
   const quiet = quietHours(env);
-  const kokoro = {
-    dir: env.TTS_DIR || `${env.HOME ?? ""}/.cache/ted-personal-assistant/kokoro`,
-    voice: env.TTS_VOICE || "am_onyx",
-    speed: num(env, "TTS_SPEED", 0.95, 0.5, 2),
-  };
   // Where mail comes from. none: chat only, no mail client anywhere (heartbeat, brief, prompts and doctor all leave mail out).
   // gmail: the claude.ai Gmail connector, inherited from the Claude login like Notion (src/modules/gmail/gmail.ts, plugin/skills/gmail).
   const mailProvider = oneOf(env, "MAIL_PROVIDER", "mailbird", ["none", "mailbird", "gmail"] as const);
@@ -333,11 +324,11 @@ export function loadSettings(env: Env) {
     whisperModel: env.WHISPER_MODEL || `${env.HOME ?? ""}/.cache/ted-personal-assistant/ggml-small.bin`,
     maxConcurrentRuns: num(env, "MAX_CONCURRENT_RUNS", 3, 1, 16), // model processes running at once, all kinds together (rungate.ts); chat turns and small helper calls never wait for a place, looks and dreams do
     groupWarmSlots: num(env, "GROUP_WARM_SLOTS", 2, 0, 10), // warm model processes kept for the most recently active groups (agentwarm.ts); 0: none
-    // Spoken replies to voice messages (src/conversation/voicereply.ts): local text to speech with Kokoro (scripts/setup-tts.sh).
+    // Spoken replies to voice messages (src/conversation/voicereply.ts): local text to speech with the cloned Qwen voice (npm run setup:tts-qwen).
     voiceReplies: oneOf(env, "VOICE_REPLIES", "on", ["on", "off"] as const) === "on",
     ttsLanguages: parseLanguages(env.TTS_LANGUAGES), // languages the voice speaks (default en); a reply in another one goes out as text (src/conversation/lang.ts)
     // Optional remote speech (docs/REMOTE-TTS.md): sends the spoken words to a third party or to your own server.
-    tts: ttsProvider(env, kokoro, dataDir),
+    tts: ttsProvider(env, dataDir),
     // Group chats (own-account mode, src/conversation/group.ts): it takes part in any group the owner is in, speaking only
     // when it fits (see PARTICIPATION in persona.ts).
     groupParticipation: oneOf(env, "GROUP_PARTICIPATION", "auto", ["auto", "tagged"] as const), // auto: the assistant judges every message; tagged: only when @mentioned or replied to
