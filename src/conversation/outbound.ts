@@ -57,7 +57,7 @@ export function classifySendError(e: unknown): SendFailure {
   return "permanent";
 }
 const BACKOFF_MS = [2_000, 6_000];
-const PAUSE_MS = 1_000; // between the messages of one reply: they arrive in order and read like typing
+const PAUSE_MS = 2_000; // between the messages of one reply: they arrive in order and read like typing
 const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // `record` is told about every message sent (kind, timestamp, text, target if it did not go to the owner's chat): the message log.
