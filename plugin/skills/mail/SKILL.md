@@ -167,9 +167,13 @@ your head: take what decides the case and move on.
    - **In doubt between keep and archive for routine mail: archive.** It is
      reversible, journaled and listed in the brief. Doubt about a mail from a real
      person, money or an official deadline is different: keep that one.
-   - **The owner's triage notes win.** Their learned preferences in memory
-     (`triage-` notes: "mail from X is always urgent", "keep the school's mails")
-     override every default in this list, in both directions.
+   - **The owner's notes are the strongest context, weighed with the situation.**
+     A preference they stated in their own words (`triage-` notes: "mail from X is
+     always urgent") wins. A blanket rule or a lesson from one incident ("never
+     archive onboarding mail") serves the need behind it (the mail whose link is
+     still needed stays, the routine notices go) and lapses once that situation is
+     over. A note never makes you archive mail that waits for the owner. When notes
+     conflict, weigh the newer, more specific one against the facts.
 
    **Real conversations in the brief:** a real conversation that still waits for a
    reply from either side and has gone quiet is flagged in the brief ("dormant
