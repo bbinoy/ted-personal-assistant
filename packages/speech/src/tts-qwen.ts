@@ -142,13 +142,27 @@ class QwenServer {
     }
   }
 
-  async warm(): Promise<void> {
+  /** Starts the server and has it encode the voice of `scope` (both cheap when already done; the server remembers the voices it encoded). */
+  async warm(scope: string): Promise<void> {
     await this.ensure();
+    const voice = this.c.voiceRoot ? activeVoiceRel(this.c.voiceRoot, scope) : undefined;
+    if (voice) {
+      await this.#turn(async () => {
+        const { port, key } = await this.ensure();
+        const r = await (this.c.fetchImpl ?? fetch)(`http://127.0.0.1:${port}/warm`, { method: "POST", headers: { "x-qwen-key": key }, body: JSON.stringify({ voice }), signal: AbortSignal.timeout(START_TIMEOUT_MS) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      }).catch((e) => console.log(`voice: qwen could not warm a voice: ${(e as Error).message}`)); // the reply then pays for it, as before
+    }
     this.#touch();
   }
 
   // The server speaks one text at a time, so replies queue here: a reply's generation time (qwenGenerationMs, by text length) runs from its turn, not while it waits behind another or for the start.
-  async say(text: string, scope: string = OWNER_SCOPE, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
+  say(text: string, scope: string = OWNER_SCOPE, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
+    const queued = Date.now();
+    return this.#turn(() => this.#speak(text, scope, Date.now() - queued, format, signal), signal);
+  }
+
+  async #turn<T>(job: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     this.#busy++;
     clearTimeout(this.#idle);
     const prev = this.#tail;
@@ -156,7 +170,7 @@ class QwenServer {
     this.#tail = new Promise<void>((r) => (release = r));
     try {
       await (signal ? raceAbort(prev, signal) : prev); // giving up while waiting leaves the server and the running reply alone
-      return await this.#speak(text, scope, format, signal);
+      return await job();
     } finally {
       void prev.then(release); // an aborted waiter still hands over only after the one before it, so the order holds
       this.#busy--;
@@ -164,17 +178,24 @@ class QwenServer {
     }
   }
 
-  async #speak(text: string, scope: string, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
+  // One log line per request, no text: chars, the wait in the queue, whether the server had to start, and the time it took, on success and on failure.
+  async #speak(text: string, scope: string, waitedMs: number, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
     let up = false;
+    const cold = !this.#up;
+    const t0 = Date.now();
+    const note = (what: string) => console.log(`voice: qwen ${what} ${text.length} chars, queued ${waitedMs} ms, ${cold ? "cold" : "warm"} server, ${Date.now() - t0} ms`);
     try {
       const { port, key } = await (signal ? raceAbort(this.ensure(), signal) : this.ensure()); // a cold start (bounded by START_TIMEOUT_MS, not by the generation time) is not waited for past the caller's deadline (it goes on, for the next reply)
       up = true;
       const voice = this.c.voiceRoot ? activeVoiceRel(this.c.voiceRoot, scope) : undefined; // read per reply: a switch needs no restart
-      return await synthesizeRemote(
+      const file = await synthesizeRemote(
         { url: `http://127.0.0.1:${port}/say`, headers: { "x-qwen-key": key }, body: voice ? { text, voice } : { text }, secrets: [key], timeoutMs: (this.c.generationMs ?? qwenGenerationMs)(text.length), fetchImpl: this.c.fetchImpl, format, signal },
         "Qwen voice server",
       );
+      note("generated");
+      return file;
     } catch (e) {
+      note("failed:");
       // A server that timed out or was given up on may still be busy with the old text, and one that died is gone: start fresh next time.
       // (Not while it is still starting: that start is kept for the next reply.)
       if (!(signal?.aborted && !up)) this.stop();
@@ -194,11 +215,11 @@ const serverFor = (c: QwenConfig): QwenServer => {
 /** Speaks `text` in the cloned voice (the active one of the conversation `scope`: "owner" or a group id) and returns the path of a voice message (an .m4a unless `format` says otherwise) in a fresh temp folder (the caller deletes it). Starts the server if needed. */
 export const synthesizeQwen = (text: string, c: QwenConfig, scope: string = OWNER_SCOPE, format?: VoiceFormat, signal?: AbortSignal): Promise<string> => serverFor(c).say(text, scope, format, signal);
 
-/** Starts the server ahead of the first reply (at start-up). Never throws: a failure is returned for the log, and the first reply tries again. */
-export async function warmQwen(c: QwenConfig): Promise<string | undefined> {
+/** Starts the server ahead of the first reply (at start-up) and encodes the voice of `scope`. Never throws: a failure is returned for the log, and the first reply tries again. */
+export async function warmQwen(c: QwenConfig, scope: string = OWNER_SCOPE): Promise<string | undefined> {
   const s = serverFor(c);
   try {
-    await s.warm();
+    await s.warm(scope);
     return undefined;
   } catch (e) {
     s.stop();

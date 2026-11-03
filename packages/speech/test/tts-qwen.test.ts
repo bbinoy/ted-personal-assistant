@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { qwenReady, stopQwen, synthesizeQwen, warmQwen, type QwenConfig } from "../src/tts-qwen.ts";
 import { providerReady, synthesizeWith } from "../src/tts-provider.ts";
+import { setActiveVoice } from "../src/voices.ts";
 
 // The Python server is replaced by a small fake (a node script with the same protocol); no model is loaded.
 
@@ -182,6 +183,22 @@ test("provider: Qwen not set up or failing is an error (the words go out as text
   mkdirSync(join(tmp, "venv/bin"), { recursive: true });
   writeFileSync(join(tmp, "venv/bin/python"), ""); // the Qwen environment "exists"; the fake command then crashes
   await assert.rejects(synthesizeWith("Hi.", { provider: "qwen", qwen: cfg("crash") }), /Qwen voice server/);
+});
+
+test("qwen: warming a conversation with its own voice has the server encode that voice; the default voice needs no request", { skip }, async () => {
+  const voiceRoot = join(tmp, "voices-lib");
+  const dir = join(voiceRoot, "grp1/voices/mine");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "ref.wav"), "x");
+  writeFileSync(join(dir, "ref.txt"), "hello");
+  setActiveVoice(join(voiceRoot, "grp1/voices"), "mine");
+  const seen: string[] = [];
+  const fetchImpl = ((u: string, init: RequestInit) => (seen.push(`${new URL(u).pathname} ${init.body}`), fetch(u, init))) as typeof fetch;
+  const c = cfg("ok", { voiceRoot, fetchImpl });
+  assert.equal(await warmQwen(c, "grp1"), undefined);
+  assert.deepEqual(seen, ['/warm {"voice":"grp1/voices/mine"}']);
+  assert.equal(await warmQwen(c), undefined); // the owner has the default voice: the server is up, nothing more to do
+  assert.equal(seen.length, 1);
 });
 
 test("the Python server binds to loopback only and checks the key", () => {
