@@ -11,6 +11,26 @@ export interface ToolClean { output: unknown; removed: number; cut: number; hidd
 
 const MAIL_TOOL = /mailbird|gmail/i;
 
+const CALENDAR_TOOL = /google_calendar/i;
+
+// Pure: an event time {dateTime, timeZone?} stated in `zone`: the same instant with that zone's offset, and `timeZone` set to `zone`, so the zone the model reads
+// always agrees with the wall-clock beside it (a booking made in another zone carries that zone's name next to an offset that is already the owner's, which models misread as a
+// conversion to do). A time without an offset, an all-day `date` and anything else are left as they are.
+function inZone(o: Record<string, unknown>, zone: string): Record<string, unknown> {
+  const dt = o.dateTime;
+  if (typeof dt !== "string" || !/(Z|[+-]\d\d:?\d\d)$/i.test(dt)) return o;
+  const t = new Date(dt);
+  if (Number.isNaN(t.getTime())) return o;
+  try {
+    const f = new Intl.DateTimeFormat("en-CA", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "longOffset" });
+    const p = Object.fromEntries(f.formatToParts(t).map((x) => [x.type, x.value]));
+    const off = (p.timeZoneName ?? "GMT").replace("GMT", "") || "+00:00";
+    return { ...o, dateTime: `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${off}`, timeZone: zone };
+  } catch {
+    return o; // an unknown zone name
+  }
+}
+
 const countable = (key: string) => !["data", "base64", "type", "mimeType"].includes(key); // (binary content, and the tags that say what a block is)
 
 // Pure: a result whose text (every string but binary fields, in reading order) is longer than `max` characters keeps its first `max` characters; the last string of the result
@@ -47,9 +67,10 @@ export function capTotal(v: unknown, max: number): { value: unknown; cut: number
 
 // The most characters of ONE tool result the model reads (in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
 const TOOL_OUTPUT_MAX_CHARS = 60_000;
-export function cleanToolOutput(tool: string, output: unknown, max: number = TOOL_OUTPUT_MAX_CHARS): ToolClean | undefined {
+export function cleanToolOutput(tool: string, output: unknown, max: number = TOOL_OUTPUT_MAX_CHARS, zone?: string): ToolClean | undefined {
   const mail = MAIL_TOOL.test(tool);
   const gmail = /gmail/i.test(tool);
+  const shape = zone && CALENDAR_TOOL.test(tool) ? zone : undefined; // calendar results: every event time in the conversation's zone
   const t = { removed: 0, cut: 0, hidden: 0 };
 
   const text = (s: string): string => {
@@ -87,7 +108,7 @@ export function cleanToolOutput(tool: string, output: unknown, max: number = TOO
         const stripped = o.attachments.map((a) => (a && typeof a === "object" ? Object.fromEntries(Object.entries(a).map(([k, x]) => [k, k === "content" || k === "data" ? "[attachment content withheld]" : x])) : a));
         return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, k === "attachments" ? walk(stripped, k) : walk(x, k)]));
       }
-      return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, walk(x, k)]));
+      return Object.fromEntries(Object.entries(shape ? inZone(o, shape) : o).map(([k, x]) => [k, walk(x, k)]));
     }
     return v;
   };

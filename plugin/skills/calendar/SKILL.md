@@ -23,7 +23,7 @@ Google Calendar via MCP. Call `list_events` with an explicit start/end range and
 the owner's time zone, for **all of the listed calendars in the same turn** (they
 are independent). The note may list calendars that are **not** connected (a work
 account that cannot be added, say): those are invisible, so never assume the list
-is complete, and if a workday looks empty, say so.
+is complete, and if a workday looks empty, say so. Event times in results are already in the owner's zone: read them as shown, never convert.
 
 ## Window
 
