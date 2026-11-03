@@ -1,4 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { hasSilent } from "../core/silent.ts";
 import { settings } from "../core/settings.ts";
 import type { TriageRow } from "../tasks/maildecisions.ts";
 
@@ -6,7 +7,6 @@ import type { TriageRow } from "../tasks/maildecisions.ts";
 
 const MIN_LOOK_MINUTES = 10;
 const MAX_LOOK_MINUTES = 60;
-const SILENT = "[[silent]]";
 const MAX_TRIAGE = 60;
 const TRIAGE_DECISIONS: readonly TriageRow["decision"][] = ["archive", "keep", "task", "draft"];
 
@@ -51,7 +51,7 @@ export function parseHeartbeatAnswer(structured: unknown, text: string): Answer 
   }
   const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown; urgent?: unknown; triage?: unknown };
   const message = typeof v.message === "string" ? v.message.trim() : "";
-  const silent = !message || message.toLowerCase().includes(SILENT.toLowerCase());
+  const silent = !message || hasSilent(message);
   return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: !silent && v.urgent === true, triage: triageRows(v.triage) };
 }
 

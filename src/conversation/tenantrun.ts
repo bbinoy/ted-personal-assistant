@@ -1,5 +1,6 @@
 import { runConversation } from "../run/agent.ts";
 import { chatTurn } from "../run/chattail.ts";
+import { SILENT } from "../core/silent.ts";
 import { timeIn } from "../core/timezone.ts";
 import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
@@ -18,7 +19,6 @@ import { markDisclosed, setPaused, tenantById, tenantContext, type TenantContext
 // and after the run: her first reply is marked (the model greets her once, in its own voice: persona.ts FIRST_CONTACT). A fixed notice is sent at most every
 // 30 minutes (tenants.ts mayNotice); in between the turn stays silent ([[silent]]).
 
-const SILENT = "[[silent]]";
 
 export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)

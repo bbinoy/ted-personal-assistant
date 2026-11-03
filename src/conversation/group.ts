@@ -1,5 +1,6 @@
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
+import { SILENT } from "../core/silent.ts";
 import { reactionJournal } from "../core/reaction.ts";
 import { prepare, runConversation, type TurnBuilder } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
@@ -134,7 +135,7 @@ function sponsorPayer(conv: Conversation): Payer | undefined {
 // Chat replies and wake-ups both run here; the cost is logged as for an owner run. A friend's group runs on her key (the payer decides, as for her own chat).
 const realRunner: Runner = async (build, { conv, firstOutput, apiKey }) => {
   const payer = conv.sponsor ? mayRun(conv, "chat", { chat: true }) : undefined;
-  if (payer && isRefusal(payer)) return "[[silent]]";
+  if (payer && isRefusal(payer)) return SILENT;
   const r = await runConversation(conv, { apiKey: payer?.kind === "instance" ? payer.apiKey : apiKey }, build, firstOutput);
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();
