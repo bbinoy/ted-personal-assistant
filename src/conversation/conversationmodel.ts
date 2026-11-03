@@ -126,6 +126,7 @@ export interface Turn {
   announce: boolean; // somebody is waiting: a failure is explained to them
   reaction?: boolean; // the turn answers a reaction: no typing, no status icons, no apology
   background?: boolean; // nobody wrote: a wake-up (wake.ts). Like a reaction, no typing, icons or apology; the answer is still compacted after
+  voiceIn?: boolean; // the message answered is a voice note: a spoken reply is likely, so the voice server is started now (delivery.ts)
   kind?: Kind; // how the reply is logged (default "chat"); the owner's wake-ups are "notice", which the chat is told about
 }
 

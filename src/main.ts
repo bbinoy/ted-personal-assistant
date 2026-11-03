@@ -138,7 +138,7 @@ const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hook
   } else turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
   return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents, !!continuation) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents, untrusted: !!continuation }), hooks?.firstOutput)).finally(() => turn.end());
 };
-// The cloned voice takes 5 to 50 s to load: have it ready for the first spoken reply, at start-up and whenever a run that may speak begins (it is stopped again after
+// The cloned voice takes 5 to 50 s to load: have it ready for the first spoken reply, at start-up and when a voice note comes in (it is stopped again after
 // WARM_IDLE_MINUTES (settings.ts) idle; warmQwen is idempotent while a start is under way or the server is up).
 const warmVoice = () => void (settings.tts.provider === "qwen" && warmQwen(settings.tts.qwen).then((err) => err && console.log(`Qwen voice not warmed up: ${err}`)));
 const pipeline: Pipeline = createPipeline({
@@ -152,7 +152,7 @@ const pipeline: Pipeline = createPipeline({
   transcript,
   speech: {
     ready: () => settings.voiceReplies && messenger.capabilities.voice && providerReady(settings.tts).ok,
-    warm: warmVoice, // at the start of every run that may speak (delivery.ts): the cold start overlaps the model run
+    warm: warmVoice, // when a voice note comes in (delivery.ts): the cold start overlaps the model run
     synth: (words, conversation, limits) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat, limits), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },

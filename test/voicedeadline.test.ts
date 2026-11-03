@@ -246,16 +246,16 @@ test("a voice file made in time is still on disk when the messenger sends it, an
   assert.equal(existsSync(dirname(made)), false, "removed after the send");
 });
 
-test("a run that may speak pre-warms the voice server at its start: chat turn and look, not a reaction, not without speech", async () => {
+test("a turn answering a voice note pre-warms the voice server; text turns, looks and reactions do not; nor without speech", async () => {
   let warms = 0;
   const r = rig({ synth: async (_l, file) => file(), warm: () => void warms++ });
   await r.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: "" }) });
-  assert.equal(warms, 1, "a chat turn");
   await r.pipeline.sendWhile(owner(), async () => "done"); // a look
-  assert.equal(warms, 2, "a look");
   await r.pipeline.runTurn(owner(), { announce: false, reaction: true, run: async () => ({ text: "" }) });
-  assert.equal(warms, 2, "a reaction never speaks");
+  assert.equal(warms, 0, "a text turn, a look and a reaction");
+  await r.pipeline.runTurn(owner(), { announce: false, voiceIn: true, run: async () => ({ text: "" }) });
+  assert.equal(warms, 1, "a voice note in");
   const mute = rig({ synth: async (_l, file) => file(), warm: () => void warms++, ready: false });
-  await mute.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: "" }) });
-  assert.equal(warms, 2, "no speech set up: nothing is started");
+  await mute.pipeline.runTurn(owner(), { announce: false, voiceIn: true, run: async () => ({ text: "" }) });
+  assert.equal(warms, 1, "no speech set up: nothing is started");
 });

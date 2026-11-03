@@ -40,7 +40,8 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   };
 
   const canSpeak = () => deps.speech.ready();
-  // A run that may speak (a chat turn, a group turn, a wake-up, a look) starts the voice server now, so its cold start overlaps the model run. Idempotent; the server still stops when idle.
+  // A voice note in is likely answered by voice: start the voice server now, so its cold start overlaps the model run. Idempotent. Text turns and looks do not warm it (the server would never
+  // idle out); their cold start is covered by the voice deadline (limits.ts) and no longer eats the generation time.
   const warmVoice = () => canSpeak() && deps.speech.warm?.();
 
   // Checks the language, speaks and sends: "spoken", "text" (the voice does not speak this language: the words go out as text, as they are) or "failed" (the words go out
@@ -191,7 +192,6 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // An unattended run that may speak while it works (the heartbeat run and its expert): the SAME send tool as a chat turn, delivered by the same function as the final reply, as a
   // notice in the conversation the run belongs to. It takes no place in the queue (the run may wait on an approval); `onSend` counts each piece delivered.
   async function sendWhile<T>(conv: Conversation, run: () => Promise<T>, onSend?: () => void): Promise<T> {
-    warmVoice();
     const d = delivery(conv, { kind: "notice", started: now() });
     return withSend(conv.key, async (c) => {
       const before = d.state.pieces;
@@ -205,7 +205,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // enqueue(). It never throws: a failure becomes a notice (if someone is waiting) and a result.
   async function runTurn(conv: Conversation, turn: Turn): Promise<TurnResult> {
     const started = now();
-    if (!turn.reaction) warmVoice();
+    if (turn.voiceIn) warmVoice();
     const background = !!turn.reaction || !!turn.background; // a reaction or a wake-up is no conversation: no typing, no icons
     if (!background) status(conv, "👀", turn.target); // 👀 working, ✅ answered, ⚠️ failed, each replacing the last
     const typing = background ? undefined : holdTyping(conv, turn.timing); // already showing if the decision to answer came earlier
