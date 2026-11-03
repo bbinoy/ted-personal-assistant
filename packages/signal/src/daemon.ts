@@ -35,12 +35,16 @@ export interface SignalDaemon {
   exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 }
 
+/** How long to wait for signal-cli (a JVM, slow on a loaded machine) to open its port, and how often to look. */
+const START_WAIT_MS = 120_000;
+const POLL_MS = 500;
+
 /**
  * Makes sure a signal-cli daemon is listening on `host:port`, starting `signal-cli` (which must be installed and
  * registered for `account`) if needed. Installs no process handlers and never exits the process: what to do when the
  * daemon dies, and when to stop it, is the caller's decision.
  * @throws if `host` is not this machine (signal-cli's socket has no authentication, so anyone who can reach it can
- *   send as the account) unless `allowNonLoopback` is set; if signal-cli exits at once or opens no port within 30 s
+ *   send as the account) unless `allowNonLoopback` is set; if signal-cli exits at once or opens no port within 120 s
  */
 export async function ensureSignalDaemon(opts: DaemonOptions): Promise<SignalDaemon> {
   const { account, host, port, logFd } = opts;
@@ -71,14 +75,14 @@ export async function ensureSignalDaemon(opts: DaemonOptions): Promise<SignalDae
   void exited.then(() => (gone = true));
   const daemon: SignalDaemon = { started: true, stop: () => void child.kill("SIGTERM"), exited };
 
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < START_WAIT_MS / POLL_MS; i++) {
     if (await portOpen(host, port)) {
       log.info("signal-cli daemon started");
       return daemon;
     }
     if (gone) throw new Error("signal-cli exited before it opened its port");
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, POLL_MS));
   }
   daemon.stop();
-  throw new Error("signal-cli did not open its port within 30s");
+  throw new Error(`signal-cli did not open its port within ${START_WAIT_MS / 1000}s`);
 }
