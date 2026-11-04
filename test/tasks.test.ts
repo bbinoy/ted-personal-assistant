@@ -148,7 +148,7 @@ test("tasks: lists, filters and counts: overdue, today, upcoming, no date, snooz
   add("Upcoming", { due: "2026-10-25" });
   add("No date");
   add("Send photos", { kind: "i_owe", person: "Lena", due: "2026-10-30" });
-  add("Contract back", { kind: "owed_to_me", person: "Anna Berg" });
+  add("Contract back", { kind: "owed_to_me", person: "Mara Berg" });
   const snooze = add("Snoozed");
   S.snoozeItem(scope(k), snooze.id, NOW + 3_600_000);
   const done = add("Finished");
@@ -158,9 +158,9 @@ test("tasks: lists, filters and counts: overdue, today, upcoming, no date, snooz
   assert.deepEqual(titles({ overdue: true }), ["Overdue day", "Overdue time"]);
   assert.deepEqual(titles({ noDate: true }), ["No date", "Contract back"]);
   assert.deepEqual(titles({ kind: "i_owe" }), ["Send photos"]);
-  assert.deepEqual(titles({ person: "anna" }), ["Contract back"]);
-  assert.deepEqual(titles({ q: "photos anna" }), [], "every word must be there");
-  assert.deepEqual(titles({ q: "contract anna" }), ["Contract back"], "the person counts as text");
+  assert.deepEqual(titles({ person: "mara" }), ["Contract back"]);
+  assert.deepEqual(titles({ q: "photos mara" }), [], "every word must be there");
+  assert.deepEqual(titles({ q: "contract mara" }), ["Contract back"], "the person counts as text");
   assert.deepEqual(titles({ dueFrom: "2026-10-22", dueTo: "2026-10-25" }), ["Overdue time", "Today later", "Today day", "Upcoming"]);
   assert.deepEqual(titles({ status: "done" }), ["Finished"]);
   assert.deepEqual(titles({ status: "snoozed" }), ["Snoozed"]);
@@ -279,7 +279,7 @@ test("tasks: the tools' schemas reject what they should before the handler sees 
   assert.equal(ok("add_task", { title: "" }), false);
   assert.equal(ok("add_task", { title: "x".repeat(201) }), false);
   assert.equal(ok("add_task", { title: "x", kind: "chore" }), false);
-  assert.equal(ok("add_task", { title: "x", kind: "owed_to_me", person: "Anna" }), true);
+  assert.equal(ok("add_task", { title: "x", kind: "owed_to_me", person: "Mara" }), true);
   assert.equal(ok("add_task", { title: "x", source_kind: "import" }), false, "import is for code");
   assert.equal(ok("add_task", { title: "x", source_kind: "mail", source_ref: "m1" }), true);
   assert.equal(ok("update_task", { id: 0 }), false);
@@ -382,7 +382,7 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   add("Send invoice", { due: "2026-10-22T15:00" });
   add("Dentist", { due: "2026-10-27T10:00" });
   add("Someday", {});
-  add("Contract back", { kind: "owed_to_me", person: "Anna", due: "2026-10-28" });
+  add("Contract back", { kind: "owed_to_me", person: "Mara", due: "2026-10-28" });
   add("Send photos", { kind: "i_owe", person: "Lena" });
   add("Water plants", { due: "2026-10-23", repeat: "every day" });
   S.addItem(scope(k, { unattended: true, by: S.LOOK_BY }), { title: "Maybe reply to Bo", sourceKind: "mail", sourceRef: "m1" });

@@ -35,7 +35,7 @@ test("created.ts: ids come from the assistant's own create results, per conversa
   assert.equal(createdFact("owner", { messageId: 26305 }, t0 + 1000), "yes");
   assert.equal(createdFact("owner", { eventId: "ev9" }, t0 + 1000), "yes");
   assert.equal(createdFact("owner", { messageId: 111 }, t0 + 1000), "no", "the owner's own");
-  assert.equal(createdFact("tenant:anna", { messageId: 26305 }, t0 + 1000), "no", "another conversation's ids tell nothing");
+  assert.equal(createdFact("tenant:mara", { messageId: 26305 }, t0 + 1000), "no", "another conversation's ids tell nothing");
   assert.equal(createdFact("owner", { summary: "nothing to compare" }, t0 + 1000), "unknown");
   assert.equal(createdFact("owner", { messageId: 26305 }, t0 + 24 * 3_600_000 + 1), "no", "older than 24 hours");
   noteCreated("owner", ["new1"], t0 + 25 * 3_600_000);
@@ -61,7 +61,7 @@ test("the judge is told by code, for a destructive call only, whether the assist
   noteCreated("owner", ["26305"]);
   assert.match(createdNote(`${MB}discard_draft`, { messageId: 26305 }, "owner"), /\nCreated by the assistant in this conversation: yes /);
   assert.match(createdNote(`${MB}discard_draft`, { messageId: 7 }, "owner"), /conversation: no /);
-  assert.match(createdNote(`${MB}discard_draft`, { messageId: 26305 }, "tenant:anna"), /conversation: no /);
+  assert.match(createdNote(`${MB}discard_draft`, { messageId: 26305 }, "tenant:mara"), /conversation: no /);
   assert.match(createdNote(`${CAL}delete_event`, {}, "owner"), /conversation: unknown /);
   assert.equal(createdNote(`${MB}archive_conversation`, { conversationId: "c" }, "owner"), "", "only for a delete");
   assert.equal(createdNote(`${N}notion-update-page`, { page_id: "p" }, "owner"), "");

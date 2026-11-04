@@ -66,18 +66,18 @@ test("notes: every note and index write is atomic, owner-only (index, forget)", 
 
 test("dream: a note edited between the read and the apply survives; an untouched one is written", () => {
   const scope = scopeIn();
-  writeFileSync(join(scope.notesDir, "people-anna.md"), "Anna is my sister\n");
+  writeFileSync(join(scope.notesDir, "people-mara.md"), "Mara is my sister\n");
   writeFileSync(join(scope.notesDir, "people-bob.md"), "Bob likes tea\n");
   const base = baseOf(readNoteFiles(scope.notesDir));
-  // meanwhile (the model is thinking): chat auto-memory edits anna, and a brand-new note appears
-  writeFileSync(join(scope.notesDir, "people-anna.md"), "Anna is my sister and lives in Oslo\n");
+  // meanwhile (the model is thinking): chat auto-memory edits mara, and a brand-new note appears
+  writeFileSync(join(scope.notesDir, "people-mara.md"), "Mara is my sister and lives in Oslo\n");
   writeFileSync(join(scope.notesDir, "people-new.md"), "typed by the owner meanwhile\n");
   const plan = {
     actions: [
-      { kind: "update" as const, file: "people-anna.md", description: "d", content: "dream's version of anna\n", merged: [] },
+      { kind: "update" as const, file: "people-mara.md", description: "d", content: "dream's version of mara\n", merged: [] },
       { kind: "update" as const, file: "people-bob.md", description: "d", content: "dream's version of bob\n", merged: [] },
       add("people-new.md", "dream's competing new note\n"),
-      { kind: "delete" as const, file: "people-anna.md", why: "x" },
+      { kind: "delete" as const, file: "people-mara.md", why: "x" },
     ],
     rejected: [],
   };
@@ -89,7 +89,7 @@ test("dream: a note edited between the read and the apply survives; an untouched
   } finally {
     console.log = orig;
   }
-  assert.equal(readFileSync(join(scope.notesDir, "people-anna.md"), "utf8"), "Anna is my sister and lives in Oslo\n", "edit survived, even the delete of it");
+  assert.equal(readFileSync(join(scope.notesDir, "people-mara.md"), "utf8"), "Mara is my sister and lives in Oslo\n", "edit survived, even the delete of it");
   assert.equal(readFileSync(join(scope.notesDir, "people-new.md"), "utf8"), "typed by the owner meanwhile\n", "a note that appeared meanwhile is not overwritten");
   assert.equal(readFileSync(join(scope.notesDir, "people-bob.md"), "utf8"), "dream's version of bob\n");
   assert.equal(logs.filter((l) => /skipped .* changed while the dream was running/.test(l)).length, 3);
@@ -115,12 +115,12 @@ test("dream: a merge whose source changed is not written and its sources are not
 
 test("dream: the index is merged, not overwritten: a line added meanwhile stays", async () => {
   const scope = scopeIn();
-  writeFileSync(join(scope.notesDir, "people-anna.md"), "Anna is my sister\n");
-  writeFileSync(join(scope.notesDir, "MEMORY.md"), "- [Anna](people-anna.md) - sister\n");
+  writeFileSync(join(scope.notesDir, "people-mara.md"), "Mara is my sister\n");
+  writeFileSync(join(scope.notesDir, "MEMORY.md"), "- [Mara](people-mara.md) - sister\n");
   const run = async () => {
     // while the model runs, the chat saves a note and its index line
     writeFileSync(join(scope.notesDir, "people-zed.md"), "Zed\n");
-    writeFileSync(join(scope.notesDir, "MEMORY.md"), "- [Anna](people-anna.md) - sister\n- [Zed](people-zed.md) - chat made this\n");
+    writeFileSync(join(scope.notesDir, "MEMORY.md"), "- [Mara](people-mara.md) - sister\n- [Zed](people-zed.md) - chat made this\n");
     return { ops: [{ op: "write", file: "people-eve.md", description: "Eve", text: "Eve is a friend", evidence: "Eve is a friend of mine, said so today" }] };
   };
   const { plan } = await dreamOver(scope as never, "p", "s", "Eve is a friend of mine, said so today", new Date("2026-10-14T04:00:00"), run);
@@ -128,7 +128,7 @@ test("dream: the index is merged, not overwritten: a line added meanwhile stays"
   const index = readFileSync(join(scope.notesDir, "MEMORY.md"), "utf8");
   assert.match(index, /people-zed\.md/);
   assert.match(index, /people-eve\.md/);
-  assert.match(index, /people-anna\.md/);
+  assert.match(index, /people-mara\.md/);
 });
 
 test("writeFileAtomic: failure leaves the old content and no temp file", () => {

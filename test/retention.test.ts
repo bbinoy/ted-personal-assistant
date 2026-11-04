@@ -150,7 +150,7 @@ test("signal attachments: old files go; a voice note inside its 7-day window, a 
   const otherConv = put(join(att, "note-from-other-conv"), "f", 45);
   const od = convDbAt(L.root, "owner");
   for (const [ts, id] of [[ago(3).getTime(), "voice-fresh"], [ago(20).getTime(), "voice-stale"]] as const) od.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, ?, 0, '', '')", ts, id);
-  const ad = convDbAt(L.root, "friend-anna");
+  const ad = convDbAt(L.root, "friend-mara");
   ad.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, 'note-from-other-conv', 0, '', '')", ago(1).getTime());
   symlinkSync(old, join(att, "alink"));
   put(join(att, ".hidden"), "h", 90);

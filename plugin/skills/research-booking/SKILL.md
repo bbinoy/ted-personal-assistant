@@ -23,9 +23,9 @@ go on ("assuming 2 adults, Friday to Sunday").
 - When prices, availability or results sit behind a form or a date picker, use the `browse` tool (give it
   the whole task: site, dates, people, filters, what to read out). Don't stop at a landing page.
 - Trains: get the connections first from the free timetable API, with `WebFetch` on
-  `https://transport.opendata.ch/v1/connections?from=Zurich&to=Paris&date=2026-10-21&time=08:00&limit=6`
+  `https://transport.opendata.ch/v1/connections?from=Zurich&to=Paris&date=<YYYY-MM-DD>&time=08:00&limit=6`
   (works for Swiss and cross-border routes: departure and arrival, duration, changes, train numbers; no prices).
-  Then prices from an operator or aggregator page via `browse`. What works (checked 2026-10-15): the Omio route
+  Then prices from an operator or aggregator page via `browse`. What works: the Omio route
   page `https://www.omio.com/trains/zurich/london` (trains and fares per day) and the Trainline timetable page
   `https://www.thetrainline.com/en/train-times/zurich-to-london` (a "from" price per route). Omio's Cloudflare
   lets ONE page load through per browser session and challenges the next one ("Just a moment..."): in a browse
@@ -36,7 +36,7 @@ go on ("assuming 2 adults, Friday to Sunday").
   Don't retry them, don't try other URL forms of the same site, name them in one line, and move on.
 - No live fare anywhere: give the timetable, a best-known fare range clearly marked "unverified", and a link
   that opens the search for them. Trainline takes the route and date in the link
-  (`https://www.thetrainline.com/book/results?journeySearchType=single&origin=urn%3Atrainline%3Ageneric%3Aloc%3A6401&destination=urn%3Atrainline%3Ageneric%3Aloc%3A4916&outwardDate=2026-10-21T09%3A00%3A00&outwardDateType=departAfter&passengers%5B%5D=1992-01-01`
+  (`https://www.thetrainline.com/book/results?journeySearchType=single&origin=urn%3Atrainline%3Ageneric%3Aloc%3A6401&destination=urn%3Atrainline%3Ageneric%3Aloc%3A4916&outwardDate=<date>&outwardDateType=departAfter&passengers%5B%5D=1992-01-01`
   is Zurich to Paris; 6401 is Zurich, 4916 Paris). For other places use the Omio route page or
   `https://www.sbb.ch/en` and say they fill in the search themselves.
 - Be persistent: if a site gives no usable data (blocked, empty, no prices), try another one, and say which sites blocked you, never "every site". Compare at

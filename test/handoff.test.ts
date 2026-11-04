@@ -381,8 +381,8 @@ function rig2(typing = true, group?: import("../src/conversation/conversationmod
 }
 
 test("a private continuation is no message: no owner message, no quote, no status icon, and the asking turn's provenance rides along", async () => {
-  const anna = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000ee", name: "Anna" })!;
-  for (const conv of [owner(), tenant(anna.id)]) {
+  const mara = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000ee", name: "Mara" })!;
+  for (const conv of [owner(), tenant(mara.id)]) {
     const { pipeline, calls, reacts, quotes } = rig2(false);
     const prov = { kind: "owner", message: "add it", earlier: [] } as never;
     await pipeline.continuation(conv, "approved call text", prov);
@@ -400,7 +400,7 @@ test("a group continuation runs without the gate, takes no member's address, and
   let gated = 0;
   const g: import("../src/conversation/conversationmodel.ts").GroupDeps = {
     gate: async () => (gated++, { act: false, delaySeconds: 0, nextCheckMinutes: 30 }),
-    context: () => ({ lines: ["Anna (a member): add the dentist"] }), recent: () => [], warm: () => {},
+    context: () => ({ lines: ["Mara (a member): add the dentist"] }), recent: () => [], warm: () => {},
     run: async (build) => (seen.push(build()), "done"),
   };
   const { pipeline, reacts, quotes } = rig2(false, g);

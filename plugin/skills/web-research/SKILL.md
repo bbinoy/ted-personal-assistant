@@ -20,7 +20,7 @@ Open the best 2-3 results (WebFetch) and check the date and the facts before you
 
 ## Answer
 
-- Say how recent the find is ("published yesterday", "as of 24 Oct"). Undated means unverified: say so.
+- Say how recent the find is ("published yesterday", "as of 24 May"). Undated means unverified: say so.
 - If the strict ask cannot be met ("of the day"), give the best real find from the last days and say so, rather than nothing. Skip only when nothing real turns up, and then say in one line what you tried.
 - Never invent a fact, date, price or source. Prices and hours can change: name where they come from.
 - A big job (many sources, comparisons, a long report): in a background check hand it to the Sonnet expert instead of doing it inline.

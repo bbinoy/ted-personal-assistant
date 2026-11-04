@@ -54,7 +54,7 @@ test("people: addresses and phones are read out of a note's text, a date is no p
 });
 
 test("people: a note names the person by its first words, else by its file; only people notes are people", () => {
-  assert.equal(fromNote(note("people-anna-silva.md", "Anna Silva. Lives in: Lisbon. anna@silva.example"))?.name, "Anna Silva");
+  assert.equal(fromNote(note("people-mara-silva.md", "Mara Silva. Lives in: Lisbon. mara@silva.example"))?.name, "Mara Silva");
   assert.equal(fromNote(note("people-rui.md", "Lives in Porto, close friend. rui@example.pt"))?.name, "Rui", "an opening that does not carry the file's name is not the name");
   assert.equal(fromNote(note("style-short.md", "Keep it short. a@b.example")), undefined);
 });
@@ -65,7 +65,7 @@ test("people: Google Contacts text becomes candidates with every address and pho
   assert.deepEqual(c[0]!.emails, ["sam.carter@example.com", "sam@home.example"]);
   assert.deepEqual(c[0]!.phones, ["+44 7700 900123"]);
   assert.deepEqual(c[1]!.emails, ["samantha@example.org"]);
-  assert.deepEqual(fromContactsText("No contacts found matching 'zed' for anna@example.com."), []);
+  assert.deepEqual(fromContactsText("No contacts found matching 'zed' for mara@example.com."), []);
 });
 
 test("people: ranking and dedupe by address, notes before contacts, a person in two sources is one candidate with both", () => {
@@ -134,7 +134,7 @@ test("people: isolation, a group has its own notes only, the owner has hers and 
   assert.match(g, /sam@group\.example/);
   assert.doesNotMatch(g, /sam@owner\.example|sam@friend\.example/);
   assert.match(g, /Not available: Google Contacts \(a group has no contacts of its own\)/);
-  const f = await ask({ ...base, kind: GROUP_CHAT, mode: "group", tenant: { id: "t-anna" }, memory: { dir: friendNotes } }, "sam"); // (her set has no Google: no contacts at all)
+  const f = await ask({ ...base, kind: GROUP_CHAT, mode: "group", tenant: { id: "t-mara" }, memory: { dir: friendNotes } }, "sam"); // (her set has no Google: no contacts at all)
   assert.match(f, /sam@friend\.example/);
   assert.doesNotMatch(f, /sam@owner\.example|sam@group\.example/);
   assert.match(f, /Not available: Google Contacts \(she has not connected Google\)/);
@@ -145,10 +145,10 @@ test("people: a friend's contacts are searched through HER session, with HER add
   const hubOf = (addr: string) => ({
     session: (tenant: string) => ({ prepare: async () => {}, address: addr, tools: async () => [], call: async (tool: string, args: Record<string, unknown>) => (seen.push({ tenant, tool, args }), { text: CONTACTS, isError: false, content: [] }) }),
   });
-  assert.equal(await searchContacts("t-anna", "sam", hubOf("anna@example.com") as never), CONTACTS);
-  assert.deepEqual(seen, [{ tenant: "t-anna", tool: "search_contacts", args: { query: "sam", page_size: 10, user_google_email: "anna@example.com" } }]);
+  assert.equal(await searchContacts("t-mara", "sam", hubOf("mara@example.com") as never), CONTACTS);
+  assert.deepEqual(seen, [{ tenant: "t-mara", tool: "search_contacts", args: { query: "sam", page_size: 10, user_google_email: "mara@example.com" } }]);
   const failing = { session: () => ({ prepare: async () => {}, address: "a@b.example", tools: async () => [], call: async () => ({ text: "denied", isError: true, content: [] }) }) };
-  await assert.rejects(searchContacts("t-anna", "sam", failing as never), /connect Google again to allow contacts/);
+  await assert.rejects(searchContacts("t-mara", "sam", failing as never), /connect Google again to allow contacts/);
 });
 
 test("people: the tool is in a group's and a friend's set and the owner's; read-only, free, and what it reads is untrusted text", () => {

@@ -2,10 +2,12 @@
 // that must never be published: credentials, phone numbers, personal paths and emails, and the
 // ACTUAL values from your local .env and Mailbird config. Prints file:line and the rule that
 // matched, never the matched text. Run it before every commit: npm run check:secrets
+// Private names and dates in prompts: scripts/private-terms.ts.
 // `--dir <folder>` scans every file under that folder instead (CI uses it on the unpacked npm tarball).
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadTerms, mainCheckout, promptDates, termRegex } from "./private-terms.ts";
 
 function filesUnder(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? filesUnder(join(dir, e.name)) : [join(dir, e.name)]));
@@ -51,11 +53,25 @@ try {
   }
 } catch { /* no Claude config on this machine, e.g. CI */ }
 
+// Private terms (people's names from the owner's notes, plans/private-terms.txt): see scripts/private-terms.ts.
+const terms = loadTerms(mainCheckout());
+const termRe = terms && termRegex(terms);
+console.log(terms ? `private terms: ${terms.deny.length} checked` : "private terms: skipped (no owner notes folder or plans/private-terms.txt here, e.g. CI)");
+
 let found = 0;
 for (const f of files) {
   const text = readFileSync(f, "utf8");
   if (text.includes("\0")) continue; // binary
+  const termsHere = termRe && !terms.allowFiles.some((r) => r.test(f));
   text.split("\n").forEach((line, i) => {
+    if (termsHere && termRe.test(line.normalize("NFC"))) {
+      console.log(`${f}:${i + 1}  private term`);
+      found++;
+    }
+    if (promptDates.files.test(f) && promptDates.re.test(line) && !promptDates.allow.some((a) => a.file.test(f) && a.line.test(line))) {
+      console.log(`${f}:${i + 1}  ${promptDates.name}`);
+      found++;
+    }
     for (const r of rules) {
       if (r.skipFiles?.test(f)) continue;
       const m = line.match(r.re);

@@ -4,7 +4,7 @@ import { formatRepeat, nextInstant, type Rule } from "./repeat.ts";
 import { addDays, localOf, showInstant } from "./when.ts";
 
 // ONE schedule mechanism: a routine is something the assistant does at set times, declared as DATA by a repeat rule (repeat.ts, the grammar tasks use): a `when:` line in a `routine-` note of a conversation (a person asked "every morning at 8 send
-// Anna a pep talk", or set up the daily brief, which is a note that says to run that skill: the look hands what the note says to an expert). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
+// Mara a pep talk", or set up the daily brief, which is a note that says to run that skill: the look hands what the note says to an expert). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
 // record (assistant.db routine_runs, one row per routine, keyed by the note's file name); the model only does the work. At most one run per occurrence (the slot's date); a run that
 // died is retried once; if the Mac slept through the time the routine still runs once when it wakes, within `catchUpHours` of its time, else that occurrence is skipped (no chat message: the log and the doctor show it) and the next brief says so in one line, once.
 // An edited `when:` changes nothing already done: the new rule is read from the next occurrence on (the record is per date, so what ran today does not run again today).

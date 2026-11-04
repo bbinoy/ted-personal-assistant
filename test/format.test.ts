@@ -35,10 +35,10 @@ test("approval text: text-direction controls are stripped, so what shows is what
 });
 
 test("approval text: characters with no width are shown as code points, so two look-alike addresses differ on screen", () => {
-  const plain = describeCall("mcp__mailbird__send_message_now", { to: "anna@example.com", subject: "Hi" });
-  const sneaky = describeCall("mcp__mailbird__send_message_now", { to: "anna​@example.com", subject: "H﻿i" });
+  const plain = describeCall("mcp__mailbird__send_message_now", { to: "mara@example.com", subject: "Hi" });
+  const sneaky = describeCall("mcp__mailbird__send_message_now", { to: "mara​@example.com", subject: "H﻿i" });
   assert.notEqual(plain, sneaky);
-  assert.match(sneaky, /To: anna⟨U\+200B⟩@example\.com/);
+  assert.match(sneaky, /To: mara⟨U\+200B⟩@example\.com/);
   assert.match(sneaky, /Subject: H⟨U\+FEFF⟩i/);
   // a recipient given as an object is cleaned too, and emoji joiners and plain text are untouched
   assert.match(describeCall("mcp__x__do", { attendees: [{ email: "a⁠b@example.com" }] }), /With: a⟨U\+2060⟩b@example\.com/);

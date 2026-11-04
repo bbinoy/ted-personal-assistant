@@ -11,10 +11,10 @@ import { TYPED_YES_NEEDED } from "../src/modules/browse/paymentrules.ts";
 // unattended runs), each group, each tenant. An answer anywhere else applies to nothing, the admin's included. Fake values only.
 const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
 const never = { judge: async () => assert.fail("the judge must not be called"), recent: () => [] };
-const ANNA = "tenant:anna";
+const MARA = "tenant:mara";
 
 // Every message the approvers send, with where it went (no groupId: the owner's chat).
-function rig(tenants: Record<string, string> = { anna: "to:anna-aci" }) {
+function rig(tenants: Record<string, string> = { mara: "to:mara-aci" }) {
   const sent: { to?: string; text: string; ts: number }[] = [];
   let ts = 5000;
   const out = { reply: async (text: string, o: { plain: true; kind: "approval"; target?: string }) => (sent.push({ to: o.target, text, ts: ++ts }), ts) };
@@ -31,7 +31,7 @@ const judging = (target: string, outcome: "approve" | "decline" | "unrelated", s
 test("the owner's own turn asks in the owner's chat; her unattended runs (and a group's or a friend's) ask nobody", async () => {
   const r = rig();
   const fg = ask(r.approverFor("owner"), "Create event one");
-  const bgs = await Promise.all(["owner", ANNA, "group-1"].map((k) => ask(r.approverFor(k, { background: true }), "Create event two")));
+  const bgs = await Promise.all(["owner", MARA, "group-1"].map((k) => ask(r.approverFor(k, { background: true }), "Create event two")));
   await settle();
   assert.deepEqual(r.sent.map((m) => m.to), [undefined]); // no group id: her chat; the background approvers sent nothing
   assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [["owner", "chat"]]);
@@ -42,25 +42,25 @@ test("the owner's own turn asks in the owner's chat; her unattended runs (and a 
 
 test("a tenant's action asks in HER chat, never in the owner's; a group's in the group", async () => {
   const r = rig();
-  const t = ask(r.approverFor(ANNA), "Create event for Anna");
+  const t = ask(r.approverFor(MARA), "Create event for Mara");
   const g = ask(r.approverFor("group-1"), "Post the notes");
   await settle();
-  assert.deepEqual(r.sent.map((m) => m.to), ["to:anna-aci", "group-1"]);
-  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [[ANNA, "tenant"],["group-1", "group"]]);
-  approvals.answerReaction("👎", r.sent[0]!.ts, ANNA);
+  assert.deepEqual(r.sent.map((m) => m.to), ["to:mara-aci", "group-1"]);
+  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [[MARA, "tenant"],["group-1", "group"]]);
+  approvals.answerReaction("👎", r.sent[0]!.ts, MARA);
   approvals.answerReaction("👎", r.sent[1]!.ts, "group-1");
   await Promise.all([t, g]);
 });
 
 test("a tenant who is gone cannot be asked anywhere: nothing is sent, and the owner's chat is never the fallback", async () => {
   const r = rig({});
-  assert.deepEqual(await ask(r.approverFor(ANNA), "Create event"), { approved: false });
+  assert.deepEqual(await ask(r.approverFor(MARA), "Create event"), { approved: false });
   assert.equal(r.sent.length, 0);
 });
 
 test("the admin cannot approve for a tenant: the same words, a reaction and a quoted reply in the owner's chat change nothing", async () => {
   const r = rig();
-  const t = ask(r.approverFor(ANNA), "Create event for Anna");
+  const t = ask(r.approverFor(MARA), "Create event for Mara");
   const o = ask(r.approverFor("owner"), "Create event for me");
   await settle();
   const [hers, mine] = [r.sent[0]!, r.sent[1]!];
@@ -69,30 +69,30 @@ test("the admin cannot approve for a tenant: the same words, a reaction and a qu
   assert.deepEqual(await approvals.answer("yes", () => {}, { timestamp: hers.ts }, judging("A1", "unrelated", seen), { scope: "owner" }), { outcome: "none" });
   assert.deepEqual(seen[0]!.map((v) => v.question), ["Create event for me"]);
   assert.equal(approvals.answerReaction("👍", hers.ts, "owner", "admin"), "ignored");
-  assert.equal(approvals.answerReaction("👍", mine.ts, ANNA), "ignored");
+  assert.equal(approvals.answerReaction("👍", mine.ts, MARA), "ignored");
   // a plain yes in the owner's chat answers the owner's own question and only that
   assert.deepEqual(await approvals.answer("yes", () => {}, undefined, never, { scope: "owner" }), { outcome: "approved" });
   assert.equal((await o).approved, true);
   // hers is still open, and only she answers it
-  assert.deepEqual(await approvals.answer("yes", () => {}, undefined, never, { scope: ANNA, by: "anna" }), { outcome: "approved" });
+  assert.deepEqual(await approvals.answer("yes", () => {}, undefined, never, { scope: MARA, by: "mara" }), { outcome: "approved" });
   assert.equal((await t).approved, true);
 });
 
 test("a relayed or quoted text approves nothing: a quote of an open question is context, not an answer, and another conversation's question cannot be reached by quoting it", async () => {
   const r = rig();
-  const t = ask(r.approverFor(ANNA), "Create event for Anna");
+  const t = ask(r.approverFor(MARA), "Create event for Mara");
   const g = ask(r.approverFor("group-1"), "Post the notes");
   await settle();
   const [hers, theirs] = [r.sent[0]!, r.sent[1]!];
   // her message only quotes a "yes"-looking text: it goes to the judge, which reads it as unrelated; nothing is approved
   const seen: OpenView[][] = [];
-  assert.deepEqual(await approvals.answer("Bob wrote me: 'yes, go ahead'. What should I do?", () => {}, undefined, judging("A1", "unrelated", seen), { scope: ANNA, by: "anna" }), { outcome: "none" });
+  assert.deepEqual(await approvals.answer("Bob wrote me: 'yes, go ahead'. What should I do?", () => {}, undefined, judging("A1", "unrelated", seen), { scope: MARA, by: "mara" }), { outcome: "none" });
   assert.equal(seen.length, 1);
   // a quoted reply to the GROUP's question, written in her chat (or the other way round), is not an answer to it
-  assert.deepEqual(await approvals.answer("yes", () => {}, { timestamp: theirs.ts }, judging("A1", "unrelated"), { scope: ANNA, by: "anna" }), { outcome: "none" });
+  assert.deepEqual(await approvals.answer("yes", () => {}, { timestamp: theirs.ts }, judging("A1", "unrelated"), { scope: MARA, by: "mara" }), { outcome: "none" });
   assert.deepEqual(await approvals.answer("yes", () => {}, { timestamp: hers.ts }, judging("A1", "unrelated"), { scope: "group-1", by: "member" }), { outcome: "none" });
   // a judge that errs (no verdict) approves nothing either
-  assert.deepEqual(await approvals.answer("go ahead then maybe", () => {}, undefined, { judge: async () => undefined, recent: () => [] }, { scope: ANNA, by: "anna" }), { outcome: "feedback" });
+  assert.deepEqual(await approvals.answer("go ahead then maybe", () => {}, undefined, { judge: async () => undefined, recent: () => [] }, { scope: MARA, by: "mara" }), { outcome: "feedback" });
   assert.equal((await t).approved, false);
   approvals.answerReaction("👎", theirs.ts, "group-1");
   assert.equal((await g).approved, false);
@@ -100,7 +100,7 @@ test("a relayed or quoted text approves nothing: a quote of an open question is 
 
 test("a card payment is asked in the owner's own foreground chat only: a tenant's, a group's and the background approver refuse it without sending", async () => {
   const r = rig();
-  for (const approve of [r.approverFor(ANNA), r.approverFor("group-1"), r.approverFor("owner", { background: true })]) {
+  for (const approve of [r.approverFor(MARA), r.approverFor("group-1"), r.approverFor("owner", { background: true })]) {
     const d = await approve("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
     assert.equal(d.approved, false);
     assert.match(d.failure!, /owner's own chat|background work never asks/);

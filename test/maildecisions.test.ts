@@ -31,12 +31,12 @@ test("record keeps the last decision per mail; it is read back as the block, new
   const f = file("a");
   const triage = createTriage(f);
   assert.equal(inboxBlock(f, NOW), "", "no decisions: every mail is new");
-  triage.record([row("c-1", "keep", "needs the owner's answer", "Philip", "Thanksgiving"), row("18f3a", "archive", "newsletter", "News", "Weekly")], NOW - 5 * HOUR);
+  triage.record([row("c-1", "keep", "needs the owner's answer", "Peter", "Thanksgiving"), row("18f3a", "archive", "newsletter", "News", "Weekly")], NOW - 5 * HOUR);
   triage.record([row("c-2", "draft", "reply overdue", "Eve", "Friday")], NOW - 3 * HOUR);
   const text = inboxBlock(f, NOW);
   assert.match(text, /A mail you find in the inbox that is not listed here is new/);
   assert.match(text, /c-2 \| drafted a reply 3 h ago: “Friday” from Eve, reply overdue\n/);
-  assert.match(text, /c-1 \| kept 5 h ago: “Thanksgiving” from Philip, needs the owner's answer/);
+  assert.match(text, /c-1 \| kept 5 h ago: “Thanksgiving” from Peter, needs the owner's answer/);
   assert.match(text, /18f3a \| archive not done yet 5 h ago/, "an archive that did not go through is still in the inbox");
   assert.ok(text.indexOf("c-2 |") < text.indexOf("c-1 |"), "newest first");
   triage.record([row("c-1", "task", "task added")], NOW - HOUR);

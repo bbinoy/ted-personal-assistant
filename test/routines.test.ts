@@ -327,7 +327,7 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
   assert.match(scheduledIn({ ...o, notesDir: none.notesDir }).broken[0]!.why, /no `when:` line/);
   writeFileSync(file, "---\nwhen: every mon and thu at 9\n---\nSummarise my week.\n");
   assert.equal(routineNoteReply("Edit", { file_path: file }, conv.notesDir, ZONE, o.now), "Routine saved: every monday, thursday at 09:00, next today 09:00 (Europe/Berlin). Tell the person this schedule and when it runs next, in your own words.");
-  assert.equal(routineNoteReply("Write", { file_path: join(conv.notesDir, "people-anna.md") }, conv.notesDir, ZONE, o.now), undefined, "only routine notes");
+  assert.equal(routineNoteReply("Write", { file_path: join(conv.notesDir, "people-mara.md") }, conv.notesDir, ZONE, o.now), undefined, "only routine notes");
   assert.equal(routineNoteReply("Read", { file_path: file }, conv.notesDir, ZONE, o.now), undefined, "only writes");
   assert.equal(routineNoteReply("Write", { file_path: "/etc/routine-x.md" }, conv.notesDir, ZONE, o.now), undefined, "only inside the notes folder");
   assert.equal(scheduledIn({ ...o, notesDir: conv.notesDir }).routines[0]!.name, "routine-fun-fact");

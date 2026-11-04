@@ -10,6 +10,7 @@ Read CLAUDE.md (principles) and CONTRIBUTING.md (commits, gates, tests) first; t
 Also:
 - Work on a branch or worktree. Never merge, push or restart the assistant.
 - Never read or write `conversations/`, `instance/`, `state/`, `logs/` or `.env`. Put no personal data in code, tests or docs.
+- Examples in code, prompts, tests, docs, commits and agent briefs are invented, never taken from the current chat, task or brief, even when a brief shows one. Prompt dates use May ("3 May").
 - Commit in small conventional commits, ending with the trailers the session gives.
 - Regenerate fixtures only on purpose (`SNAPSHOT_WRITE=1 npm test`) and review the diff.
 - Iterate with `npm run gates:quick -- <test files you touched>`. Run the full `npm run gates` once before your final commit only when the change touches shared code paths (approvals, run building, persona/prompts, the conversation pipeline); otherwise gates:quick is enough and the orchestrator's push runs the full gates. Report which you ran.
