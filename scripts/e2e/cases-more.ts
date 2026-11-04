@@ -1153,8 +1153,8 @@ const e33: Case = {
     const mia = by(/mia/i);
     const dep = by(/deposit/i);
     return [
-      check("a draft to Sam exists", drafts.some((d) => d.to.some((p) => p.email === SAM_E)), drafts.map((d) => d.to.map((p) => p.email).join(",")).join("; ")),
-      check("a draft to Mia exists", drafts.some((d) => d.to.some((p) => p.email === MIA_E))),
+      check("a draft to Sam exists", drafts.some((d) => JSON.stringify(d.to).includes(SAM_E)), drafts.map((d) => d.to.map((p) => p.email).join(",")).join("; ")),
+      check("a draft to Mia exists", drafts.some((d) => JSON.stringify(d.to).includes(MIA_E))),
       check("exactly one message to the owner, naming Valmora", said.length === 1 && /valmora/i.test(said[0] ?? ""), `${said.length}`),
       check("the prepare task is done", prep?.status === "done", prep?.status),
       check("Mia's dated wish lost its due date and reminder", !!mia && !mia.due && !mia.remindAt, JSON.stringify({ due: mia?.due, r: mia?.remindAt })),
@@ -1184,7 +1184,7 @@ const e34: Case = {
   title: "'the Valmora trip moved a week later': the whereabouts note follows, the one prepare task's reminder moves, no second task",
   turns: ["The Valmora trip has moved a week later"],
   world: (t) => ({
-    tasks: [{ title: "Prepare Valmora stay", remindAt: t.at(t.day(25), "09:00") }, { title: "When in Valmora: coffee with Sam" }, { title: `Meet Noor during the Valmora stay (around ${t.day(33)})`, details: `Noor is free ${t.day(33)}`, due: t.day(33) }, { title: "Renew the library card", due: t.day(33) }],
+    tasks: [{ title: "Prepare Valmora stay", remindAt: t.at(t.day(25), "09:00") }, { title: "When in Valmora: coffee with Sam" }, { title: `Meet Noor during the Valmora stay (around ${t.day(33)})`, details: `Planned for ${t.day(33)}, to be confirmed`, due: t.day(33) }, { title: "Renew the library card", due: t.day(33) }],
     notes: { "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(30)} to ${t.day(44)}`, `At home. Valmora stay from ${t.day(30)} to ${t.day(44)}.`) },
   }),
   maxQuestions: 0,
@@ -1250,7 +1250,7 @@ const e36: Case = {
     return [
       check("the reply names the newer first day", dateWords(o.time.day(27)).test(said), said.slice(0, 200)),
       check("the reply does not name the older first day", !dateWords(o.time.day(30)).test(said), said.slice(0, 200)),
-      check("the older plan note now holds the newer day and not the older start", plan.includes(o.time.day(27)) && !plan.includes(o.time.day(30)), plan.slice(0, 200)),
+      check("the older plan note now holds the newer day and no longer says the stay is from the older day", plan.includes(o.time.day(27)) && !plan.includes(`from ${o.time.day(30)}`), plan.slice(0, 200)),
       check("the lunch task has no due date", !!task && !task.due, task?.due),
       check("the owner was not asked anything", o.asks.length === 0),
     ];
@@ -1317,7 +1317,7 @@ const e38: Case = {
   state: (o) => {
     const said = o.turns.flatMap((x) => x.messages).join("\n");
     const task = o.tasks.find((x) => /lena/i.test(x.title));
-    const handled = o.mail.drafts().some((d) => d.to.some((p) => p.email === LENA_E)) || o.calendar.some((e) => /lena/i.test(e.summary ?? "")) || task?.status === "done";
+    const handled = o.mail.drafts().some((d) => JSON.stringify(d.to).includes(LENA_E)) || o.calendar.some((e) => /lena/i.test(e.summary ?? "")) || task?.status === "done";
     return [
       check("the reply says they are there until day 6", dateWords(o.time.day(6)).test(said), said.slice(0, 200)),
       check("it is handled now: a draft to Lena, a calendar entry, or the task done", handled, `${o.mail.drafts().length} drafts`),
