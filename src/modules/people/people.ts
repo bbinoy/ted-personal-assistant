@@ -122,7 +122,7 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
 // recipient floor (approvals/autojudge.ts) needs it inside a permission check, and a friend's Google Contacts need a network call per query, so only what is saved as a note counts.
 export const knownPeople = (notesDir: string | undefined): Candidate[] => (notesDir ? readNotes(undefined, notesDir).flatMap((n) => fromNote(n) ?? []) : []);
 
-// Pure: the addresses of the known people whose first name (3+ letters) is a whole word of the text. "invite Mara" names mara.clements@... only if a known Mara has that address.
+// Pure: the addresses of the known people whose first name (3+ letters) is a whole word of the text. "invite Mara" names mara.holm@... only if a known Mara has that address.
 export function addressesNamedIn(text: string, known: readonly Candidate[]): Set<string> {
   const said = new Set(tokens(text));
   return new Set(known.filter((c) => { const first = tokens(c.name)[0]; return !!first && first.length >= 3 && said.has(first); }).flatMap((c) => c.emails));

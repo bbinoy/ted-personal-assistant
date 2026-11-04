@@ -7,15 +7,15 @@ import type { Case, Outcome, Time } from "./case.ts";
 const e3: Case = {
   id: "e3",
   title: "bulk task triage in one message",
-  turns: ["Done: swing class signup, send deck to Leif. Push Ricardo transfer to Tuesday. Remove world ETF buy. Calling Ursula seems duplicate."],
+  turns: ["Done: swing class signup, send deck to Leif. Push Ricardo transfer to Tuesday. Remove world ETF buy. Calling Ingrid seems duplicate."],
   world: (t) => ({
     tasks: [
       { title: "Swing class signup", due: t.day(2) },
       { title: "Send deck to Leif", due: t.day(1) },
       { title: "Ricardo transfer", due: t.nextWeekday(5), details: "the deposit for the flat" },
       { title: "World ETF buy" },
-      { title: "Call Ursula about the flat viewing" },
-      { title: "Ring Ursula back", details: "re the viewing" },
+      { title: "Call Ingrid about the flat viewing" },
+      { title: "Ring Ingrid back", details: "re the viewing" },
       { title: "Renew library card", due: t.day(9) },
     ],
   }),
@@ -30,20 +30,20 @@ const e3: Case = {
       check("the deck for Leif is done", by("deck")[0]?.status === "done", by("deck")[0]?.status),
       check("Ricardo is due on the Tuesday after his old Friday due date, and still open", !!ric && ric.status === "open" && ric.due?.slice(0, 10) === o.time.plus(o.time.nextWeekday(5), 4), ric && `${ric.status} ${ric.due}`),
       check("the ETF task is closed, not deleted (done or dropped)", by("etf").length === 1 && ["done", "dropped"].includes(by("etf")[0]!.status), by("etf")[0]?.status),
-      check("the two Ursula tasks became one open task", by("ursula").length >= 1 && open("ursula").length === 1, `${open("ursula").length} open`),
+      check("the two Ingrid tasks became one open task", by("ingrid").length >= 1 && open("ingrid").length === 1, `${open("ingrid").length} open`),
       check("the other tasks are untouched", !!lib && lib.status === "open" && lib.due === o.time.day(9) && lib.title === "Renew library card"),
     ];
   },
   never: () => [],
-  reply: ["It says briefly what was done with the tasks: the two finished, Ricardo moved to Tuesday, the ETF task removed, the Ursula tasks merged.", "It is short: five lines at most.", "It asks no question."],
+  reply: ["It says briefly what was done with the tasks: the two finished, Ricardo moved to Tuesday, the ETF task removed, the Ingrid tasks merged.", "It is short: five lines at most.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
     s.tasks.done(s.tasks.find("swing"));
     s.tasks.done(s.tasks.find("deck"));
     s.tasks.edit(s.tasks.find("ricardo"), { due: s.time.plus(s.time.nextWeekday(5), 4) });
     s.tasks.drop(s.tasks.find("etf"));
-    s.tasks.drop(s.tasks.find("ring ursula"));
-    s.say("Done: the swing class signup and the deck for Leif are ticked off, Ricardo is on Tuesday, the ETF task is removed and the two Ursula tasks are one now.");
+    s.tasks.drop(s.tasks.find("ring ingrid"));
+    s.say("Done: the swing class signup and the deck for Leif are ticked off, Ricardo is on Tuesday, the ETF task is removed and the two Ingrid tasks are one now.");
   },
 };
 
@@ -104,7 +104,7 @@ const e4: Case = {
 };
 
 // ---- e7: "I booked, check email, update calendar, invite Mara" ----
-const MARA = "mara.clements@example.org";
+const MARA = "mara.holm@example.org";
 const e7: Case = {
   id: "e7",
   title: "a booking mail updates the existing event; Mara is invited from past mail",
@@ -116,7 +116,7 @@ const e7: Case = {
     ],
     mail: [
       { from: { email: "reservations.marlowpine@example.com", displayName: "Marlow & Pine" }, subject: "Your table at Marlow & Pine is confirmed", body: `<p>Your table for 2 is confirmed for tomorrow, ${t.day(1)}, at 19:00. Marlow & Pine, 14 Quay Street, London. Booking reference MP-48213.</p>`, receivedAt: new Date(t.now.getTime() - 2 * 3_600_000).toISOString() },
-      { from: { email: MARA, displayName: "Mara Clements" }, subject: "Re: catching up", body: "<p>Would love to! Any evening next week works. Mara</p>", receivedAt: new Date(t.now.getTime() - 20 * 86_400_000).toISOString(), read: true },
+      { from: { email: MARA, displayName: "Mara Holm" }, subject: "Re: catching up", body: "<p>Would love to! Any evening next week works. Mara</p>", receivedAt: new Date(t.now.getTime() - 20 * 86_400_000).toISOString(), read: true },
     ],
   }),
   maxQuestions: 1, // (Mara's address comes from a mail the run read and the owner only said "Mara": the code floor asks once before the invitation goes out)
@@ -672,18 +672,18 @@ const e16b: Case = {
 };
 
 // ---- e19: "is registration open?": the event's site wants the access key from the invite mail; typing it is no question, the page behind it is read ----
-const POLARIS_AUTH = "https://polaris.example.lovable.app/auth";
-const POLARIS_HOME = "https://polaris.example.lovable.app/event";
+const MERIDIAN_AUTH = "https://meridian.example.lovable.app/auth";
+const MERIDIAN_HOME = "https://meridian.example.lovable.app/event";
 const e19: Case = {
   id: "e19",
   title: "check whether an event's registration is open: the site wants the access key from the invite mail, no question",
-  turns: ["Is registration for the Polaris event still open? The invite is in my inbox."],
+  turns: ["Is registration for the Meridian event still open? The invite is in my inbox."],
   world: (t) => ({
-    mail: [{ from: { email: "hello@example.com", displayName: "Polaris Events" }, subject: "You are invited: Visionaries Polaris", body: `<p>Join us for Visionaries Polaris. Details and registration: ${POLARIS_AUTH}</p><p>Access key: polaris2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
-    fetch: { [POLARIS_AUTH]: `<html><head><title>Visionaries Polaris</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
+    mail: [{ from: { email: "hello@example.com", displayName: "Meridian Events" }, subject: "You are invited: Meridian Circle", body: `<p>Join us for Meridian Circle. Details and registration: ${MERIDIAN_AUTH}</p><p>Access key: meridian2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
+    fetch: { [MERIDIAN_AUTH]: `<html><head><title>Meridian Circle</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
     web: {
-      [POLARIS_AUTH]: { url: POLARIS_AUTH, heading: "Visionaries Polaris", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "polaris2026", to: POLARIS_HOME } },
-      [POLARIS_HOME]: { url: POLARIS_HOME, heading: "Visionaries Polaris", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
+      [MERIDIAN_AUTH]: { url: MERIDIAN_AUTH, heading: "Meridian Circle", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "meridian2026", to: MERIDIAN_HOME } },
+      [MERIDIAN_HOME]: { url: MERIDIAN_HOME, heading: "Meridian Circle", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
     },
   }),
   maxQuestions: 0,
@@ -699,10 +699,10 @@ const e19: Case = {
   reply: ["It says registration is open, with the closing date (the 14th).", "It does not ask whether to type the access key or to go ahead.", "It is short."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${MB}search_conversations`, { query: "Polaris" });
-    await s.tool("mcp__browser__browser_navigate", { url: POLARIS_AUTH });
-    await s.tool("mcp__browser__browser_type", { target: "e3", text: "polaris2026", submit: true });
-    s.say("Yes, registration for Visionaries Polaris is open until the 14th, seats are limited.");
+    await s.tool(`${MB}search_conversations`, { query: "Meridian" });
+    await s.tool("mcp__browser__browser_navigate", { url: MERIDIAN_AUTH });
+    await s.tool("mcp__browser__browser_type", { target: "e3", text: "meridian2026", submit: true });
+    s.say("Yes, registration for Meridian Circle is open until the 14th, seats are limited.");
   },
 };
 
