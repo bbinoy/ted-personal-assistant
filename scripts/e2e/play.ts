@@ -11,6 +11,7 @@ import { owner } from "../../src/conversation/conversationmodel.ts";
 import { runConversation, runLook } from "../../src/run/agent.ts";
 import { chatTurn } from "../../src/run/chattail.ts";
 import { ledgerEntries, recordMessage } from "../../src/core/messages.ts";
+import { liveConvDb } from "../../src/core/convdb.ts";
 import { lookState } from "../../src/conversation/ledger.ts";
 import { scopeOf } from "../../src/approvals/turnscope.ts";
 import { approveIn, setApprovers } from "../../src/approvals/permissions.ts";
@@ -99,6 +100,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   seedNotes(o.zone, world.notes);
   const web = world.fetch ? await startFakeWeb(world.fetch) : undefined;
   const scope: Scope = { key: OWNER_KEY, zone: o.zone, by: "owner", origin: "owner", source: "chat", now: nowMs };
+  const firstId = Math.max(0, ...listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone).map((x) => x.id)); // (tasks of an earlier case in the same data folder are not this case's)
+  for (const x of listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone)) dropItem(scope, x.id); // (a duplicate of a live task of an earlier case would be refused)
   for (const t of world.tasks ?? []) addItem(scope, t);
 
   const rec = new Recorder();
@@ -191,10 +194,10 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       },
       tasks: {
         add: (t) => void addItem(scope, { title: t.title, due: t.due, remindAt: t.remindAtMs }),
-        find: (part) => listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.title.toLowerCase().includes(part.toLowerCase()))!.id,
+        find: (part) => listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.id > firstId && x.title.toLowerCase().includes(part.toLowerCase()))!.id,
         done: (id) => void completeItem(scope, id),
         drop: (id) => void dropItem(scope, id),
-        edit: (id, patch) => void editItem(scope, id, patch),
+        edit: (id, patch) => void editItem(scope, id, { ...patch, remindAt: patch.remindAtMs }),
       },
       ask: (tool, question, answer, payment = false) => void scriptedAsks.push({ turn, tool, question, payment, answer }),
       note: (file, text) => void writeFileSync(join(owner().notesDir, file), text),
@@ -318,6 +321,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         };
         const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (cv, payer, build, extra) => runLook(cv, payer, build, approveIn(cv.key, { background: true }), extra, { now: o.now, io: { query: realQuery } }), may: () => LOGIN, why: () => "refused", notesChangedAt: () => 0 });
         recordMessage("owner", nowMs - 3_600_000, "morning", new Date(nowMs - 3_600_000)); // (a conversation with some history, as a look finds it)
+        for (const f of readdirSync(owner().notesDir).filter((x) => x.startsWith("routine-"))) liveConvDb(conv)?.run("INSERT OR IGNORE INTO routine_runs (name, since) VALUES (?, ?)", f.replace(/\.md$/, ""), nowMs - 86_400_000); // (a routine note seeded by the case has been known since yesterday, so today's slot is due)
         await fireReminders(pipeline as never, conv, o.now); // (the wake tick claims a reminder that came due, which is what wakes the look with its reason)
         const outcome = await hb.look(conv, lookState(ledgerEntries(conv.logFile)), o.now);
         if (outcome !== "silent" && outcome !== "posted") error = `the look ended ${outcome}`;
@@ -344,7 +348,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
   if (!error && guard.inits === 0 && !o.perfect && !c.group) guard.violations.push("no start-up message was checked"); // (a group the gate leaves unanswered starts no run at all)
   await web?.close();
   return {

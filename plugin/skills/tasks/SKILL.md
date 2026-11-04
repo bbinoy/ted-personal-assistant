@@ -40,11 +40,11 @@ the owner says plainly to drop or remove that item.
 
 ## Reconcile
 
-Tidy the list from what the run has already read (mail, calendar, chat), never by extra fetching beyond `list_tasks`. Only on clear evidence; when unsure, leave it.
+Tidy the list from what the run has already read (mail, calendar, notes, the whereabouts note included, chat), never by extra fetching beyond `list_tasks`. Only on clear evidence; when unsure, leave it.
 
 - **Complete** a task the sources show is done (the reply was sent, the document arrived, the meeting happened): `complete_task`.
 - **Merge** duplicates: keep the better-worded item, fold the other's details into it with `update_task`, `drop_task` the other.
-- **Move** the due date when a mail or event changed it: `update_task`.
+- **Move** a task when a mail, event, note or the person's words changed the date or plan it depends on: `update_task` every place the old date appears in it: due date, reminder, title and details (a date in the details counts: "planned for <old day>" becomes the new day). The run that changes a plan does this itself, in the same run (`list_tasks` with a `query` for the place or event).
 - **Drop** a moot task (the event it was for is past and nothing is left to do): `drop_task`.
 
 All are reversible with `update_task` and `reopen: true`.
@@ -77,9 +77,9 @@ change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
 ## Tasks that fit a place or a moment
 
-Your memory index has a `whereabouts` line: where the person is now and the next known change. Keep that note current (calendar, booking mails, what they say). When you change it (they arrived somewhere, or a new trip appears), in that run `list_tasks` with a `query` for the place and its obvious variants (city, country), look at the `people-` notes for who lives there, and mention what helps in one short statement (no question, no offer): before a trip (about a week ahead, or at the first sight of it) and on arrival, once each and not repeatedly. Other fits (shopping when heading into town, things to buy before a trip, something to bring to a meeting): remind once, briefly, at a sensible moment. No standing section in every brief, no message when nothing fits, and never state a location as certain: the calendar or the chat may say otherwise.
+A wish tied to a place ("next time I'm in London, coffee with Sam") stays on the place: write the place first in the title ("When in London: coffee with Sam"), the person set when there is one, **no due date** and no reminder pinned to an event that happens during the stay (the last dinner of a two-week stay is too late to arrange a coffee). The same for "next time I see Sam: ..." (the person set; when that person is on the calendar, that is when it fits). Confirm in one line when the person is there, read at that moment from `context-whereabouts.md`, the plan notes and the calendar: now and until when if they are there already, else the first day of the next stretch (not an event in it); if none is known, say so. Note a stretch you found there that `context-whereabouts.md` lacks. Other fits (shopping when heading into town, things to buy before a trip, something to bring to a meeting): remind once, briefly, at a sensible moment.
 
-A task that depends on a place ("when I'm next in London, meet Sam") is written with the place first in the title ("When in London: meet Sam"), no due date, and the person set when there is one. The same for "next time I see Sam: ...": the person set. When a person is on the calendar, do the same for their "next time I see" tasks (`person`).
+The daily brief arranges the place wishes ahead of a stay ("Before a stay" in `ted-personal-assistant:stay-in-touch`, which also says how `context-whereabouts.md` is kept). No standing section in every brief, no message when nothing fits, and never state a location as certain: the calendar or the chat may say otherwise.
 
 ## Do the task, not only the reminder
 
