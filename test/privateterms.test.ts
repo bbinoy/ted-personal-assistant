@@ -21,8 +21,9 @@ test("terms: slug words of 4+ letters from people-note file names, plus deny and
     assert.equal(t.allowFiles[0]!.test("docs/fiction.md"), true);
     const re = termRegex(t)!;
     assert.equal(re.test("hello Zorbel!"), true);
-    assert.equal(re.test("zorbel"), false, "case-sensitive");
     assert.equal(re.test("Zorbels"), false, "whole words");
+    assert.equal(re.test("id zorbel-1a"), true, "any case");
+    assert.equal(termRegex({ deny: ["Zörbel"], allowFiles: [] })!.test("Zo\u0308rbel".normalize("NFC")), true, "decomposed text, once normalised");
     assert.equal(re.test("on Vlorp Street today"), true);
     assert.equal(re.test("Quint"), false, "allowed");
   } finally {

@@ -12,7 +12,7 @@ You judge; the tools only report numbers. Never invent a number: every wind, gus
 Look in this conversation's memory notes before you answer anything about where or what to ride:
 
 - `context-surf-profile`: home place and its coordinates, boards and sports, kite quiver (sizes), rider weight, skill level, wind units (knots by default), dislikes, and optionally how far they will travel. The notes override anything below.
-- `context-spot-<name>`, one note per spot (for example `context-spot-yvonand`): name, lat/lon of the launch point at the shore, which wind directions are onshore, side-on or offshore (and where that came from), hazards, notes.
+- `context-spot-<name>`, one note per spot (for example `context-spot-larkmere`): name, lat/lon of the launch point at the shore, which wind directions are onshore, side-on or offshore (and where that came from), hazards, notes.
 
 Save a note the way you save any other (one fact per note file in the notes folder, with its line in MEMORY.md) and say in a few words what you saved.
 

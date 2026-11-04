@@ -1,6 +1,6 @@
 // The private-terms and prompt-date checks behind `npm run check:secrets` and the commit-msg hook.
 // Terms come from two ignored places in the MAIN checkout (a worktree finds it through git's common dir):
-//   conversations/owner/notes/people-<slug>.md  -> only the FILE NAMES are read: each slug word of 4+ letters, capitalised
+//   conversations/owner/notes/people-<slug>.md  -> only the FILE NAMES are read: each slug word of 4+ letters
 //   plans/private-terms.txt                      -> lines `deny: <term>`, `allow: <term>`, `allow-file: <path regex>`; allow always wins
 // Neither there (CI, a fresh clone): the check is skipped and passes. Findings print the rule name, never the term.
 import { execFileSync } from "node:child_process";
@@ -30,14 +30,14 @@ export function loadTerms(root: string | undefined): Terms | undefined {
   if (existsSync(notes)) {
     any = true;
     for (const f of readdirSync(notes)) {
-      const slug = f.match(/^people-(.+)\.md$/)?.[1];
-      for (const w of slug?.split("-") ?? []) if (/^\p{L}{4,}$/u.test(w)) deny.add(w[0]!.toUpperCase() + w.slice(1).toLowerCase());
+      const slug = f.normalize("NFC").match(/^people-(.+)\.md$/)?.[1];
+      for (const w of slug?.split("-") ?? []) if (/^[\p{L}\p{M}]{4,}$/u.test(w)) deny.add(w[0]!.toUpperCase() + w.slice(1).toLowerCase());
     }
   }
   const list = join(root, "plans", "private-terms.txt");
   if (existsSync(list)) {
     any = true;
-    for (const raw of readFileSync(list, "utf8").split("\n")) {
+    for (const raw of readFileSync(list, "utf8").normalize("NFC").split("\n")) {
       const m = raw.match(/^\s*(deny|allow|allow-file):\s*(.+?)\s*$/);
       if (!m) continue;
       if (m[1] === "deny") deny.add(m[2]!);
@@ -45,14 +45,15 @@ export function loadTerms(root: string | undefined): Terms | undefined {
       else allowFiles.push(new RegExp(m[2]!));
     }
   }
-  return any ? { deny: [...deny].filter((t) => !allow.has(t)), allowFiles } : undefined;
+  const allowed = new Set([...allow].map((t) => t.toLowerCase()));
+  return any ? { deny: [...deny].filter((t) => !allowed.has(t.toLowerCase())), allowFiles } : undefined;
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Whole word, case-sensitive.
+// Whole word, any case (ids, addresses and voice names are lower case). Scan NFC text.
 export function termRegex(t: Terms): RegExp | undefined {
-  return t.deny.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${t.deny.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "u") : undefined;
+  return t.deny.length ? new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])(?:${t.deny.map(escape).join("|")})(?![\\p{L}\\p{M}\\p{N}])`, "iu") : undefined;
 }
 
 // Prompts (assistants/, plugin/) use invented dates: only May, as "3 May" or "2026-05-03".

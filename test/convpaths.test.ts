@@ -20,7 +20,7 @@ test("convId: owner, friend-<tenant id>, group-<16 hex of sha256(group id)>; fil
   assert.equal(g, `group-${hashOf(GROUP_ID)}`);
   assert.ok(!g.includes(GROUP_ID) && !g.includes("secrets"));
   assert.notEqual(g, groupConvId(`${GROUP_ID}x`));
-  for (const ok of ["owner", "friend-a", "friend-anna_b-1", g]) assert.equal(isConvId(ok), true, ok);
+  for (const ok of ["owner", "friend-a", "friend-mara_b-1", g]) assert.equal(isConvId(ok), true, ok);
   for (const bad of ["", "Owner", "friend-", "friend-Mara", "friend-../x", "group-xyz", "group-0123456789abcde", "group-0123456789abcdef0", "x", "../owner", "owner/x", "tenant:a", "friend-" + "a".repeat(33)]) assert.equal(isConvId(bad), false, bad);
   assert.throws(() => friendConvId("owner"), /not a tenant id/);
   assert.throws(() => friendConvId("../x"), /not a tenant id/);

@@ -56,7 +56,7 @@ try {
 // Private terms (people's names from the owner's notes, plans/private-terms.txt): see scripts/private-terms.ts.
 const terms = loadTerms(mainCheckout());
 const termRe = terms && termRegex(terms);
-if (!terms) console.log("private terms: skipped (no owner notes folder or plans/private-terms.txt here, e.g. CI)");
+console.log(terms ? `private terms: ${terms.deny.length} checked` : "private terms: skipped (no owner notes folder or plans/private-terms.txt here, e.g. CI)");
 
 let found = 0;
 for (const f of files) {
@@ -64,7 +64,7 @@ for (const f of files) {
   if (text.includes("\0")) continue; // binary
   const termsHere = termRe && !terms.allowFiles.some((r) => r.test(f));
   text.split("\n").forEach((line, i) => {
-    if (termsHere && termRe.test(line)) {
+    if (termsHere && termRe.test(line.normalize("NFC"))) {
       console.log(`${f}:${i + 1}  private term`);
       found++;
     }
