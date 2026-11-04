@@ -38,6 +38,8 @@
 - `npm run eval` (`scripts/approval-eval-check.ts`) checks that the approval questions the model writes describe the call truthfully.
 - What belongs where: a judge case judges one step and must make sense without knowing the rest of the task. Whether the whole task got done (the invite was sent too, nothing was asked needlessly) is a question for an end-to-end case, which runs the real agent against fake tools. A call the code floor never lets the judge see is not a judge case: the floor already decides it.
 - Cases are fiction: no real names, addresses or places, only `example.com` and `example.org` addresses (the secret scan allows only those), and the owner's name filled in at run time.
+- This holds for everything in the repo: code, prompts, skills, tests, docs, commit messages and agent briefs. Every example is invented, never taken from the current chat, task or brief, even when a brief shows one. A reviewer flags any example that looks lived-in.
+- `npm run check:secrets` also refuses private terms (`scripts/private-terms.ts`): names from the owner's `people-*` note file names (names only) and `plans/private-terms.txt` (`deny:`, `allow:`, `allow-file:`; allow wins), read from the main checkout; it prints file:line and the rule, never the term. The `commit-msg` hook checks the message too. With neither source (CI, a fresh clone) it says so and passes. In `assistants/` and `plugin/` a day and month must be in May ("3 May", `2026-05-03`); the one exception is the clock-change line of the calendar skill (it names the last Sunday of October).
 
 **Layout**
 

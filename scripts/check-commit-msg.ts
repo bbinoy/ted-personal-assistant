@@ -2,6 +2,7 @@
 //   node scripts/check-commit-msg.ts <file with the message>      (git passes this file to the hook)
 // Exit 1 and a list of problems when the message breaks a rule. Merge commits and fixup/squash commits are not checked.
 import { readFileSync } from "node:fs";
+import { loadTerms, mainCheckout, termRegex } from "./private-terms.ts";
 
 export const TYPES = ["feat", "fix", "refactor", "perf", "docs", "test", "chore", "ci", "build", "revert"] as const;
 export const SUBJECT_MAX = 72; // GitHub shows about this much of a subject before it cuts it
@@ -36,7 +37,10 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     console.error("usage: node scripts/check-commit-msg.ts <commit message file>");
     process.exit(2);
   }
-  const problems = checkCommitMessage(readFileSync(file, "utf8"));
+  const message = readFileSync(file, "utf8");
+  const problems = checkCommitMessage(message);
+  const termRe = termRegex(loadTerms(mainCheckout()) ?? { deny: [], allowFiles: [] }); // scripts/private-terms.ts; skipped when there is no list
+  if (termRe && message.split("\n").some((l) => !l.startsWith("#") && termRe.test(l))) problems.push("the message contains a private term (see scripts/private-terms.ts); reword it");
   if (problems.length) {
     console.error("Commit message not accepted:\n" + problems.map((p) => `  - ${p}`).join("\n") + "\nSee CONTRIBUTING.md, \"Git hygiene\".");
     process.exit(1);
