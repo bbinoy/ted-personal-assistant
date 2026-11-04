@@ -35,7 +35,7 @@ import { LIMITS, oneLine } from "../core/sanitize.ts";
 // and the snapshot lets "undo the dream" put the notes back. Nothing it reads is mail: the person's messages are the only ground for a note, so a crafted
 // email cannot plant a memory.
 
-const MAX_PROMPT_NOTES_CHARS = 80_000;
+const MAX_PROMPT_NOTES_CHARS = 240_000; // only stops a runaway: normal memory never meets it; over it, whole notes are left out, never cut
 const MAX_PROMPT_CONVERSATION_CHARS = 40_000;
 
 // ---- what the model sees ----
@@ -62,10 +62,14 @@ export function conversationLines(messages: readonly Sent[], who: string = OWNER
 export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile[], lines: readonly string[]): string {
   const conv = lines.join("\n");
   const cut = conv.length > MAX_PROMPT_CONVERSATION_CHARS ? conv.slice(-MAX_PROMPT_CONVERSATION_CHARS) : conv;
-  const current = notes.map((n) => `### ${n.file}\n${n.raw.trim()}`).join("\n\n").slice(0, MAX_PROMPT_NOTES_CHARS);
+  const blocks = notes.map((n) => `### ${n.file}\n${n.raw.trim()}`);
+  let used = 0;
+  const kept = blocks.filter((b) => (used += b.length + 2) <= MAX_PROMPT_NOTES_CHARS);
+  if (kept.length < blocks.length) console.log(`dream: ${blocks.length - kept.length} of ${blocks.length} note(s) left out of the prompt (too long)`);
+  const current = kept.join("\n\n");
   return [
     clockLine(now),
-    `The notes you keep about ${subject} right now (one file per fact; MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)")}`,
+    `The notes you keep about ${subject} right now (one file per fact; MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)", MAX_PROMPT_NOTES_CHARS)}`,
     `What ${subject} said and did since the last dream, oldest first:\n${fence("conversation", cut || "(nothing)")}`,
     `Propose the changes to the notes, if any.`,
   ].join("\n\n");

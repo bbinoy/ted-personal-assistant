@@ -141,6 +141,19 @@ test("one prompt: the same template for the owner, a friend and a group, with th
   assert.match(dreamPrompt(NOW, "Mia", [], ["[10-13 20:00] Mia: hi"]), /The notes you keep about Mia right now/);
 });
 
+test("dreamPrompt: every whole note reaches the dream; over the bound only whole notes are left out", () => {
+  const note = (name: string, size: number) => ({ file: `${name}.md`, raw: `${name} ${"fact ".repeat(Math.ceil(size / 5))}`.slice(0, size).trim() });
+  const some = Array.from({ length: 12 }, (_, i) => note(`a-${String(i).padStart(2, "0")}`, 8_000)).concat(note("voice-last", 500));
+  assert.ok(some.reduce((n, f) => n + f.raw.length, 0) > 80_000);
+  assert.match(dreamPrompt(NOW, "Mia", some, []), /### voice-last\.md\nvoice-last /);
+  const many = Array.from({ length: 40 }, (_, i) => note(`n-${String(i).padStart(2, "0")}`, 10_000));
+  const p = dreamPrompt(NOW, "Mia", many, []);
+  const bodies = p.split("### n-").slice(1);
+  assert.ok(bodies.length > 0 && bodies.length < 40);
+  assert.equal((p.match(/fact/g) ?? []).length, bodies.length * 1999 + 1, "every kept note is whole");
+  assert.ok(p.includes("n-00.md") && !p.includes("n-39.md"));
+});
+
 test("undo: a conversation that is dreamt can undo its dream with its own memory server (a group here; a friend in tenantloops.test.ts)", async () => {
   reset();
   const g = G(3);
