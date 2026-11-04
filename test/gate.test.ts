@@ -65,7 +65,7 @@ test("gate prompt: the style the gate is told of is one compact line; no style, 
   const other = join(convPaths(OWNER_CONV).notes, "people-gate-test.md");
   mkdirSync(dirname(note), { recursive: true });
   writeFileSync(note, "warm and folksy,\nfew emoji\n");
-  writeFileSync(other, "Anna is the dentist\n");
+  writeFileSync(other, "Mara is the dentist\n");
   try {
     assert.match(styleLines(T0), /^- warm and folksy, few emoji$/m);
     assert.doesNotMatch(styleLines(T0), /dentist/);

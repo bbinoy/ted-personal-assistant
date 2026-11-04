@@ -48,7 +48,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
     groupDir(g, `Group ${i}`);
     for (let n = 0; n < (i === 6 ? 2 : 3); n++) say(n, groupLogFile(g)); // the last group said too little
   }
-  recordMessage("owner", 5, "Anna is my sister and her birthday is on 3 March", new Date("2026-10-13T20:00:00Z"));
+  recordMessage("owner", 5, "Mara is my sister and her birthday is on 3 March", new Date("2026-10-13T20:00:00Z"));
   const c = counting();
   const d = createDreamer({ conversations: () => dreamConversations(["owner", "group"]), run: c.run });
   await d.run(NOW);
@@ -173,7 +173,7 @@ test("undo: a conversation that is dreamt can undo its dream with its own memory
 
 test("one dreamer: a conversation someone is talking to is skipped for now, its day stays open, and it is dreamt once it is quiet", async () => {
   reset();
-  recordMessage("owner", 5, "Anna is my sister and her birthday is on 3 March", new Date("2026-10-13T20:00:00Z"));
+  recordMessage("owner", 5, "Mara is my sister and her birthday is on 3 March", new Date("2026-10-13T20:00:00Z"));
   const c = counting();
   let busy = true;
   const d = createDreamer({ conversations: () => dreamConversations(["owner"]), run: c.run, busy: () => busy });

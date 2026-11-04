@@ -68,10 +68,10 @@ test("notes: a nested front matter (the SDK's writer puts fields under metadata:
 
 test("notes: the index is regenerated over whatever else was written there, and not created for a folder with no notes", () => {
   reset();
-  put("people-anna.md", "Anna lives in Lisbon");
+  put("people-mara.md", "Mara lives in Lisbon");
   writeFileSync(join(NOTES_DIR, "MEMORY.md"), "- the model's own line, with a note that does not exist\n");
   writeIndex(NOTES_DIR);
-  assert.equal(readFileSync(join(NOTES_DIR, "MEMORY.md"), "utf8"), "- people: [anna](people-anna.md) - Anna lives in Lisbon\n");
+  assert.equal(readFileSync(join(NOTES_DIR, "MEMORY.md"), "utf8"), "- people: [mara](people-mara.md) - Mara lives in Lisbon\n");
   const empty = join(NOTES_DIR, "empty");
   mkdirSync(empty);
   writeIndex(empty);
@@ -131,15 +131,15 @@ test("persona: each run sees only its categories; chat gets the memory conventio
 test("the dream: a change to a note from the person's own words needs their quote; a merge only shortens; nothing is marked inferred", () => {
   reset();
   const now = new Date("2026-10-21T10:00:00");
-  put("people-anna.md", "Anna lives in Lisbon.");
-  put("people-rui.md", "Rui is Anna's partner.");
-  const notes = ["people-anna.md", "people-rui.md"].map((file) => ({ file, raw: readFileSync(join(NOTES_DIR, file), "utf8") }));
+  put("people-mara.md", "Mara lives in Lisbon.");
+  put("people-rui.md", "Rui is Mara's partner.");
+  const notes = ["people-mara.md", "people-rui.md"].map((file) => ({ file, raw: readFileSync(join(NOTES_DIR, file), "utf8") }));
   const base = { notes, today: "2026-10-21", now, scope: dreamScope(owner()) };
-  const merge = planOps({ ops: [{ op: "write", file: "people-anna-rui.md", description: "Anna and Rui", text: "Anna and Rui, Lisbon.", consolidates: ["people-anna.md", "people-rui.md"] }] }, { ...base, ownerText: "" });
+  const merge = planOps({ ops: [{ op: "write", file: "people-mara-rui.md", description: "Mara and Rui", text: "Mara and Rui, Lisbon.", consolidates: ["people-mara.md", "people-rui.md"] }] }, { ...base, ownerText: "" });
   assert.ok(merge.actions.some((a) => a.kind === "merge"), "a merge needs no quote");
-  const refused = planOps({ ops: [{ op: "write", file: "people-anna.md", description: "Anna", text: "Anna lives in Porto.", evidence: "Anna lives in Porto now" }] }, { ...base, ownerText: "we talked about the weather" });
+  const refused = planOps({ ops: [{ op: "write", file: "people-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "we talked about the weather" });
   assert.deepEqual([refused.actions.length, refused.rejected.length], [0, 1], "no quote of the person's own words: refused");
-  const accepted = planOps({ ops: [{ op: "write", file: "people-anna.md", description: "Anna", text: "Anna lives in Porto.", evidence: "Anna lives in Porto now" }] }, { ...base, ownerText: "yes Anna lives in Porto now, my friend" });
+  const accepted = planOps({ ops: [{ op: "write", file: "people-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "yes Mara lives in Porto now, my friend" });
   assert.equal(accepted.actions.length, 1);
   assert.doesNotMatch(noteContent("people-x.md", "d", "t", undefined, now), /origin/);
 });

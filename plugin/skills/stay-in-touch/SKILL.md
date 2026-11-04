@@ -12,8 +12,8 @@ The people who matter are ordinary memory notes, `people-<name>.md`, one per per
 Save it like any other note (one file per person, its line in MEMORY.md, a few words to the owner on what you saved). Use this shape so a later look can read it quickly:
 
 ```
-Anna Silva. Lives in: Lisbon, Portugal. Close friend from university, lives with her partner Rui.
-Wants: to be in touch about every 3 months. Birthday 14 March.
+Mara Silva. Lives in: Lisbon, Portugal. Close friend from university, lives with her partner Rui.
+Wants: to be in touch about every 3 months. Birthday 14 May.
 Likes surf and long dinners. Her first child is due in November.
 ```
 

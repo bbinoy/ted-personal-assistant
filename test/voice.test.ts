@@ -63,7 +63,7 @@ beforeEach(() => {
 });
 
 test("names: sanitised to [a-z0-9-] up to 32, and nothing climbs out of the library", () => {
-  assert.equal(sanitizeVoiceName("Anna's Voice!"), "anna-s-voice");
+  assert.equal(sanitizeVoiceName("Mara's Voice!"), "mara-s-voice");
   assert.equal(sanitizeVoiceName("../../etc/passwd"), "etc-passwd");
   assert.equal(sanitizeVoiceName("Zoë Ünal"), "zoe-unal");
   assert.equal(sanitizeVoiceName("x".repeat(80)).length, 32);
@@ -79,19 +79,19 @@ test("library: create, switch, delete, cap, default is built in and cannot be de
   const root = join(tmp, "lib");
   const v = (t: string) => ({ wav: Buffer.from("RIFF"), text: t, meta: { created: new Date().toISOString(), source: "voice note", seconds: 5 } });
   assert.equal(activeVoice(root), "default");
-  saveVoice(root, "anna", v("a"), 3);
+  saveVoice(root, "mara", v("a"), 3);
   saveVoice(root, "bo", v("b"), 3);
-  assert.throws(() => saveVoice(root, "anna", v("again"), 3), /exists already/);
+  assert.throws(() => saveVoice(root, "mara", v("again"), 3), /exists already/);
   assert.throws(() => saveVoice(root, "default", v("d"), 3), /built-in/);
-  setActiveVoice(root, "anna");
-  assert.equal(activeVoice(root), "anna");
-  assert.equal(voiceFiles(root, "anna")?.text, "a");
+  setActiveVoice(root, "mara");
+  assert.equal(activeVoice(root), "mara");
+  assert.equal(voiceFiles(root, "mara")?.text, "a");
   assert.throws(() => setActiveVoice(root, "nobody"), /no voice/);
   saveVoice(root, "cy", v("c"), 3);
   assert.throws(() => saveVoice(root, "di", v("d"), 3), /holds 3 voices/);
-  assert.deepEqual(listVoices(root).map((x) => x.name).sort(), ["anna", "bo", "cy"]);
+  assert.deepEqual(listVoices(root).map((x) => x.name).sort(), ["bo", "cy", "mara"]);
   assert.throws(() => deleteVoice(root, "default"), /cannot be deleted/);
-  deleteVoice(root, "anna"); // the active one: the default is active again
+  deleteVoice(root, "mara"); // the active one: the default is active again
   assert.equal(activeVoice(root), "default");
   setActiveVoice(root, "bo");
   setActiveVoice(root, "default");
@@ -277,8 +277,8 @@ process.stdin.on("end", () => process.exit(0)); process.stdin.resume();
   const gone = (f: string) => void readdirSync(join(f, ".."));
   try {
     gone(await synthesizeQwen("one", cfg));
-    saveVoice(owners, "anna", { wav: Buffer.from("RIFF"), text: "t", meta: { created: "", source: "", seconds: 4 } }, 5);
-    setActiveVoice(owners, "anna");
+    saveVoice(owners, "mara", { wav: Buffer.from("RIFF"), text: "t", meta: { created: "", source: "", seconds: 4 } }, 5);
+    setActiveVoice(owners, "mara");
     await synthesizeQwen("two", cfg);
     await synthesizeQwen("three", cfg, "some-group"); // another conversation: its own (default) voice
     setActiveVoice(owners, "default");
@@ -286,7 +286,7 @@ process.stdin.on("end", () => process.exit(0)); process.stdin.resume();
   } finally {
     stopQwen();
   }
-  assert.deepEqual(bodies, [{ text: "one" }, { text: "two", voice: "owner/voices/anna" }, { text: "three" }, { text: "four" }]);
+  assert.deepEqual(bodies, [{ text: "one" }, { text: "two", voice: "owner/voices/mara" }, { text: "three" }, { text: "four" }]);
 });
 
 // ---- audio FILES as a voice source (an mp3 someone sent), the same list and the same rules as voice messages ----

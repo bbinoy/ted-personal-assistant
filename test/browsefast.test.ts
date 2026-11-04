@@ -144,11 +144,11 @@ test("typing, forms and choices are never fast-pathed, and AUTO_APPROVE=off turn
 
 test("a tenant's judge-skipped row is wordless: lengths, no host", async () => {
   const r = rig({ tenant: true });
-  await r.go("https://anna-private-site.example.net/");
-  await r.go("https://anna-private-site.example.net/x");
+  await r.go("https://mara-private-site.example.net/");
+  await r.go("https://mara-private-site.example.net/x");
   const rows = readAudit((e) => e.decision === "judge-skipped" && JSON.stringify(e.meta ?? {}).includes("reasonChars"));
   assert.ok(rows.length >= 1);
   const last = rows.at(-1)!;
-  assert.equal((last.meta as { hostChars: number }).hostChars, "anna-private-site.example.net".length);
-  assert.equal(readAudit((e) => JSON.stringify(e).includes("anna-private-site")).length, 0, "no row of her run names the site");
+  assert.equal((last.meta as { hostChars: number }).hostChars, "mara-private-site.example.net".length);
+  assert.equal(readAudit((e) => JSON.stringify(e).includes("mara-private-site")).length, 0, "no row of her run names the site");
 });

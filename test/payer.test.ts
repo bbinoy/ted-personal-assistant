@@ -56,21 +56,21 @@ test("mayRun: the owner and a group run on the login, held back (unattended) by 
 });
 
 test("mayRun: a friend runs on the instance key and her own ledger; the key's cooldown is every friend's, her budget is her own", () => {
-  const anna = friend("Anna");
+  const mara = friend("Mara");
   const bea = friend("Bea");
-  const p = mayRun(her(anna), "t", { key: () => KEY });
-  assert.deepEqual(p, { kind: "instance", id: anna.id, apiKey: KEY, ledger: T.tenantContext(anna).ledger });
+  const p = mayRun(her(mara), "t", { key: () => KEY });
+  assert.deepEqual(p, { kind: "instance", id: mara.id, apiKey: KEY, ledger: T.tenantContext(mara).ledger });
   // no key: no run, and the owner hears of it once (never the login as a fallback)
   const alerts = ownerFacts();
-  assert.deepEqual(mayRun(her(anna), "t", { key: () => undefined }), { refused: "no-key" });
+  assert.deepEqual(mayRun(her(mara), "t", { key: () => undefined }), { refused: "no-key" });
   assert.deepEqual(mayRun(her(bea), "t", { key: () => undefined }), { refused: "no-key" });
   assert.equal(alerts.length, 1);
   // her spend is hers in the ledger, and no day of her own stops her
-  recordCost(0.1, T.tenantContext(anna).ledger);
-  assert.equal((mayRun(her(anna), "t", { key: () => KEY }) as { kind: string }).kind, "instance");
+  recordCost(0.1, T.tenantContext(mara).ledger);
+  assert.equal((mayRun(her(mara), "t", { key: () => KEY }) as { kind: string }).kind, "instance");
   // the key's cooldown
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN);
-  for (const rec of [anna, bea]) assert.equal((mayRun(her(rec), "t", { key: () => KEY }) as { refused: string }).refused, "cooldown", "the key is cooling down for every friend");
+  for (const rec of [mara, bea]) assert.equal((mayRun(her(rec), "t", { key: () => KEY }) as { refused: string }).refused, "cooldown", "the key is cooling down for every friend");
   assert.ok(!coolingDown(Date.now() + 1000), "the owner's login is not cooling down");
   // paused, suspended
   resetCooldown();
@@ -82,10 +82,10 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
 });
 
 test("a friend's urgent compaction waits while she is blocked (the key is cooling down): no model call, nothing marked", async () => {
-  const anna = friend("Anna2");
-  const conv = { ...her(anna), convId: T.tenantContext(anna).convId, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
+  const mara = friend("Anna2");
+  const conv = { ...her(mara), convId: T.tenantContext(mara).convId, source: "group", notesDir: T.tenantContext(mara).notesDir } as const;
   const { mkdirSync } = await import("node:fs");
-  mkdirSync(T.tenantContext(anna).dir, { recursive: true });
+  mkdirSync(T.tenantContext(mara).dir, { recursive: true });
   const stale = { sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() };
   writeSession(conv.convId, stale);
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the key's cooldown is what blocks a friend
@@ -136,8 +136,8 @@ test("oneShot on the login: the process's environment, the instance ledger, the 
 });
 
 test("oneShot on the instance key: her ledger, the key in the environment and no login, a refusal is the key's (every friend's cooldown, one owner notice)", async () => {
-  const anna = friend("Anna3");
-  const payer = mayRun(her(anna), "t", { key: () => KEY });
+  const mara = friend("Anna3");
+  const payer = mayRun(her(mara), "t", { key: () => KEY });
   assert.ok(!isRefusal(payer) && payer.kind === "instance");
   const seen: { options?: Record<string, any> } = {};
   const ok = (a: { options: Record<string, any> }) => {
@@ -150,7 +150,7 @@ test("oneShot on the instance key: her ledger, the key in the environment and no
   await oneShot({ system: "s", prompt: "p", payer, run: ok as never });
   assert.equal(seen.options!.env.ANTHROPIC_API_KEY, KEY);
   assert.equal(seen.options!.env.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
-  assert.equal(spentToday(T.tenantContext(anna).ledger), 0.4);
+  assert.equal(spentToday(T.tenantContext(mara).ledger), 0.4);
   assert.equal(spentToday(), before, "not the instance's own ledger");
   const alerts = ownerFacts();
   const refused = (() =>
@@ -191,15 +191,15 @@ test("notices: one table by what went wrong and who reads it; a friend is told a
 });
 
 test("approval context: a friend's prompt reads her own log, a group none, and nobody reads another's", () => {
-  const anna = friend("Anna4");
+  const mara = friend("Anna4");
   const bea = friend("Bea4");
   const at = new Date();
-  recordMessage("owner", at.getTime(), "please book the 9 o'clock train", at, T.tenantContext(anna).logFile);
-  recordMessage("chat", at.getTime() + 1, "Which day?", at, T.tenantContext(anna).logFile);
+  recordMessage("owner", at.getTime(), "please book the 9 o'clock train", at, T.tenantContext(mara).logFile);
+  recordMessage("chat", at.getTime() + 1, "Which day?", at, T.tenantContext(mara).logFile);
   recordMessage("owner", at.getTime() + 2, "Bea's private words", at, T.tenantContext(bea).logFile);
-  assert.deepEqual(recentIn(tenantKey(anna.id)), [{ from: "owner", text: "please book the 9 o'clock train" }, { from: "assistant", text: "Which day?" }]);
-  assert.deepEqual(recentIn(tenantKey(anna.id), "Which day?"), [{ from: "owner", text: "please book the 9 o'clock train" }, { from: "assistant", text: "Which day?" }], "(only a last line from the person is the message being judged)");
+  assert.deepEqual(recentIn(tenantKey(mara.id)), [{ from: "owner", text: "please book the 9 o'clock train" }, { from: "assistant", text: "Which day?" }]);
+  assert.deepEqual(recentIn(tenantKey(mara.id), "Which day?"), [{ from: "owner", text: "please book the 9 o'clock train" }, { from: "assistant", text: "Which day?" }], "(only a last line from the person is the message being judged)");
   assert.deepEqual(recentIn("some-group-id-0123456789abcdef"), []);
   assert.deepEqual(recentIn("tenant:nobody"), []);
-  assert.ok(!JSON.stringify(recentIn(tenantKey(anna.id))).includes("Bea"));
+  assert.ok(!JSON.stringify(recentIn(tenantKey(mara.id))).includes("Bea"));
 });

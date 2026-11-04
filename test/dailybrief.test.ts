@@ -51,16 +51,16 @@ test("the status notes are ordinary notes the skills write with Write: expiring,
   // what the daily-brief skill writes (and what the owner's older, code-stamped note looks like: the same shape)
   writeFileSync(join(dir, "status-brief.md"), "---\nexpires: 2026-10-15\nwritten: 2026-10-14T09:00:00\n---\n2026-10-14\nHeadlines\n");
   writeFileSync(join(dir, "status-overdue-offer.md"), "---\nexpires: 2026-11-13\n---\n2026-10-14 clean-up offered\n");
-  writeFileSync(join(dir, "people-anna.md"), "---\ndescription: Anna\n---\nAnna lives in Lisbon\n");
+  writeFileSync(join(dir, "people-mara.md"), "---\ndescription: Mara\n---\nAnna lives in Lisbon\n");
   assert.equal(categoryOf("status-brief.md"), "status");
-  assert.deepEqual(readNotes(now, dir).map((n) => n.file).sort(), ["people-anna.md", "status-brief.md", "status-overdue-offer.md"]);
-  assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir).map((n) => n.file).sort(), ["people-anna.md", "status-overdue-offer.md"], "the brief's note expires after tomorrow, the offer's after 30 days");
+  assert.deepEqual(readNotes(now, dir).map((n) => n.file).sort(), ["people-mara.md", "status-brief.md", "status-overdue-offer.md"]);
+  assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir).map((n) => n.file).sort(), ["people-mara.md", "status-overdue-offer.md"], "the brief's note expires after tomorrow, the offer's after 30 days");
   assert.doesNotMatch(indexOf(readNotes(now, dir)), /status-/, "not in MEMORY.md");
   assert.ok(preset().notes.categories.includes("status") && !preset().notes.dream.includes("status"));
   assert.ok(!dreamScope({ kind: "owner" }).categories.includes("status"));
   assert.equal(noteSavedHint("Write", { file_path: join(dir, "status-brief.md"), content: "x" }, dir), undefined, "a status note is not the owner's memory: no hint to mention it");
   assert.equal(journalable("Write", { file_path: join(dir, "status-brief.md") }), false, "plumbing, not an action");
-  assert.equal(journalable("Write", { file_path: join(dir, "people-anna.md") }), true, "any other note write is");
+  assert.equal(journalable("Write", { file_path: join(dir, "people-mara.md") }), true, "any other note write is");
   // the tool is gone; the owner's look and a chat turn write the note with Write
   assert.equal(toolsFor(capabilitiesOf({ kind: "owner" }), OWNER_LOOK).has("mcp__status__write_status_note"), false);
   const path = join(NOTES_DIR, "status-brief.md");

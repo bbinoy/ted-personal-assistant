@@ -4,7 +4,7 @@ import { kindOfKey } from "../core/ownerkey.ts";
 import { agoText } from "../core/timezone.ts";
 
 // What a conversation's turn is known to have been asked, for the approval judge's provenance (autojudge.ts RunProvenance): the person's message that started the
-// turn and the two before it (a send is judged against what was said about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"),
+// turn and the two before it (a send is judged against what was said about it, which may have been a message ago: "reply to Tomas that Tuesday works" ... "send it"),
 // what the assistant last told the owner in chat (so that a plain "yes, send" is read against it; never consent by itself), or, for an unattended turn of the
 // conversation (a wake-up), the derived text it was given. One scope per conversation, owned by that conversation's turns: the code that starts a turn says what
 // it is (say / derive) and when it ends (end); a run reads it (read) at every call, because a warm process is built before the message that uses it arrives. A run of

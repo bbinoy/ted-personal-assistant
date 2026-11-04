@@ -25,12 +25,12 @@ function book(key: string, nextInMin: number) {
 for (const key of ["owner", "group", "friend"]) {
   test(`check_again (${key}): earlier than booked books now+m with the reason, and the look is told it`, () => {
     const state = book(key, 60);
-    assert.match(pullLook(KEYS[key], 10, "  Anna's reply \n to the invite ", T0), /^Booked/);
+    assert.match(pullLook(KEYS[key], 10, "  Mara's reply \n to the invite ", T0), /^Booked/);
     const st = state();
     assert.equal(st.wake?.next, min(10).toISOString());
-    assert.equal(st.wake?.why, "Anna's reply to the invite");
+    assert.equal(st.wake?.why, "Mara's reply to the invite");
     assert.equal(lookWhy(st, min(9)), undefined);
-    assert.equal(lookWhy(st, min(10)), "You asked to check again: Anna's reply to the invite");
+    assert.equal(lookWhy(st, min(10)), "You asked to check again: Mara's reply to the invite");
   });
 }
 

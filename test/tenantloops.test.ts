@@ -97,25 +97,25 @@ function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: st
 const tenantRuns = (r: ReturnType<typeof rig>) => r.seen.runs.filter((x) => x.conv.tenantId).map((x) => x.conv.tenantId);
 
 test("a friend gets the heartbeat run, on the instance key, with her log and her chat only", async () => {
-  const anna = person("Anna");
+  const mara = person("Mara");
   const other = person("Bo");
   T.setStatus(other.id, "suspended"); // the admin stopped Bo
-  note(anna);
+  note(mara);
   note(other, "Bo is a secret");
-  said(anna, "remind me about my sister's birthday on Friday");
+  said(mara, "remind me about my sister's birthday on Friday");
   said(other, "I am a secret of Bo");
   const r = rig();
   await r.wakeups.tick(NOON);
-  assert.deepEqual(tenantRuns(r), [anna.id], "the look: only hers; Bo is suspended");
-  const run = r.seen.runs.find((x) => x.conv.tenantId === anna.id)!;
-  assert.deepEqual(run.payer, { kind: "instance", id: anna.id, apiKey: KEY, ledger: T.tenantContext(anna).ledger }, "billed to her, on the instance key");
-  assert.match(run.prompt, /Anna: remind me about my sister's birthday/, "her words, under her name");
+  assert.deepEqual(tenantRuns(r), [mara.id], "the look: only hers; Bo is suspended");
+  const run = r.seen.runs.find((x) => x.conv.tenantId === mara.id)!;
+  assert.deepEqual(run.payer, { kind: "instance", id: mara.id, apiKey: KEY, ledger: T.tenantContext(mara).ledger }, "billed to her, on the instance key");
+  assert.match(run.prompt, /Mara: remind me about my sister's birthday/, "her words, under her name");
   assert.doesNotMatch(run.prompt, /secret of Bo/);
-  assert.match(run.prompt, /Anna's local time/);
+  assert.match(run.prompt, /Mara's local time/);
   assert.deepEqual(r.seen.provenance.slice(-1)[0] && (r.seen.provenance.slice(-1)[0] as { kind: string }).kind, "standing", "the fixed instruction, not anybody's words");
-  assert.deepEqual(r.seen.sent.filter((s) => s.conv.tenantId).map((s) => [s.conv.tenantId, s.conv.target]), [[anna.id, `to:${anna.acis[0]}`]], "delivered to her chat only");
+  assert.deepEqual(r.seen.sent.filter((s) => s.conv.tenantId).map((s) => [s.conv.tenantId, s.conv.target]), [[mara.id, `to:${mara.acis[0]}`]], "delivered to her chat only");
   assert.ok(r.seen.runs.some((x) => x.conv.kind === "owner"), "the owner's own look ran as well, the same way");
-  assert.match(readFileSync(T.tenantContext(anna).logFile, "utf8"), /"kind":"wake"/);
+  assert.match(readFileSync(T.tenantContext(mara).logFile, "utf8"), /"kind":"wake"/);
   assert.doesNotMatch(readFileSync(T.tenantContext(other).logFile, "utf8"), /"kind":"wake"/);
 });
 
@@ -139,21 +139,21 @@ test("with the wake-ups switched off, or while not active: no look at all", asyn
 });
 
 test("a tenant's suspension, cooldown and a missing instance key each stop her look before any model call", async () => {
-  const anna = person("Anna2");
-  note(anna);
+  const mara = person("Anna2");
+  note(mara);
   const sus = rig();
-  T.setStatus(anna.id, "suspended");
+  T.setStatus(mara.id, "suspended");
   await sus.wakeups.tick(NOON);
   assert.deepEqual(tenantRuns(sus), []);
-  T.setStatus(anna.id, "active");
+  T.setStatus(mara.id, "active");
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the KEY is cooling down: for every friend
   const cool = rig();
-  assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "cooldown");
+  assert.equal(await cool.wakeups.look(tenant(mara.id), NOON), "cooldown");
   resetCooldown();
   on.instanceKeyDailyUsd = 50; // the key's day only warns the owner: a friend over it still gets her look
-  recordCost(100, T.tenantContext(anna).ledger);
+  recordCost(100, T.tenantContext(mara).ledger);
   const rich = rig();
-  assert.notEqual(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
+  assert.notEqual(await rich.wakeups.look(tenant(mara.id), NOON), "blocked");
   on.instanceKeyDailyUsd = 1e9;
   // no instance key: no run, one notice for the admin however many tenants and ticks
   const bea = person("Bea");
@@ -167,29 +167,29 @@ test("a tenant's suspension, cooldown and a missing instance key each stop her l
 });
 
 test("nothing to look at, no run: a friend without Google and without notes costs nothing; her own note opens the look", async () => {
-  const anna = person("Moe");
+  const mara = person("Moe");
   const empty = rig();
-  assert.equal(await empty.wakeups.look(tenant(anna.id), NOON), "nothing-to-look-at");
+  assert.equal(await empty.wakeups.look(tenant(mara.id), NOON), "nothing-to-look-at");
   assert.deepEqual(empty.seen.runs, []);
-  assert.ok(!existsSync(T.tenantContext(anna).logFile) || !/"kind":"wake"/.test(readFileSync(T.tenantContext(anna).logFile, "utf8")), "nothing recorded: the next tick asks again");
-  note(anna);
+  assert.ok(!existsSync(T.tenantContext(mara).logFile) || !/"kind":"wake"/.test(readFileSync(T.tenantContext(mara).logFile, "utf8")), "nothing recorded: the next tick asks again");
+  note(mara);
   const withNote = rig();
-  assert.equal(await withNote.wakeups.look(tenant(anna.id), NOON), "posted");
+  assert.equal(await withNote.wakeups.look(tenant(mara.id), NOON), "posted");
   assert.equal(withNote.seen.runs.length, 1);
 });
 
 test("a tenant's night is the instruction's, not a rule in code: her look runs at night too, with her time zone in it", async () => {
-  const anna = person("Anna3");
-  note(anna);
-  T.setTimeZone(anna.id, "Pacific/Auckland");
+  const mara = person("Anna3");
+  note(mara);
+  T.setTimeZone(mara.id, "Pacific/Auckland");
   const night = new Date(2026, 9, 14, 3, 0, 0);
   const r = rig({ now: night, answer: () => ({}) });
-  assert.equal(await r.wakeups.look(tenant(anna.id), night), "silent");
+  assert.equal(await r.wakeups.look(tenant(mara.id), night), "silent");
   assert.equal(r.seen.runs.length, 1);
   assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland, /, "the instruction names her zone (the run path adds the clock line in it: runclock.test.ts)");
   assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00\./);
   const { runFor } = await import("../src/run/runoptions.ts");
-  assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /Safe, reversible work with the tools you have \(a note, a task\)/, "no mail or calendar: the same proactivity as everyone's, within her tools (her prompt says so)");
+  assert.match(runFor(tenant(mara.id), "look", { apiKey: KEY }).systemPrompt, /Safe, reversible work with the tools you have \(a note, a task\)/, "no mail or calendar: the same proactivity as everyone's, within her tools (her prompt says so)");
 });
 
 test("a look that calls check_again during its run keeps the pull over its own later choice", async () => {
@@ -223,7 +223,7 @@ test("one tenant's failing look or run does not stop the others or the owner", a
 });
 
 test("quiet-time compaction of a tenant needs her to be active and her access; it is hers to pay", async () => {
-  const anna = person("Ivy");
+  const mara = person("Ivy");
   const nobeat = person("Jo");
   T.setStatus(nobeat.id, "suspended");
   const ran: string[] = [];
@@ -235,7 +235,7 @@ test("quiet-time compaction of a tenant needs her to be active and her access; i
       run: async () => ({ text: "" }),
       groups: () => [],
       key: () => key,
-      tenantIds: () => [anna.id, nobeat.id],
+      tenantIds: () => [mara.id, nobeat.id],
       compact: { due: () => true, run: async (c) => void ran.push(c.tenantId ?? c.kind) },
       notesChangedAt: () => 0,
       now: () => NOON,
@@ -246,7 +246,7 @@ test("quiet-time compaction of a tenant needs her to be active and her access; i
   const w = mk(KEY);
   await w.tick(NOON);
   await w.idle();
-  assert.deepEqual(ran.sort(), [anna.id, "owner"].sort(), "hers, not Jo's (suspended): the owner's too");
+  assert.deepEqual(ran.sort(), [mara.id, "owner"].sort(), "hers, not Jo's (suspended): the owner's too");
   ran.length = 0;
   const w2 = mk(undefined);
   await w2.tick(NOON);
@@ -255,8 +255,8 @@ test("quiet-time compaction of a tenant needs her to be active and her access; i
 });
 
 test("the gate's own call for a tenant is on the instance key and billed to her; a refusal is her cooldown only", async () => {
-  const anna = person("Kim");
-  const ctx = T.tenantContext(anna);
+  const mara = person("Kim");
+  const ctx = T.tenantContext(mara);
   let options: { env?: Record<string, string | undefined> } | undefined;
   const fake = (assistantError?: string) => ({
     query: ((a: { options: typeof options }) => {
@@ -268,7 +268,7 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
     }) as never,
   });
   const before = spentToday();
-  const input = { conv: tenant(anna.id), trigger: "clock" as const, now: NOON, tail: [], payer: { kind: "instance" as const, id: anna.id, apiKey: KEY, ledger: ctx.ledger } };
+  const input = { conv: tenant(mara.id), trigger: "clock" as const, now: NOON, tail: [], payer: { kind: "instance" as const, id: mara.id, apiKey: KEY, ledger: ctx.ledger } };
   await askGateWith(input, fake());
   assert.equal(options!.env!.ANTHROPIC_API_KEY, KEY);
   assert.equal(options!.env!.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
@@ -287,11 +287,11 @@ const ownerNotesBefore = () => (existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR).s
 const WRITE = (evidence: string) => ({ ops: [{ op: "write", file: "people-sister.md", description: "her sister", text: "Her sister Eve is vegetarian.", evidence }] });
 
 test("the nightly dream tidies a tenant's notes from her words only, on her key; owner's and others' notes are untouched", async () => {
-  const anna = person("Mia");
+  const mara = person("Mia");
   const bob = person("Ned");
   const noDream = person("Oz");
   T.setStatus(noDream.id, "suspended");
-  for (const p of [anna, bob, noDream]) said(p, p === anna ? "my sister Eve is vegetarian, please remember" : "this is the private matter of someone else");
+  for (const p of [mara, bob, noDream]) said(p, p === mara ? "my sister Eve is vegetarian, please remember" : "this is the private matter of someone else");
   const before = ownerNotesBefore();
   const prompts: { prompt: string; system?: string; key: string }[] = [];
   const d = createDreamer({
@@ -307,13 +307,13 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   assert.equal(mine.key, KEY);
   assert.match(mine.system!, /Mia/);
   assert.doesNotMatch(mine.system!, new RegExp(`${settings.owner}'s memory`));
-  const hers = T.tenantContext(anna);
+  const hers = T.tenantContext(mara);
   assert.match(readFileSync(join(hers.notesDir, "people-sister.md"), "utf8"), /vegetarian/);
   assert.ok(existsSync(hers.backupDir) && readdirSync(hers.backupDir).length > 0, "a snapshot in her folder");
   // she can undo it in her chat: her memory server has undo_dream, closed over HER scope (no `group` argument to name another)
   const { createMemoryServer } = await import("../src/modules/memory/memory-tools.ts");
   const { dreamScope } = await import("../src/modules/memory/dreamscope.ts");
-  const mem = createMemoryServer({ source: "chat", notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(anna.id)) }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
+  const mem = createMemoryServer({ source: "chat", notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(mara.id)) }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
   assert.deepEqual(Object.keys(mem.instance._registeredTools).sort(), ["forget_note", "journal", "search_logs", "undo_dream"]);
   const undone = await mem.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(undone.content[0]!.text, /Restored \d+ notes/);
@@ -381,9 +381,9 @@ test("one dreamer over every kind: owner, group and friends in one pass; thresho
   groupDir(gid, "Chess club");
   for (let i = 0; i < r.minNewLines.group; i++) recordMessage("member", 900 + i, `Eve (a member): we play on Thursdays ${i} ${"x".repeat(20)}`, new Date("2026-10-13T20:00:00Z"), groupLogFile(gid));
   recordMessage("owner", 905, "my cousin Zed is allergic to peanuts", new Date("2026-10-13T20:00:00Z"));
-  const anna = person("Mia");
+  const mara = person("Mia");
   const bob = person("Ned");
-  said(anna, "my sister Eve is vegetarian, please remember", new Date("2026-10-13T20:00:00Z"));
+  said(mara, "my sister Eve is vegetarian, please remember", new Date("2026-10-13T20:00:00Z"));
   said(bob, "my brother Kit is a secret agent", new Date("2026-10-13T20:00:00Z"));
   const ran: string[] = [];
   const logged: string[] = [];
@@ -398,13 +398,13 @@ test("one dreamer over every kind: owner, group and friends in one pass; thresho
       run: (_payer, conv) => async () => {
         ran.push(conv.kind === "tenant" ? `tenant:${conv.tenantId}` : conv.kind);
         if (conv.kind === "owner") throw new Error("model down");
-        return conv.tenantId === anna.id ? WRITE("my sister Eve is vegetarian") : { ops: [] };
+        return conv.tenantId === mara.id ? WRITE("my sister Eve is vegetarian") : { ops: [] };
       },
     }).run(NOON);
   } finally {
     console.log = log;
   }
-  assert.ok(ran.includes("owner") && ran.includes("group") && ran.includes(`tenant:${anna.id}`) && ran.includes(`tenant:${bob.id}`), "the failing owner dream did not stop the group or the friends");
+  assert.ok(ran.includes("owner") && ran.includes("group") && ran.includes(`tenant:${mara.id}`) && ran.includes(`tenant:${bob.id}`), "the failing owner dream did not stop the group or the friends");
   const text = logged.join("\n");
   assert.doesNotMatch(text, /vegetarian|secret agent|people-sister/, "a friend's words and notes stay out of the log");
   assert.match(text, /tenant dream \(.*\): 1 change\(s\)/, "counts only");

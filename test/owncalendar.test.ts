@@ -47,7 +47,7 @@ test("an update of the owner's own no-guest event is judged the same way (auto r
 });
 
 test("an event with an attendee is judged like a send: the judge decides, nobody is asked when it says auto", async () => {
-  const withGuest = { ...UNCLE, attendees: ["uschi@example.com"] };
+  const withGuest = { ...UNCLE, attendees: ["greta@example.com"] };
   assert.equal(isJudgeable(`${CAL}create_event`, withGuest), true);
   const c = chat("auto");
   assert.equal(((await c.can(`${CAL}create_event`, withGuest, opts)) as { behavior: string }).behavior, "allow");

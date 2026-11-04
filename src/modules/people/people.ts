@@ -40,14 +40,14 @@ export function contactsIn(text: string): { emails: string[]; phones: string[] }
   return { emails, phones };
 }
 
-// Pure: a people note as a candidate (nothing for any other note; a note with no address still names the person). The name is the one the note starts with ("Anna Silva. Lives in ..."), else the file's.
+// Pure: a people note as a candidate (nothing for any other note; a note with no address still names the person). The name is the one the note starts with ("Mara Silva. Lives in ..."), else the file's.
 export function fromNote(n: Note): Candidate | undefined {
   if (n.category !== "people") return undefined;
   const slug = n.file.replace(/^people-/, "").replace(/\.md$/, "").replace(/-/g, " ");
   const first = n.text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
   const lead = /^([^.:;,\n]{2,60}?)(?:\.|:|;|,| - |$)/.exec(first)?.[1]?.trim();
   const head = tokens(slug)[0];
-  const spelled = slug.replace(/\b\p{L}/gu, (c) => c.toUpperCase()); // people-anna-silva.md -> Anna Silva
+  const spelled = slug.replace(/\b\p{L}/gu, (c) => c.toUpperCase()); // people-mara-silva.md -> Mara Silva
   const name = lead && tokens(lead).length <= 5 && !/@/.test(lead) && (!head || tokens(lead).some((w) => w.startsWith(head))) ? lead : spelled; // (the opening words only when they carry the file's name: "Lives in Porto" is not one)
   const { emails, phones } = contactsIn(n.text);
   return { name: name || spelled, emails, phones, from: [{ source: "notes", detail: n.file }] };
@@ -122,7 +122,7 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
 // recipient floor (approvals/autojudge.ts) needs it inside a permission check, and a friend's Google Contacts need a network call per query, so only what is saved as a note counts.
 export const knownPeople = (notesDir: string | undefined): Candidate[] => (notesDir ? readNotes(undefined, notesDir).flatMap((n) => fromNote(n) ?? []) : []);
 
-// Pure: the addresses of the known people whose first name (3+ letters) is a whole word of the text. "invite Anna" names anna.clements@... only if a known Anna has that address.
+// Pure: the addresses of the known people whose first name (3+ letters) is a whole word of the text. "invite Mara" names mara.clements@... only if a known Mara has that address.
 export function addressesNamedIn(text: string, known: readonly Candidate[]): Set<string> {
   const said = new Set(tokens(text));
   return new Set(known.filter((c) => { const first = tokens(c.name)[0]; return !!first && first.length >= 3 && said.has(first); }).flatMap((c) => c.emails));

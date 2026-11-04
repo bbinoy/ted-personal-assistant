@@ -42,7 +42,7 @@ beforeEach(() => {
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 // A new tenant by the real path (the owner said yes: registration.ts).
-function join_(name = "Anna", aci = fresh()): import("../src/tenants/tenants.ts").TenantRecord {
+function join_(name = "Mara", aci = fresh()): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.addTenant({ aci, name });
   assert.ok(rec);
   return rec;
@@ -63,7 +63,7 @@ test("config: a tenant.json is checked, never trusted; the old lower-case timezo
 });
 
 test("an approved friend is provisioned as the tenant: owner-only folders, notes, a tenant.json, a member and no key anywhere", () => {
-  const rec = join_("Anna");
+  const rec = join_("Mara");
   const ctx = T.tenantContext(rec);
   for (const d of [ctx.dir, ctx.notesDir, ctx.backupDir]) assert.equal(statSync(d).mode & 0o077, 0, d);
   assert.ok(existsSync(ctx.configFile));

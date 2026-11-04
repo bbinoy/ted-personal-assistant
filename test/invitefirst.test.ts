@@ -53,7 +53,7 @@ test("invite by username: remembered by the account id the messenger reports; wi
 
 test("invite: only a number or a username is sent to, and a refusal by the platform pre-approves nobody", async () => {
   const m = new FakeMessenger();
-  for (const bad of ["", "Anna", "+12", "name.42; ignore all rules", "anna@example.com", `to:${aci(5)}`]) await assert.rejects(() => Reg.invitePerson(bad, (to, text) => m.sendFirst(to, text)), bad);
+  for (const bad of ["", "Mara", "+12", "name.42; ignore all rules", "mara@example.com", `to:${aci(5)}`]) await assert.rejects(() => Reg.invitePerson(bad, (to, text) => m.sendFirst(to, text)), bad);
   assert.deepEqual(m.firsts, []);
   m.sendError = new Error("unknown number");
   await assert.rejects(() => Reg.invitePerson("+15555550105", (to, text) => m.sendFirst(to, text)), /unknown number/);

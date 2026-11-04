@@ -49,8 +49,8 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
 
 // Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
 // or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
-// the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Anna" covers the
-// Anna of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
+// the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Mara" covers the
+// Mara of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
 // have seen the exact address, and whether their reply approves it is the judge's call, the floor only stops blocking). Only that one message, never older ones. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
 // the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
 export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = []): string[] {

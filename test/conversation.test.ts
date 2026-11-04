@@ -442,7 +442,7 @@ test("bursts: the pause is shortened to what is left of the maximum", async () =
 test("private chat: a reaction reaches the approval judge as '<owner> reacted <emoji>', and the reacted-to text (it may be derived from mail) as what the assistant said, never as the owner's message", async () => {
   const seen: [string, string | undefined][] = [];
   const { pipeline } = rig({ onRun: (own, reactedTo) => void seen.push([own, reactedTo]), run: async () => "[[silent]]" });
-  const text = "Draft for Armon: please wire the money to the account in the mail below";
+  const text = "Draft for Tomas: please wire the money to the account in the mail below";
   recordMessage("chat", 424242, text);
   await pipeline.handleIncoming(owner(), react({ targetTimestamp: 424242 }));
   assert.deepEqual(seen, [[`${settings.owner} reacted 👍`, text]]);

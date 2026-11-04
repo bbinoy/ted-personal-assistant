@@ -14,28 +14,28 @@ const GROUP_ID = "Zm9vYmFyLWdyb3VwLWlkLXdpdGgtc2VjcmV0cw==";
 
 test("convId: owner, friend-<tenant id>, group-<16 hex of sha256(group id)>; filesystem-safe, a group's not reversible", () => {
   assert.equal(OWNER_CONV, "owner");
-  assert.equal(friendConvId("anna-1a2b"), "friend-anna-1a2b");
+  assert.equal(friendConvId("mara-1a2b"), "friend-mara-1a2b");
   const g = groupConvId(GROUP_ID);
   assert.match(g, /^group-[0-9a-f]{16}$/);
   assert.equal(g, `group-${hashOf(GROUP_ID)}`);
   assert.ok(!g.includes(GROUP_ID) && !g.includes("secrets"));
   assert.notEqual(g, groupConvId(`${GROUP_ID}x`));
   for (const ok of ["owner", "friend-a", "friend-anna_b-1", g]) assert.equal(isConvId(ok), true, ok);
-  for (const bad of ["", "Owner", "friend-", "friend-Anna", "friend-../x", "group-xyz", "group-0123456789abcde", "group-0123456789abcdef0", "x", "../owner", "owner/x", "tenant:a", "friend-" + "a".repeat(33)]) assert.equal(isConvId(bad), false, bad);
+  for (const bad of ["", "Owner", "friend-", "friend-Mara", "friend-../x", "group-xyz", "group-0123456789abcde", "group-0123456789abcdef0", "x", "../owner", "owner/x", "tenant:a", "friend-" + "a".repeat(33)]) assert.equal(isConvId(bad), false, bad);
   assert.throws(() => friendConvId("owner"), /not a tenant id/);
   assert.throws(() => friendConvId("../x"), /not a tenant id/);
   assert.throws(() => convPaths("../x"), /not a conversation id/);
-  assert.equal(tenantIdOfConv("friend-anna-1a2b"), "anna-1a2b");
+  assert.equal(tenantIdOfConv("friend-mara-1a2b"), "mara-1a2b");
   assert.equal(tenantIdOfConv("owner"), undefined);
 });
 
 test("convId of a key or a conversation: the owner, tenant:<id>, and anything else is an opaque group key (hashed)", () => {
   assert.equal(convIdOfKey("owner"), "owner");
-  assert.equal(convIdOfKey("tenant:anna-1a2b"), "friend-anna-1a2b");
+  assert.equal(convIdOfKey("tenant:mara-1a2b"), "friend-mara-1a2b");
   assert.equal(convIdOfKey(GROUP_ID), groupConvId(GROUP_ID));
   assert.equal(convIdOfKey("tenant:../x"), groupConvId("tenant:../x"), "a key that is not a tenant is hashed, never put in a path");
   assert.equal(convIdOf({ kind: "owner" }), "owner");
-  assert.equal(convIdOf({ kind: "tenant", tenantId: "anna-1a2b" }), "friend-anna-1a2b");
+  assert.equal(convIdOf({ kind: "tenant", tenantId: "mara-1a2b" }), "friend-mara-1a2b");
   assert.equal(convIdOf({ kind: "group", groupId: GROUP_ID }), groupConvId(GROUP_ID));
   assert.equal(convIdOf({ kind: "group", convId: "group-0123456789abcdef" }), "group-0123456789abcdef");
   assert.throws(() => convIdOf({ kind: "group" }), /not a conversation/);
@@ -44,7 +44,7 @@ test("convId of a key or a conversation: the owner, tenant:<id>, and anything el
 test("layout: every conversation has the same files in one folder; instance and logs are apart; nothing holds a raw group id", () => {
   const L = layout("/data");
   const names = (id: string) => Object.entries(L.conv(id)).map(([k, v]) => [k, relative(L.conv(id).dir, v)]);
-  for (const id of ["owner", "friend-anna", groupConvId(GROUP_ID)]) {
+  for (const id of ["owner", "friend-mara", groupConvId(GROUP_ID)]) {
     assert.equal(L.conv(id).dir, join("/data/conversations", id));
     assert.deepEqual(names(id), names("owner"), "the same layout for everyone");
     for (const [k, v] of Object.entries(L.conv(id))) assert.ok(v === L.conv(id).dir || v.startsWith(L.conv(id).dir + sep), `${k} is inside the conversation's folder`);
@@ -61,18 +61,18 @@ test("layout: every conversation has the same files in one folder; instance and 
 
 test("the speech package and the app agree on where a conversation's cloned voices are (the package learns no conversation, only a root and a folder name)", () => {
   const L = layout("/data");
-  for (const id of ["owner", "friend-anna", groupConvId(GROUP_ID)]) assert.equal(scopeRoot(L.conversations, id), L.conv(id).voices);
+  for (const id of ["owner", "friend-mara", groupConvId(GROUP_ID)]) assert.equal(scopeRoot(L.conversations, id), L.conv(id).voices);
 });
 
 test("bound accessors follow the data root the settings registered; convOfPath names the conversation a path is in", () => {
   useDataRoot("/somewhere/data");
   try {
     assert.equal(convDir("owner"), "/somewhere/data/conversations/owner");
-    assert.equal(convPaths("friend-anna").db, "/somewhere/data/conversations/friend-anna/assistant.db");
+    assert.equal(convPaths("friend-mara").db, "/somewhere/data/conversations/friend-mara/assistant.db");
     assert.equal(instancePaths().tenants, "/somewhere/data/instance/tenants.json");
     assert.equal(logPaths().audit, "/somewhere/data/logs/audit.jsonl");
-    assert.equal(convOfPath("/somewhere/data/conversations/friend-anna/notes/x.md"), "friend-anna");
-    assert.equal(convOfPath("/somewhere/data/conversations/friend-anna"), "friend-anna");
+    assert.equal(convOfPath("/somewhere/data/conversations/friend-mara/notes/x.md"), "friend-mara");
+    assert.equal(convOfPath("/somewhere/data/conversations/friend-mara"), "friend-mara");
     assert.equal(convOfPath("/somewhere/data/conversations"), undefined);
     assert.equal(convOfPath("/somewhere/data/conversations/junk/x"), undefined);
     assert.equal(convOfPath("/somewhere/data/instance/x"), undefined);

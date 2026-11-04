@@ -17,7 +17,7 @@ const R = await import("../src/core/looks.ts");
 const { dbCheck } = await import("../src/doctor.ts");
 
 const GROUP = "Zm9yLXRoZS1kYi10ZXN0";
-const ANNA = friendConvId("anna-1a2b");
+const MARA = friendConvId("mara-1a2b");
 const BO = friendConvId("bo-3c4d");
 const DAY_MS = 86_400_000;
 const reset = () => {
@@ -42,19 +42,19 @@ test("spend: the owner's day is every login run (her chat, background work and t
   reset();
   B.recordCost(1.5); // the owner
   B.recordSpend({ usd: 2, conv: groupConvId(GROUP), payer: "login", kind: "chat" });
-  B.recordSpend({ usd: 0.25, conv: ANNA, payer: "key", kind: "look" });
+  B.recordSpend({ usd: 0.25, conv: MARA, payer: "key", kind: "look" });
   B.recordSpend({ usd: 0.75, conv: BO, payer: "key", kind: "chat" });
   const at = new Date();
-  B.recordSpend({ usd: 0.5, conv: ANNA, payer: "key", kind: "dream", now: at });
+  B.recordSpend({ usd: 0.5, conv: MARA, payer: "key", kind: "dream", now: at });
   assert.equal(B.spentToday(), 3.5, "owner today: login only");
   assert.equal(B.spentToday("owner"), 3.5);
   assert.equal(B.spentToday(groupConvId(GROUP)), 2);
-  assert.equal(B.spentToday(ANNA), 0.75);
+  assert.equal(B.spentToday(MARA), 0.75);
   assert.equal(B.spentToday(BO), 0.75);
   assert.equal(B.keySpentToday(), 1.5, "the key's day: all friends together");
   // each row says who, which payer, what kind, which local day
   const row = instanceDb().get<{ day: string; conv: string; payer: string; kind: string; at: number }>("SELECT * FROM spend WHERE kind = 'dream'")!;
-  assert.deepEqual([row.day, row.conv, row.payer, row.kind], [dayIn(at), ANNA, "key", "dream"]);
+  assert.deepEqual([row.day, row.conv, row.payer, row.kind], [dayIn(at), MARA, "key", "dream"]);
   assert.equal(row.at, at.getTime());
   // nothing is recorded for a charge that is not money
   B.recordCost(0);
@@ -77,13 +77,13 @@ test("spend: yesterday's rows are not today's; the day is the local one at the m
 test("spend: forgetting a conversation unnames its rows but the owner's and the key's day do not shrink", () => {
   reset();
   B.recordSpend({ usd: 2, conv: groupConvId(GROUP), payer: "login" });
-  B.recordSpend({ usd: 1, conv: ANNA, payer: "key" });
+  B.recordSpend({ usd: 1, conv: MARA, payer: "key" });
   assert.equal(B.forgetSpend(groupConvId(GROUP)), true);
   assert.equal(B.forgetSpend(groupConvId(GROUP)), false, "idempotent");
   assert.equal(B.spentToday(groupConvId(GROUP)), 0);
   assert.equal(B.spentToday(), 2, "the owner's day still holds what the group cost");
-  B.forgetSpend(ANNA);
-  assert.equal(B.spentToday(ANNA), 0);
+  B.forgetSpend(MARA);
+  assert.equal(B.spentToday(MARA), 0);
   assert.equal(B.keySpentToday(), 1, "and the key's day what she cost");
 });
 
@@ -92,7 +92,7 @@ test("the budget check uses the covering indexes (smoke bound on speed) with a y
   const db = instanceDb();
   const day = dayIn(new Date());
   db.tx(() => {
-    for (let d = 0; d < 365; d++) for (let i = 0; i < 60; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, 'chat', 0.01)", 1, `2025-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}`, i % 5 === 0 ? ANNA : "owner", i % 5 === 0 ? "key" : "login");
+    for (let d = 0; d < 365; d++) for (let i = 0; i < 60; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, 'chat', 0.01)", 1, `2025-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}`, i % 5 === 0 ? MARA : "owner", i % 5 === 0 ? "key" : "login");
   });
   for (let i = 0; i < 50; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (1, ?, 'owner', 'login', 'chat', 0.01)", day);
   B.spentToday(); // (the statements are prepared on the first call)
@@ -118,15 +118,15 @@ test("the budget check uses the covering indexes (smoke bound on speed) with a y
 test("notices: once a day per key or once per interval, forgetting by key, pruning what means nothing any more", () => {
   reset();
   const now = Date.now();
-  assert.equal(N.takeCapNotice("friend:anna", now), true);
-  assert.equal(N.takeCapNotice("friend:anna", now), false, "not again today");
-  assert.equal(N.takeCapNotice("friend:anna", now + DAY_MS), true, "tomorrow it is due again");
+  assert.equal(N.takeCapNotice("friend:mara", now), true);
+  assert.equal(N.takeCapNotice("friend:mara", now), false, "not again today");
+  assert.equal(N.takeCapNotice("friend:mara", now + DAY_MS), true, "tomorrow it is due again");
   assert.equal(N.takeCapNotice("friend:bo", now), true, "marking is per key");
   assert.equal(N.takeCapNotice("warn:g1", now, 60_000), true);
   assert.equal(N.takeCapNotice("warn:g1", now + 30_000, 60_000), false, "within the interval");
   assert.equal(N.takeCapNotice("warn:g1", now + 60_000, 60_000), true, "after it");
-  assert.equal(N.forgetNotices((k) => k.startsWith("warn:") || k.startsWith("friend:a")), 2, "friend:anna and warn:g1");
-  assert.equal(N.takeCapNotice("friend:anna", now), true);
+  assert.equal(N.forgetNotices((k) => k.startsWith("warn:") || k.startsWith("friend:m")), 2, "friend:mara and warn:g1");
+  assert.equal(N.takeCapNotice("friend:mara", now), true);
   N.takeCapNotice("today", now);
   N.takeCapNotice("old", now - 3 * DAY_MS);
   assert.equal(N.pruneNotices(now), 1, "the old mark");
@@ -163,19 +163,19 @@ test("intake marks: done and needs-reconnect per tenant and purpose, a newer for
   const t0 = new Date("2026-10-14T10:00:00.000Z");
   const t1 = new Date("2026-10-14T11:00:00.000Z");
   const t2 = new Date("2026-10-14T12:00:00.000Z");
-  assert.deepEqual(I.connectionState("anna-1a2b", "notion"), { state: "none" });
-  I.recordDone("anna-1a2b", "notion", [{ name: "token", chars: 40 }], t0);
-  assert.deepEqual(I.connectionState("anna-1a2b", "notion"), { state: "connected", at: t0.toISOString() });
-  assert.deepEqual(I.readDone("anna-1a2b", "notion"), { at: t0.toISOString(), stored: [{ name: "token", chars: 40 }] });
-  I.markNeedsReconnect("anna-1a2b", "notion", t1);
-  assert.deepEqual(I.connectionState("anna-1a2b", "notion"), { state: "reconnect", at: t1.toISOString() });
-  I.recordDone("anna-1a2b", "notion", [{ name: "token", chars: 41 }], t2);
-  assert.deepEqual(I.connectionState("anna-1a2b", "notion"), { state: "connected", at: t2.toISOString() }, "connecting again is newer than the problem");
+  assert.deepEqual(I.connectionState("mara-1a2b", "notion"), { state: "none" });
+  I.recordDone("mara-1a2b", "notion", [{ name: "token", chars: 40 }], t0);
+  assert.deepEqual(I.connectionState("mara-1a2b", "notion"), { state: "connected", at: t0.toISOString() });
+  assert.deepEqual(I.readDone("mara-1a2b", "notion"), { at: t0.toISOString(), stored: [{ name: "token", chars: 40 }] });
+  I.markNeedsReconnect("mara-1a2b", "notion", t1);
+  assert.deepEqual(I.connectionState("mara-1a2b", "notion"), { state: "reconnect", at: t1.toISOString() });
+  I.recordDone("mara-1a2b", "notion", [{ name: "token", chars: 41 }], t2);
+  assert.deepEqual(I.connectionState("mara-1a2b", "notion"), { state: "connected", at: t2.toISOString() }, "connecting again is newer than the problem");
   I.markNeedsReconnect("bo-3c4d", "calendar", t1);
   assert.deepEqual(I.connectionState("bo-3c4d", "calendar"), { state: "reconnect", at: t1.toISOString() }, "a problem with no form at all");
   assert.equal(I.readDone("bo-3c4d", "calendar"), undefined);
-  assert.equal(I.forgetTenantConnections("anna-1a2b"), true);
-  assert.equal(I.forgetTenantConnections("anna-1a2b"), false);
-  assert.deepEqual(I.connectionState("anna-1a2b", "notion"), { state: "none" });
+  assert.equal(I.forgetTenantConnections("mara-1a2b"), true);
+  assert.equal(I.forgetTenantConnections("mara-1a2b"), false);
+  assert.deepEqual(I.connectionState("mara-1a2b", "notion"), { state: "none" });
   assert.deepEqual(I.connectionState("bo-3c4d", "calendar").state, "reconnect", "another friend's is untouched");
 });

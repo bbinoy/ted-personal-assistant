@@ -44,8 +44,8 @@ const iso = (ms: number) => new Date(ms).toISOString();
 
 type Raw = import("../src/tasks/meetings.ts").RawMeeting;
 const ME = { name: "Alex", email: "alex@example.com", self: true };
-const ANNA = { name: "Anna", email: "anna@client.org" };
-const raw = (id: string, startMs: number, o: Partial<Raw> = {}): Raw => ({ eventId: id, start: iso(startMs), title: `Meeting ${id}`, attendees: [ME, ANNA], ...o });
+const MARA = { name: "Mara", email: "mara@client.org" };
+const raw = (id: string, startMs: number, o: Partial<Raw> = {}): Raw => ({ eventId: id, start: iso(startMs), title: `Meeting ${id}`, attendees: [ME, MARA], ...o });
 const record = (list: Raw[], at = NOW) => noteMeetings({ key: "owner", source: "background", now: () => at }, list);
 
 function reset(): void {
@@ -82,12 +82,12 @@ test("recording: a time without its UTC offset, a past or far-off start, a missi
 test("recording: fields are cleaned and bounded: control characters out, titles and attendee lists cut, only https links, bad addresses dropped, the owner's own entry flagged", () => {
   reset();
   const many = Array.from({ length: 50 }, (_, i) => ({ name: `P${i}`, email: `p${i}@x.org` }));
-  record([raw("a", NOW + 30 * MIN, { title: "Budget\u0000 review\n" + "x".repeat(400), attendees: [ME, { name: "Anna", email: "not an address" }, { email: "BOB@Client.ORG" }, {}, ...many], link: "javascript:alert(1)" }), raw("b", NOW + 31 * MIN, { link: "https://meet.example.com/abc" })]);
+  record([raw("a", NOW + 30 * MIN, { title: "Budget\u0000 review\n" + "x".repeat(400), attendees: [ME, { name: "Mara", email: "not an address" }, { email: "BOB@Client.ORG" }, {}, ...many], link: "javascript:alert(1)" }), raw("b", NOW + 31 * MIN, { link: "https://meet.example.com/abc" })]);
   const [a, b] = rowsOf();
   assert.equal(a!.title.length, 200);
   assert.ok(!a!.title.includes("\u0000") && !a!.title.includes("\n"));
   assert.equal(a!.attendees.length, M.MAX_ATTENDEES - 1, "the invite is bounded (30 taken, the empty entry dropped)");
-  assert.deepEqual(a!.attendees.slice(0, 3), [{ name: "Alex", email: "alex@example.com", self: true }, { name: "Anna" }, { email: "bob@client.org" }]);
+  assert.deepEqual(a!.attendees.slice(0, 3), [{ name: "Alex", email: "alex@example.com", self: true }, { name: "Mara" }, { email: "bob@client.org" }]);
   assert.equal(a!.link, undefined, "a link that is not https is dropped, the meeting stays");
   assert.equal(b!.link, "https://meet.example.com/abc");
 });
@@ -128,7 +128,7 @@ test("recording: off while PREP_MINUTES is 0, and the tool is the conversation's
 
 // ---- the pure rules ----
 
-const meet = (o: Partial<import("../src/tasks/meetings.ts").Meeting> = {}): import("../src/tasks/meetings.ts").Meeting => ({ eventId: "e", startMs: NOW + 20 * MIN, title: "T", attendees: [ME, ANNA], allDay: false, private: false, ...o });
+const meet = (o: Partial<import("../src/tasks/meetings.ts").Meeting> = {}): import("../src/tasks/meetings.ts").Meeting => ({ eventId: "e", startMs: NOW + 20 * MIN, title: "T", attendees: [ME, MARA], allDay: false, private: false, ...o });
 
 test("skip rules: declined, all-day, private, nobody else (unless there is a video link); outside her domain is a fact, not a rule", () => {
   assert.equal(M.prepSkip(meet()), undefined);
@@ -188,8 +188,8 @@ test("scheduling: nothing before PREP_MINUTES; at the time the meeting is claime
   assert.match(facts, /Meeting m1/);
   assert.match(facts, /in 15 min/);
   const why = M.meetingWhy(PT.waitingMeetings(conv), { now: NOW, zone: "Europe/Berlin" });
-  assert.match(why[0]!, /^Triggered: meeting 'Meeting m1' with .*Anna.* starts at \d\d:\d\d \(in 15 min\)\.$/, "the trigger line carries the reason");
-  assert.match(facts, /Anna <anna@client\.org>/);
+  assert.match(why[0]!, /^Triggered: meeting 'Meeting m1' with .*Mara.* starts at \d\d:\d\d \(in 15 min\)\.$/, "the trigger line carries the reason");
+  assert.match(facts, /Mara <mara@client\.org>/);
   assert.match(facts, /<meetings_to_prepare>/, "the calendar's words are fenced data");
   assert.match(facts, /ted-personal-assistant:meeting-prep/);
   assert.match(facts, /urgent: true/);
@@ -358,7 +358,7 @@ test("retention: meeting rows older than 3 days go in the nightly sweep, newer o
 
 test("the owner's look is handed the claimed meeting as a fact and says it: a post marks it sent; a look that stays silent gives it back", async () => {
   s.wakeups = true;
-  let answer: string = "15:10 Budget review with Anna. Last mail on Monday.";
+  let answer: string = "15:10 Budget review with Mara. Last mail on Monday.";
   const prompts: string[] = [];
   let n = 0;
   const pipeline = {

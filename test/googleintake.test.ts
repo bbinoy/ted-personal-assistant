@@ -52,7 +52,7 @@ before(async () => {
       tokenCalls.push({ body: new URLSearchParams(b) });
       if (tokenMode === "refused") return void res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: "invalid_grant" }));
       const scope = tokenMode === "missing-scope" ? ALL_SCOPES.slice(0, -1).join(" ") : ALL_SCOPES.join(" ");
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ access_token: ACCESS, expires_in: 3599, ...(tokenMode === "no-refresh" ? {} : { refresh_token: REFRESH }), scope, token_type: "Bearer", id_token: idToken("Anna@Example.com") }));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ access_token: ACCESS, expires_in: 3599, ...(tokenMode === "no-refresh" ? {} : { refresh_token: REFRESH }), scope, token_type: "Bearer", id_token: idToken("Mara@Example.com") }));
     });
   }).unref();
   await new Promise<void>((r) => tokenServer.listen(0, "127.0.0.1", r));
@@ -82,7 +82,7 @@ function person(name: string, capabilities: import("../src/tenants/tenants.ts").
   return rec;
 }
 T.ensureOwner({ number: "+15555550114" });
-const anna = person("Anna", ["intake", "google", "mail", "calendar"]);
+const mara = person("Mara", ["intake", "google", "mail", "calendar"]);
 const noGoogle = person("Nora", ["intake", "profile"]);
 
 let bao: FakeBao;
@@ -122,11 +122,11 @@ const callback = (base: string, params: Record<string, string>, cookie?: string)
   const c = cookie ?? cookieOfState.get(params.state ?? "");
   return fetch(`${base}/oauth/google/callback?${new URLSearchParams(params)}`, c ? { headers: { cookie: c } } : {});
 };
-const GRANT = () => bao.store.get(`tenants/${anna.id}/google/oauth`);
+const GRANT = () => bao.store.get(`tenants/${mara.id}/google/oauth`);
 
 test("google: the link opens a sign-in with offline access, PKCE (S256), the scopes and a state; the callback exchanges the code, stores the grant in HER path and says connected", async () => {
   const s = await start();
-  const code = s.mint(anna.id);
+  const code = s.mint(mara.id);
   const { r, html, url } = await signIn(s.base, code);
   assert.equal(r.status, 200);
   assert.match(html, /Connect Google/);
@@ -146,7 +146,7 @@ test("google: the link opens a sign-in with offline access, PKCE (S256), the sco
   const done = await callback(s.base, { code: AUTH_CODE, state: q.get("state")! });
   const text = await done.text();
   assert.equal(done.status, 200);
-  assert.match(text, /Google is connected as anna@example\.com/, "the account is shown so that a mismatch is visible");
+  assert.match(text, /Google is connected as mara@example\.com/, "the account is shown so that a mismatch is visible");
   // the token endpoint was asked with the PKCE verifier of this flow, the secret and the same redirect address
   assert.equal(tokenCalls.length, 1);
   const body = tokenCalls[0]!.body;
@@ -158,32 +158,32 @@ test("google: the link opens a sign-in with offline access, PKCE (S256), the sco
   // stored under HER path, with her address (lower-cased) from the id token
   const grant = GRANT() as Record<string, unknown>;
   assert.equal(grant.refresh_token, REFRESH);
-  assert.equal(grant.email, "anna@example.com");
+  assert.equal(grant.email, "mara@example.com");
   assert.equal(bao.store.has("tenants/owner/google/oauth"), false);
   assert.equal(bao.requests.filter((x) => x.method === "POST").every((x) => x.token === bao.intakeToken), true, "written only with the write-only token");
   // the link is burnt and the status is "connected", never the token
   assert.equal((await fetch(`${s.base}/i/${code}`)).status, 404);
-  assert.equal(L.readDone(anna.id, "google")?.stored.length, 1);
+  assert.equal(L.readDone(mara.id, "google")?.stored.length, 1);
   // nothing prints, audits or answers with the token, the access token, the authorization code, the state or the link code
-  const everything = [text, printed.join("\n"), JSON.stringify(readAudit(() => true)), JSON.stringify(L.readDone(anna.id, "google"))].join("\n");
+  const everything = [text, printed.join("\n"), JSON.stringify(readAudit(() => true)), JSON.stringify(L.readDone(mara.id, "google"))].join("\n");
   for (const secret of [REFRESH, ACCESS, AUTH_CODE, q.get("state")!, code, "fake-client-secret-not-real"]) assert.ok(!everything.includes(secret), `leaked ${secret.slice(0, 12)}`);
   for (const secret of [REFRESH, ACCESS, AUTH_CODE, code, "fake-client-secret-not-real"]) assert.ok(!html.includes(secret), "the sign-in page holds none of them (only the state, in the address of the link to Google)");
-  const rows = readAudit((e) => e.tool === "intake_store" && e.meta?.tenant === anna.id);
+  const rows = readAudit((e) => e.tool === "intake_store" && e.meta?.tenant === mara.id);
   assert.deepEqual(rows[0]!.meta!.purpose, "google");
 });
 
 test("google: the binding cookie is HttpOnly, SameSite=Lax, scoped to the callback path and not Secure on http; a callback from a browser without it or with another browser's is refused (nothing exchanged, nothing stored, the state is used up)", async () => {
   const s = await start();
-  const eve = await signIn(s.base, s.mint(anna.id));
+  const eve = await signIn(s.base, s.mint(mara.id));
   assert.match(eve.setCookie!, /^ted_oauth_google=[A-Za-z0-9_-]{43}; Path=\/oauth\/google\/callback; HttpOnly; SameSite=Lax; Max-Age=600$/);
-  const victim = await signIn(s.base, s.mint(anna.id)); // another page view: a different binding
+  const victim = await signIn(s.base, s.mint(mara.id)); // another page view: a different binding
   const stateOfEve = eve.url!.searchParams.get("state")!;
   const calls = tokenCalls.length;
-  bao.store.delete(`tenants/${anna.id}/google/oauth`);
+  bao.store.delete(`tenants/${mara.id}/google/oauth`);
   // the consent address passed on: the other browser has no cookie, or has its own
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: stateOfEve }, "")).status, 404, "no cookie");
   assert.equal(tokenCalls.length, calls);
-  const again = await signIn(s.base, s.mint(anna.id));
+  const again = await signIn(s.base, s.mint(mara.id));
   const st2 = again.url!.searchParams.get("state")!;
   const other = victim.setCookie!.split(";")[0]!;
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: st2 }, other)).status, 404, "another browser's cookie");
@@ -199,11 +199,11 @@ test("google: the binding cookie is HttpOnly, SameSite=Lax, scoped to the callba
 
 test("google: a replayed callback, a state from nowhere and a state of a link that was used all get the page's one 404, and nothing is exchanged or stored", async () => {
   const s = await start();
-  const code = s.mint(anna.id);
+  const code = s.mint(mara.id);
   const { url } = await signIn(s.base, code);
   const state = url!.searchParams.get("state")!;
   const calls = tokenCalls.length;
-  bao.store.delete(`tenants/${anna.id}/google/oauth`);
+  bao.store.delete(`tenants/${mara.id}/google/oauth`);
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: "A".repeat(43) })).status, 404, "a state that was never made");
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: "short" })).status, 404);
   assert.equal((await callback(s.base, { code: AUTH_CODE })).status, 404, "no state at all");
@@ -211,7 +211,7 @@ test("google: a replayed callback, a state from nowhere and a state of a link th
   assert.equal((await callback(s.base, { code: AUTH_CODE, state })).status, 200, "the real one still works once");
   assert.equal((await callback(s.base, { code: AUTH_CODE, state })).status, 404, "replay");
   // a second page view makes a new state; the first one stops working
-  const code2 = s.mint(anna.id);
+  const code2 = s.mint(mara.id);
   const first = (await signIn(s.base, code2)).url!.searchParams.get("state")!;
   const second = (await signIn(s.base, code2)).url!.searchParams.get("state")!;
   assert.notEqual(first, second);
@@ -219,7 +219,7 @@ test("google: a replayed callback, a state from nowhere and a state of a link th
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: first })).status, 404);
   assert.equal(tokenCalls.length, n);
   // a state made for one link does not finish another person's link: the link must still be open and hers
-  const other = s.mint(anna.id);
+  const other = s.mint(mara.id);
   const st = (await signIn(s.base, other)).url!.searchParams.get("state")!;
   s.links.claim(other)!.burn(); // the link was used elsewhere meanwhile
   assert.equal((await callback(s.base, { code: AUTH_CODE, state: st })).status, 404);
@@ -228,35 +228,35 @@ test("google: a replayed callback, a state from nowhere and a state of a link th
 
 test("google: wrong purpose and no capability: a profile link is a form (no sign-in), a person without google cannot open a google link, and revoking it kills a flow in progress", async () => {
   const s = await start();
-  const profile = s.mint(anna.id, "profile");
-  assert.equal((await fetch(`${s.base}/i/${profile}`)).status, 404, "anna has no profile capability: not that purpose");
+  const profile = s.mint(mara.id, "profile");
+  assert.equal((await fetch(`${s.base}/i/${profile}`)).status, 404, "mara has no profile capability: not that purpose");
   const nora = s.mint(noGoogle.id, "google");
   assert.equal((await fetch(`${s.base}/i/${nora}`)).status, 404, "no google capability");
-  const code = s.mint(anna.id);
+  const code = s.mint(mara.id);
   const state = (await signIn(s.base, code)).url!.searchParams.get("state")!;
-  held.get(anna.id)!.delete("google");
+  held.get(mara.id)!.delete("google");
   const calls = tokenCalls.length;
   assert.equal((await callback(s.base, { code: AUTH_CODE, state })).status, 404);
   assert.equal(tokenCalls.length, calls);
-  held.get(anna.id)!.add("google");
+  held.get(mara.id)!.add("google");
   // POSTing to a sign-in link is not a thing
-  const again = s.mint(anna.id);
+  const again = s.mint(mara.id);
   assert.equal((await fetch(`${s.base}/i/${again}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "x=1" })).status, 405);
 });
 
 test("google: she says no, Google refuses the code, no refresh token comes back, or a permission was unticked: nothing is stored and the same link can be used again", async () => {
   const s = await start();
-  const code = s.mint(anna.id);
+  const code = s.mint(mara.id);
   const attempt = async (mode: typeof tokenMode, params: (state: string) => Record<string, string>) => {
     tokenMode = mode;
     const state = (await signIn(s.base, code)).url!.searchParams.get("state")!;
-    bao.store.delete(`tenants/${anna.id}/google/oauth`);
+    bao.store.delete(`tenants/${mara.id}/google/oauth`);
     const r = await callback(s.base, params(state));
     const text = await r.text();
     assert.equal(r.status, 400, mode);
     assert.equal(GRANT(), undefined, `${mode}: nothing stored`);
     assert.ok(!text.includes(REFRESH) && !text.includes(AUTH_CODE) && !text.includes("invalid_grant"), "fixed sentences only");
-    assert.equal(s.links.isOpen({ tenant: anna.id, purpose: "google" }), true, `${mode}: the link is still open`);
+    assert.equal(s.links.isOpen({ tenant: mara.id, purpose: "google" }), true, `${mode}: the link is still open`);
     return text;
   };
   await attempt("ok", (state) => ({ error: "access_denied", state }));
@@ -276,7 +276,7 @@ test("google: the page says it is not available when the client is not set up, a
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   const base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
-  const code = links.mint({ tenant: anna.id, purpose: "google" }, 60_000)!;
+  const code = links.mint({ tenant: mara.id, purpose: "google" }, 60_000)!;
   assert.equal((await fetch(`${base}/i/${code}`)).status, 503);
   assert.equal((await fetch(`${base}/oauth/google/callback`, { method: "POST" })).status, 405);
   assert.equal((await fetch(`${base}/oauth/google/other`)).status, 404);
@@ -287,7 +287,7 @@ test("google: pkce and the consent address are well formed", async () => {
   assert.match(p.verifier, /^[A-Za-z0-9_-]{43,128}$/);
   assert.equal(createHash("sha256").update(p.verifier).digest("base64url"), p.challenge);
   const flows = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: "c", clientSecret: "s", authUrl: "https://a.example/auth", tokenUrl: "t", scopes: ["a", "b"] }))], baseUrl: () => "https://ted.example" });
-  const u = new URL((await flows.begin("google", "LINKCODE", "anna")).url);
+  const u = new URL((await flows.begin("google", "LINKCODE", "mara")).url);
   assert.equal(u.searchParams.get("redirect_uri"), "https://ted.example/oauth/google/callback");
   assert.equal(u.searchParams.get("prompt"), "consent");
   assert.equal(u.searchParams.get("scope"), "a b");
@@ -313,21 +313,21 @@ test("google: the chat tool offers the google purpose only with the capability a
   L.recordDone(bea.id, "google", [{ name: "google connection", chars: 16 }]);
   const status = await text("setup_status", "google");
   assert.match(status, /Google is connected/);
-  assert.doesNotMatch(status, /token|anna@/i);
+  assert.doesNotMatch(status, /token|mara@/i);
   assert.match(await text("get_setup_link", "profile"), /cannot set up/);
   const bad = await client.callTool({ name: "get_setup_link", arguments: { purpose: "google" } });
   assert.ok(bad);
 });
 
 test("google: the write-only intake token cannot read the grant; the app's token can read a friend's Google item and no other item of hers; one friend cannot read another's", async () => {
-  bao.store.set(`tenants/${anna.id}/google/oauth`, { refresh_token: REFRESH, email: "anna@example.com" });
-  bao.store.set(`tenants/${anna.id}/profile/address.home`, { value: "FAKE-ADDR" });
+  bao.store.set(`tenants/${mara.id}/google/oauth`, { refresh_token: REFRESH, email: "mara@example.com" });
+  bao.store.set(`tenants/${mara.id}/profile/address.home`, { value: "FAKE-ADDR" });
   const intake = bao.bao({ token: bao.intakeToken });
-  await assert.rejects(intake.read(`tenants/${anna.id}/google/oauth`));
-  const app = new TenantSecrets(bao.bao({ token: bao.token }), anna.id);
+  await assert.rejects(intake.read(`tenants/${mara.id}/google/oauth`));
+  const app = new TenantSecrets(bao.bao({ token: bao.token }), mara.id);
   assert.equal((await app.get("google", "oauth"))?.refresh_token, REFRESH);
   await assert.rejects(app.get("profile", "address.home"), "the app's token reads her Google grant and nothing else of hers");
-  const other = new TenantSecrets(bao.bao({ token: bao.tokenFor(noGoogle.id) }), anna.id);
+  const other = new TenantSecrets(bao.bao({ token: bao.tokenFor(noGoogle.id) }), mara.id);
   await assert.rejects(other.get("google", "oauth"), "another friend's token reaches only her own folder");
 });
 
@@ -337,12 +337,12 @@ test("doctor: a google line appears once there is a friend; a missing client is 
   const line = (ok: boolean | "warn", what: string, detail = "") => void (what.startsWith("google") && out.push({ ok, what, detail })); // (Notion has its own test)
   servicesCheck(line, { friends: [] });
   assert.equal(out.length, 0, "no friend: no line");
-  const friends = T.people().filter((r) => r.id === anna.id || r.id === noGoogle.id);
+  const friends = T.people().filter((r) => r.id === mara.id || r.id === noGoogle.id);
   servicesCheck(line, { needs: { google: ["GOOGLE_OAUTH_CLIENT_SECRET"] }, baseUrl: "https://ted.example.test", friends });
   assert.equal(out[0]!.ok, true, "not set up is not a failure");
   assert.match(out[0]!.detail, /not set up .*GOOGLE_OAUTH_CLIENT_SECRET is not set.*not offered/);
   out.length = 0;
-  servicesCheck(line, { needs: { google: [] }, baseUrl: "https://ted.example.test", friends, onPath: () => true, state: (id) => (id === anna.id ? { state: "connected", at: "2026-10-20T08:00:00.000Z" } : { state: "none" }) });
+  servicesCheck(line, { needs: { google: [] }, baseUrl: "https://ted.example.test", friends, onPath: () => true, state: (id) => (id === mara.id ? { state: "connected", at: "2026-10-20T08:00:00.000Z" } : { state: "none" }) });
   assert.equal(out.length, 3, "the command and each of the two friends");
   assert.deepEqual(out.map((x) => x.ok), [true, true, "warn"]);
   assert.match(out[1]!.detail, /connected since 2026-10-20/);

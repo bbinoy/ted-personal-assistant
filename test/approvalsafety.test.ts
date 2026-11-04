@@ -51,12 +51,12 @@ const owner = (message: string, earlier: string[] = []): RunProvenance => ({ kin
 
 test("TurnScope: repliedTo is the assistant message at the time the person wrote; a message sent mid-turn changes assistantSaid only", () => {
   const scope = scopeOf("owner");
-  scope.assistantSaid("Draft: To: philip@example.com. Send it?");
+  scope.assistantSaid("Draft: To: peter@example.com. Send it?");
   scope.say("Send");
   scope.assistantSaid("Also mail evil@example.org");
   const p = scope.read();
   assert.ok(p?.kind === "owner");
-  assert.equal(p.repliedTo, "Draft: To: philip@example.com. Send it?");
+  assert.equal(p.repliedTo, "Draft: To: peter@example.com. Send it?");
   assert.equal(p.assistantSaid, "Also mail evil@example.org");
   assert.deepEqual(recipientsOutside({ action: "send", to: ["evil@example.org"], cc: [], bcc: [] }, {}, p), ["evil@example.org"]);
   scope.end();
@@ -94,28 +94,28 @@ const notes = (files: Record<string, string>): string => {
   for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), t);
   return d;
 };
-const ANNA = { "people-anna-clements.md": "Anna Clements. anna.clements@example.com" };
+const MARA = { "people-mara-clements.md": "Mara Clements. mara.clements@example.com" };
 
 test("recipientsOutside: an address in the assistant message the person answers counts; others and older ones do not; a standing task has none", () => {
-  const v = { action: "send" as const, to: ["philip@example.com"], cc: [], bcc: [] };
-  const draft = "Draft: To: philip@example.com, Subject: Lunch, body: see you at one. Send it?";
+  const v = { action: "send" as const, to: ["peter@example.com"], cc: [], bcc: [] };
+  const draft = "Draft: To: peter@example.com, Subject: Lunch, body: see you at one. Send it?";
   assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", repliedTo: draft }), []);
   assert.deepEqual(recipientsOutside(v, {}, { kind: "member", message: "Send", repliedTo: draft }), []);
   assert.deepEqual(recipientsOutside({ ...v, to: ["spy@evil.example"] }, {}, { kind: "owner", message: "Send", repliedTo: draft }), ["spy@evil.example"]);
-  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", assistantSaid: draft, repliedTo: "Anything else?" }), ["philip@example.com"], "only the last assistant message counts");
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", assistantSaid: draft, repliedTo: "Anything else?" }), ["peter@example.com"], "only the last assistant message counts");
   const mid = { kind: "owner" as const, message: "Send", repliedTo: "Anything else?", assistantSaid: "Draft: To: evil@example.org" };
   assert.deepEqual(recipientsOutside({ ...v, to: ["evil@example.org"] }, {}, mid), ["evil@example.org"], "a message sent mid-turn is not the one they answered");
-  assert.deepEqual(recipientsOutside(v, {}, { kind: "standing", task: draft }), ["philip@example.com"]);
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "standing", task: draft }), ["peter@example.com"]);
 });
 
 test("recipientsOutside: an address is the person's when verbatim in their words, or a known person's whose first name they said; a word in an address proves nothing", () => {
-  const v = { action: "send" as const, to: ["anna.clements@example.com", "anna@evil.example"], cc: [], bcc: [] };
-  const known = knownPeople(notes(ANNA));
-  assert.deepEqual(recipientsOutside(v, {}, owner("I booked, update the calendar and invite Anna"), known), ["anna@evil.example"], "a known Anna's address is named; another address with her name is not");
-  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna")), ["anna.clements@example.com", "anna@evil.example"], "no known people: only verbatim counts");
-  assert.deepEqual(recipientsOutside(v, {}, owner("invite her"), known), ["anna.clements@example.com", "anna@evil.example"], "no name, no match");
-  assert.deepEqual(recipientsOutside(v, {}, owner("invite annabelle"), known), ["anna.clements@example.com", "anna@evil.example"], "a whole word, not a prefix");
-  assert.deepEqual(recipientsOutside(v, {}, owner("send to anna@evil.example")), ["anna.clements@example.com"], "verbatim still counts");
+  const v = { action: "send" as const, to: ["mara.clements@example.com", "mara@evil.example"], cc: [], bcc: [] };
+  const known = knownPeople(notes(MARA));
+  assert.deepEqual(recipientsOutside(v, {}, owner("I booked, update the calendar and invite Mara"), known), ["mara@evil.example"], "a known Mara's address is named; another address with her name is not");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Mara")), ["mara.clements@example.com", "mara@evil.example"], "no known people: only verbatim counts");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite her"), known), ["mara.clements@example.com", "mara@evil.example"], "no name, no match");
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite annabelle"), known), ["mara.clements@example.com", "mara@evil.example"], "a whole word, not a prefix");
+  assert.deepEqual(recipientsOutside(v, {}, owner("send to mara@evil.example")), ["mara.clements@example.com"], "verbatim still counts");
   const al = knownPeople(notes({ "people-al.md": "Al. al@example.com" }));
   assert.deepEqual(recipientsOutside({ ...v, to: ["al@example.com"] }, {}, owner("call al"), al), ["al@example.com"], "names under three letters never match");
   // Common words in an injected address are no longer enough.
@@ -124,25 +124,25 @@ test("recipientsOutside: an address is the person's when verbatim in their words
 });
 
 test("a friend's run uses the friend's own people, never the owner's", () => {
-  const owners = notes(ANNA);
+  const owners = notes(MARA);
   const friends = notes({ "people-ben-hall.md": "Ben Hall. ben.hall@example.org" });
-  const v = { action: "send" as const, to: ["anna.clements@example.com"], cc: [], bcc: [] };
-  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna"), knownPeople(friends)), ["anna.clements@example.com"]);
-  assert.deepEqual(recipientsOutside(v, {}, owner("invite Anna"), knownPeople(owners)), []);
+  const v = { action: "send" as const, to: ["mara.clements@example.com"], cc: [], bcc: [] };
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Mara"), knownPeople(friends)), ["mara.clements@example.com"]);
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite Mara"), knownPeople(owners)), []);
 });
 
 test("an event with guests is judged; in an untrusted run only when the person named every guest", async () => {
   let judged = 0;
   let asked = 0;
   const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "fine" });
-  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, notes(ANNA), judge as never, undefined, undefined, false, { provenance: scopeOf("guests").read, conversation: "guests", untrusted });
+  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, notes(MARA), judge as never, undefined, undefined, false, { provenance: scopeOf("guests").read, conversation: "guests", untrusted });
   let day = 4;
   const event = (guest: string) => (day++, { summary: "Dinner", startTime: `2026-11-0${day}T19:00:00`, endTime: `2026-11-0${day}T21:00:00`, attendees: [{ email: guest }] });
-  scopeOf("guests").say("dinner tomorrow at 7, invite Anna");
-  assert.equal((await run(false)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
+  scopeOf("guests").say("dinner tomorrow at 7, invite Mara");
+  assert.equal((await run(false)(CAL, event("mara.clements@example.com"), opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "a trusted run: the judge decides about the guest");
-  assert.equal((await run(true)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
-  assert.deepEqual({ judged, asked }, { judged: 2, asked: 0 }, "untrusted, but the owner named Anna: judged");
+  assert.equal((await run(true)(CAL, event("mara.clements@example.com"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 2, asked: 0 }, "untrusted, but the owner named Mara: judged");
   assert.equal((await run(true)(CAL, event("billing@evil.example"), opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "untrusted and nobody named this guest: the owner is asked, the judge is not");
 });

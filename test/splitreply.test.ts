@@ -30,7 +30,7 @@ test("split: the copy marker keeps a block whole and is stripped", () => {
 
 test("split: a tiny fragment joins its neighbour", () => {
   assert.deepEqual(splitMessages("All done, the table is booked.\n\n🎉\n\nSee you there, have a lovely evening."), ["All done, the table is booked.\n\n🎉", "See you there, have a lovely evening."]);
-  assert.deepEqual(splitMessages("Hi Anna\n\nThe table is booked for eight."), ["Hi Anna\n\nThe table is booked for eight."]);
+  assert.deepEqual(splitMessages("Hi Mara\n\nThe table is booked for eight."), ["Hi Mara\n\nThe table is booked for eight."]);
 });
 
 function rig() {

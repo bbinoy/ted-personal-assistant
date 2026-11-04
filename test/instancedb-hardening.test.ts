@@ -19,23 +19,23 @@ const { Ledger } = await import("../src/modules/browse/payments.ts");
 const { noteDone } = await import("../src/intake/intakeserver.ts");
 const I = await import("../src/intake/intakelinks.ts");
 
-const ANNA = "anna-1a2b";
+const MARA = "mara-1a2b";
 const BO = "bo-3c4d";
 
 test("removing a friend unnames her spend rows (the totals stay), and leaves another friend's rows alone", async () => {
-  const conv = friendConvId(ANNA);
+  const conv = friendConvId(MARA);
   B.recordSpend({ usd: 1, conv, payer: "key" });
   B.recordSpend({ usd: 2, conv: friendConvId(BO), payer: "key" });
   const db = instanceDb();
   const keyBefore = B.keySpentToday();
-  const out = await removeTenant(ANNA);
+  const out = await removeTenant(MARA);
   assert.deepEqual(out!.failed, []);
   assert.ok(out!.removed.some((x) => x.includes("spend rows")));
   assert.equal(B.spentToday(conv), 0, "a friend with the same id, added again today, starts at nothing");
   assert.equal(B.keySpentToday(), keyBefore, "the key's day did not shrink");
   assert.equal(db.num("SELECT COUNT(*) FROM spend WHERE conv = ?", conv), 0, "no row names her");
   assert.equal(B.spentToday(friendConvId(BO)), 2, "another friend is untouched");
-  assert.deepEqual((await removeTenant(ANNA))!.failed, [], "idempotent");
+  assert.deepEqual((await removeTenant(MARA))!.failed, [], "idempotent");
 });
 
 test("a damaged INDEX opens fine and only the integrity check finds it: a ledger database refuses to start, a rebuildable one is rebuilt", () => {

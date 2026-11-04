@@ -114,7 +114,7 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
 
 const gistOf = (text: string): string => text.split("\n").map((l) => l.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, LIMITS.gist) ?? "";
 
-// Pure: the index, MEMORY.md, as the SDK reads it: one line per note, "- people: [Anna](people-anna.md) - Anna lives in Lisbon (until 2026-11-01)". Expired notes are not passed in, the assistant's
+// Pure: the index, MEMORY.md, as the SDK reads it: one line per note, "- people: [Mara](people-mara.md) - Mara lives in Lisbon (until 2026-11-01)". Expired notes are not passed in, the assistant's
 // own records (status-) are not memory, the number is capped (MEMORY_MAX_NOTES).
 export const indexOf = (notes: readonly Note[]): string =>
   notes
