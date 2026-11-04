@@ -1,6 +1,6 @@
 ---
 name: stay-in-touch
-description: Use to keep track of the people who matter to the owner and to help them stay in touch. Load it when the owner tells you about a person worth remembering (where they live, how close they are, how often to be in touch), when the calendar or mail shows the owner will be at a place where a wish or a person waits (flights, a hotel, a conference, the other city), when a person's note says it is time to reach out, or when the owner asks who they should see or call.
+description: Use to keep track of the people who matter to the owner and to help them stay in touch. Load it when the owner tells you about a person worth remembering (where they live, how close they are, how often to be in touch), when the daily brief finds a stretch with a wish or a person waiting about to start, when a person's note says it is time to reach out, or when the owner asks who they should see or call.
 ---
 
 # Stay in touch
@@ -24,23 +24,19 @@ Likes surf and long dinners. Her first child is due in November.
 
 ## Where the owner is
 
-One note, `context-whereabouts.md`, holds a sequence of stretches: where the owner is now and until when, then the next ones, each with place and first and last day (its description is the index line every run sees). Going back to the home city is a stretch like any other; many people split their time between cities. Any run updates it when the calendar (flights, hotels, events with a location, an out-of-office), a booking mail, a plan note or the owner's words show a change ("I'm in Porto next week"). A planned stretch counts even if nothing is booked yet: say "draft" while it is not firm. Never state the location as certain. A stretch you see in a plan note or the calendar with no whereabouts note yet: write the note then. When notes disagree on a date, the newer, more specific one wins, and you correct the older one in the same turn.
-
-The "Prepare <place> stay" task and the rule for a wish at the place the owner is in now are in the tasks skill ("Tasks that fit a place or a moment"); its reminder wakes the pass below.
+One note, `context-whereabouts.md`, holds a sequence of stretches: where the owner is now and until when, then the next ones, each with place and first and last day (its description is the index line every run sees). Going back to the home city is a stretch like any other; many people split their time between cities. Any run updates it when the calendar, a booking mail, a plan note or the owner's words show a change; the daily brief brings it up to date each morning. A planned stretch counts even if nothing is booked yet: say "draft" while it is not firm. Never state the location as certain. When notes disagree on a date, the newer, more specific one wins, and you correct the older one in the same turn.
 
 ### Before a stay
 
-About 5 days before a stay starts (at first sight if it is closer), when the "Prepare <place> stay" reminder wakes you, and again when its dates move, the same way in a look or a chat turn: gather everything that waits for the place, look at the free time of the stay, and arrange what you can without asking.
+Done by the daily brief, each morning, for a stretch with something waiting that starts within about 5 days, or is under way and has not had its pass (any place, home included): gather everything that waits for the place, look at the free time of the stretch, and arrange what you can without asking. Nothing waits, or the pass already went out (recent briefs and chat show it) and the dates did not move: do nothing and say nothing.
 
 1. Gather: `list_tasks` with a `query` for the place and its variants (city, country): a place wish with a due date or reminder in or around the stay counts like an undated one (a real deadline of its own, a booking or a ticket, is not a wish and keeps its date); and the `people-` notes whose "Lives in" is the place (generous about the area: Cascais counts for Lisbon; skip a stay of a few hours at an airport, anyone a note says not to bother, anyone just seen by their cadence). Search mail and calendar for when the owner last was in touch with each person, to say it ("last wrote in March"), never to save it.
 2. Look at the owner's calendar across the stay for free time. If the stay is too short or too full for everything, say which wishes do not fit rather than forcing them.
 3. Arrange: a draft to each person proposing a concrete time (a mail draft when you have an address, via `find_person` or a note; otherwise the ready-to-paste text in the message, without asking for the address), and a tentative hold on the owner's own calendar where a slot is obvious. A person needs notice, so propose, do not just list.
-4. Once a wish is arranged or carried in a proposal, put it back on the place: `update_task` with `due` and `remind` null. Complete the "Prepare <place> stay" task.
-5. Send ONE short message: where and when, who and which wishes are ready ("draft ready"), what does not fit, one useful detail from a note (a birthday, a baby). Never contact anyone yourself: every draft and invitation goes through the usual approval.
+4. Once a wish is arranged or carried in a proposal, put it back on the place: `update_task` with `due` and `remind` null.
+5. Report it inside the brief, in a few lines: where and when, who and which wishes are ready ("draft ready"), what does not fit, one useful detail from a note (a birthday, a baby). Never contact anyone yourself: every draft and invitation goes through the usual approval.
 
-A stretch already under way with open place wishes gets the same pass once.
-
-Do not repeat yourself: if your recent messages show you already told the owner about this stay, say nothing again unless the dates changed or the owner answered.
+Do not repeat yourself: if the recent briefs or messages already told the owner about this stretch, say nothing again unless the dates changed or the owner answered.
 
 ## Reaching out without a visit
 
