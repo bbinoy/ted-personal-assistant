@@ -11,6 +11,7 @@ import { owner } from "../../src/conversation/conversationmodel.ts";
 import { runConversation, runLook } from "../../src/run/agent.ts";
 import { chatTurn } from "../../src/run/chattail.ts";
 import { ledgerEntries, recordMessage } from "../../src/core/messages.ts";
+import { liveConvDb } from "../../src/core/convdb.ts";
 import { lookState } from "../../src/conversation/ledger.ts";
 import { scopeOf } from "../../src/approvals/turnscope.ts";
 import { approveIn, setApprovers } from "../../src/approvals/permissions.ts";
@@ -320,6 +321,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         };
         const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (cv, payer, build, extra) => runLook(cv, payer, build, approveIn(cv.key, { background: true }), extra, { now: o.now, io: { query: realQuery } }), may: () => LOGIN, why: () => "refused", notesChangedAt: () => 0 });
         recordMessage("owner", nowMs - 3_600_000, "morning", new Date(nowMs - 3_600_000)); // (a conversation with some history, as a look finds it)
+        for (const f of readdirSync(owner().notesDir).filter((x) => x.startsWith("routine-"))) liveConvDb(conv)?.run("INSERT OR IGNORE INTO routine_runs (name, since) VALUES (?, ?)", f.replace(/\.md$/, ""), nowMs - 86_400_000); // (a routine note seeded by the case has been known since yesterday, so today's slot is due)
         await fireReminders(pipeline as never, conv, o.now); // (the wake tick claims a reminder that came due, which is what wakes the look with its reason)
         const outcome = await hb.look(conv, lookState(ledgerEntries(conv.logFile)), o.now);
         if (outcome !== "silent" && outcome !== "posted") error = `the look ended ${outcome}`;

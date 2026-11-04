@@ -44,7 +44,7 @@ Tidy the list from what the run has already read (mail, calendar, notes, the whe
 
 - **Complete** a task the sources show is done (the reply was sent, the document arrived, the meeting happened): `complete_task`.
 - **Merge** duplicates: keep the better-worded item, fold the other's details into it with `update_task`, `drop_task` the other.
-- **Move** a task when a mail, event, note or the person's words changed the date or plan it depends on: `update_task` every place the old date appears in it: due date, reminder, title and details (read the details, not only the title). The run that changes a plan does this itself, in the same run (`list_tasks` with a `query` for the place or event).
+- **Move** a task when a mail, event, note or the person's words changed the date or plan it depends on: `update_task` every place the old date appears in it: due date, reminder, title and details (a date in the details counts: "planned for <old day>" becomes the new day). The run that changes a plan does this itself, in the same run (`list_tasks` with a `query` for the place or event).
 - **Drop** a moot task (the event it was for is past and nothing is left to do): `drop_task`.
 
 All are reversible with `update_task` and `reopen: true`.

@@ -1208,12 +1208,13 @@ const e34: Case = {
 
 const e35: Case = {
   id: "e35",
-  title: "a look finds a Valmora stay in a plan note and the calendar, 20 days out, and no whereabouts note: the note is written, the prepare task is reminded 5 days before, no drafts yet",
+  title: "the daily brief routine (a look with the routine due) sees a Valmora stay 20 days out in a plan note and the calendar, and no whereabouts note, and a place wish waiting: the note is written, the prepare task is reminded 5 days before, no drafts yet",
   turns: [],
   look: true,
   world: (t) => ({
+    tasks: [{ title: "When in Valmora: coffee with Sam" }],
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(20), "09:00"), end: t.local(t.day(30), "18:00"), zone: t.zone, location: "Valmora" }],
-    notes: { "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
+    notes: { "routine-daily-brief.md": "---\nname: daily-brief\ndescription: The daily brief\nwhen: every day at 07:30\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n", "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
   }),
   maxQuestions: 0,
   state: (o) => [
