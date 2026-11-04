@@ -12,9 +12,9 @@ const FRIEND_ACI = "22222222-2222-4222-8222-222222222222";
 const peerCh = { account: BOT, peer: ME };
 
 test("a private message from someone other than the peer is flagged `other`, with her account id and name", () => {
-  const env = { sourceNumber: "+15555550105", sourceUuid: FRIEND_ACI, sourceName: "Anna", timestamp: 3, dataMessage: { message: "hi", timestamp: 3 } };
+  const env = { sourceNumber: "+15555550105", sourceUuid: FRIEND_ACI, sourceName: "Mara", timestamp: 3, dataMessage: { message: "hi", timestamp: 3 } };
   const m = interpretEnvelope(env, peerCh).message!;
-  assert.deepEqual([m.direct, m.other, m.fromUuid, m.fromName, m.from, m.group], [false, true, FRIEND_ACI, "Anna", "+15555550105", undefined]);
+  assert.deepEqual([m.direct, m.other, m.fromUuid, m.fromName, m.from, m.group], [false, true, FRIEND_ACI, "Mara", "+15555550105", undefined]);
   // her number may be hidden: the account id is what identifies her
   assert.equal(interpretEnvelope({ ...env, sourceNumber: undefined, source: undefined }, peerCh).message?.from, "");
   const react = interpretEnvelope({ sourceNumber: "+15555550105", sourceUuid: FRIEND_ACI, dataMessage: { timestamp: 4, reaction: { emoji: "👍", targetSentTimestamp: 2 } } }, peerCh).reaction!;

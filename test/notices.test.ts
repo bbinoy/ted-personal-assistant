@@ -136,8 +136,8 @@ test("failure tracker: the owner's looks become a fact only after 3 failures ove
   // groups and friends are never tracked for anyone's chat
   const g = createFailureTracker({ fails: 1, awakeMs: 0 });
   g.observe("g1", "group", true, "timeout", T, 0);
-  g.observe("tenant:anna", "tenant", true, "timeout", T, 0);
-  assert.equal(g.fact("g1") + g.fact("tenant:anna"), "");
+  g.observe("tenant:mara", "tenant", true, "timeout", T, 0);
+  assert.equal(g.fact("g1") + g.fact("tenant:mara"), "");
 });
 
 test("causeOf and the owner's failure messages: login, limit, timeout, connector, the rest", () => {

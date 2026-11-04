@@ -210,7 +210,7 @@ test("search: a different Ranker can be plugged in (the seam for a local embeddi
 
 test("search: 20k lines, indexed once, then queries and incremental updates are fast", async () => {
   const r = rig("big");
-  const words = "meeting lunch dinner flight train hotel dentist invoice birthday garden kite surf weather mortgage Anna Alex Carla Dmitri Eve Frank trattoria cafe tickets".split(" ");
+  const words = "meeting lunch dinner flight train hotel dentist invoice birthday garden kite surf weather mortgage Mara Alex Carla Dmitri Eve Frank trattoria cafe tickets".split(" ");
   const lines: string[] = [];
   let seed = 7;
   const rnd = (k: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) % k);
@@ -225,7 +225,7 @@ test("search: 20k lines, indexed once, then queries and incremental updates are 
   const build = performance.now() - t0;
   assert.match(first, /osteria/);
   const t1 = performance.now();
-  for (let i = 0; i < 5; i++) (await r.find({ query: "dinner Anna", alsoTry: ["trattoria", "cafe", "lunch"] }));
+  for (let i = 0; i < 5; i++) (await r.find({ query: "dinner Mara", alsoTry: ["trattoria", "cafe", "lunch"] }));
   const query = (performance.now() - t1) / 5;
   appendFileSync(dataPath(r.logFile), `${JSON.stringify({ ts: 1_800_000_000_001, at: new Date(NOW).toISOString(), kind: "owner", text: "brand new platypus line" })}\n`);
   const t2 = performance.now();

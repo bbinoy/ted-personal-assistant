@@ -7,15 +7,15 @@ import type { Case, Outcome, Time } from "./case.ts";
 const e3: Case = {
   id: "e3",
   title: "bulk task triage in one message",
-  turns: ["Done: swing class signup, send deck to Henrik. Push Ricardo transfer to Tuesday. Remove world ETF buy. Calling Ursula seems duplicate."],
+  turns: ["Done: swing class signup, send deck to Leif. Push Ricardo transfer to Tuesday. Remove world ETF buy. Calling Ingrid seems duplicate."],
   world: (t) => ({
     tasks: [
       { title: "Swing class signup", due: t.day(2) },
-      { title: "Send deck to Henrik", due: t.day(1) },
+      { title: "Send deck to Leif", due: t.day(1) },
       { title: "Ricardo transfer", due: t.nextWeekday(5), details: "the deposit for the flat" },
       { title: "World ETF buy" },
-      { title: "Call Ursula about the flat viewing" },
-      { title: "Ring Ursula back", details: "re the viewing" },
+      { title: "Call Ingrid about the flat viewing" },
+      { title: "Ring Ingrid back", details: "re the viewing" },
       { title: "Renew library card", due: t.day(9) },
     ],
   }),
@@ -27,23 +27,23 @@ const e3: Case = {
     const lib = by("library")[0];
     return [
       check("the swing class signup is done", by("swing")[0]?.status === "done", by("swing")[0]?.status),
-      check("the deck for Henrik is done", by("deck")[0]?.status === "done", by("deck")[0]?.status),
+      check("the deck for Leif is done", by("deck")[0]?.status === "done", by("deck")[0]?.status),
       check("Ricardo is due on the Tuesday after his old Friday due date, and still open", !!ric && ric.status === "open" && ric.due?.slice(0, 10) === o.time.plus(o.time.nextWeekday(5), 4), ric && `${ric.status} ${ric.due}`),
       check("the ETF task is closed, not deleted (done or dropped)", by("etf").length === 1 && ["done", "dropped"].includes(by("etf")[0]!.status), by("etf")[0]?.status),
-      check("the two Ursula tasks became one open task", by("ursula").length >= 1 && open("ursula").length === 1, `${open("ursula").length} open`),
+      check("the two Ingrid tasks became one open task", by("ingrid").length >= 1 && open("ingrid").length === 1, `${open("ingrid").length} open`),
       check("the other tasks are untouched", !!lib && lib.status === "open" && lib.due === o.time.day(9) && lib.title === "Renew library card"),
     ];
   },
   never: () => [],
-  reply: ["It says briefly what was done with the tasks: the two finished, Ricardo moved to Tuesday, the ETF task removed, the Ursula tasks merged.", "It is short: five lines at most.", "It asks no question."],
+  reply: ["It says briefly what was done with the tasks: the two finished, Ricardo moved to Tuesday, the ETF task removed, the Ingrid tasks merged.", "It is short: five lines at most.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
     s.tasks.done(s.tasks.find("swing"));
     s.tasks.done(s.tasks.find("deck"));
     s.tasks.edit(s.tasks.find("ricardo"), { due: s.time.plus(s.time.nextWeekday(5), 4) });
     s.tasks.drop(s.tasks.find("etf"));
-    s.tasks.drop(s.tasks.find("ring ursula"));
-    s.say("Done: the swing class signup and the deck for Henrik are ticked off, Ricardo is on Tuesday, the ETF task is removed and the two Ursula tasks are one now.");
+    s.tasks.drop(s.tasks.find("ring ingrid"));
+    s.say("Done: the swing class signup and the deck for Leif are ticked off, Ricardo is on Tuesday, the ETF task is removed and the two Ingrid tasks are one now.");
   },
 };
 
@@ -103,23 +103,23 @@ const e4: Case = {
   },
 };
 
-// ---- e7: "I booked, check email, update calendar, invite Anna" ----
-const ANNA = "anna.clements@example.org";
+// ---- e7: "I booked, check email, update calendar, invite Mara" ----
+const MARA = "mara.holm@example.org";
 const e7: Case = {
   id: "e7",
-  title: "a booking mail updates the existing event; Anna is invited from past mail",
-  turns: ["I booked, check email, update calendar, invite Anna"],
+  title: "a booking mail updates the existing event; Mara is invited from past mail",
+  turns: ["I booked, check email, update calendar, invite Mara"],
   world: (t) => ({
     calendar: [
-      { summary: "Dinner with Anna (tentative)", start: t.local(t.day(1), "20:00"), end: t.local(t.day(1), "22:00") },
+      { summary: "Dinner with Mara (tentative)", start: t.local(t.day(1), "20:00"), end: t.local(t.day(1), "22:00") },
       { summary: "Team sync", start: t.local(t.day(1), "10:00"), end: t.local(t.day(1), "10:30") },
     ],
     mail: [
       { from: { email: "reservations.marlowpine@example.com", displayName: "Marlow & Pine" }, subject: "Your table at Marlow & Pine is confirmed", body: `<p>Your table for 2 is confirmed for tomorrow, ${t.day(1)}, at 19:00. Marlow & Pine, 14 Quay Street, London. Booking reference MP-48213.</p>`, receivedAt: new Date(t.now.getTime() - 2 * 3_600_000).toISOString() },
-      { from: { email: ANNA, displayName: "Anna Clements" }, subject: "Re: catching up", body: "<p>Would love to! Any evening next week works. Anna</p>", receivedAt: new Date(t.now.getTime() - 20 * 86_400_000).toISOString(), read: true },
+      { from: { email: MARA, displayName: "Mara Holm" }, subject: "Re: catching up", body: "<p>Would love to! Any evening next week works. Mara</p>", receivedAt: new Date(t.now.getTime() - 20 * 86_400_000).toISOString(), read: true },
     ],
   }),
-  maxQuestions: 1, // (Anna's address comes from a mail the run read and the owner only said "Anna": the code floor asks once before the invitation goes out)
+  maxQuestions: 1, // (Mara's address comes from a mail the run read and the owner only said "Mara": the code floor asks once before the invitation goes out)
   answers: ["yes"],
   state: (o) => {
     const t = o.time;
@@ -131,17 +131,17 @@ const e7: Case = {
       check("it starts at 19:00 tomorrow", !!ev && t.dateOf(ev.startMs) === t.day(1) && t.hhmm(ev.startMs) === "19:00", ev && `${t.dateOf(ev.startMs)} ${t.hhmm(ev.startMs)}`),
       check("it has the place", /quay street|marlow/i.test(text)),
       check("it has the booking reference", text.includes("MP-48213")),
-      check("Anna is a guest, at the address from the past mail", !!ev && ev.attendees.includes(ANNA)),
-      check("and she was sent the invitation", !!ev && ev.invited.includes(ANNA)),
+      check("Mara is a guest, at the address from the past mail", !!ev && ev.attendees.includes(MARA)),
+      check("and she was sent the invitation", !!ev && ev.invited.includes(MARA)),
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It says the dinner was updated with the time and place and that Anna was invited.", "It does not ask for Anna's email address.", "It is short: three lines at most."],
+  reply: ["It says the dinner was updated with the time and place and that Mara was invited.", "It does not ask for Mara's email address.", "It is short: three lines at most."],
   perfect: async (s) => {
     s.turn(0);
     const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.day(1), "00:00"), endTime: s.time.local(s.time.day(2), "00:00") })) as { events: { id: string; summary: string }[] };
-    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Dinner/.test(e.summary))!.id, summary: "Dinner with Anna at Marlow & Pine", startTime: s.time.local(s.time.day(1), "19:00"), endTime: s.time.local(s.time.day(1), "21:00"), timeZone: s.time.zone, location: "Marlow & Pine, 14 Quay Street, London", description: "Booking reference MP-48213", attendees: [{ email: ANNA }] });
-    s.say("Updated the dinner: 19:00 tomorrow at Marlow & Pine, 14 Quay Street, booking ref MP-48213. Anna is invited.");
+    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Dinner/.test(e.summary))!.id, summary: "Dinner with Mara at Marlow & Pine", startTime: s.time.local(s.time.day(1), "19:00"), endTime: s.time.local(s.time.day(1), "21:00"), timeZone: s.time.zone, location: "Marlow & Pine, 14 Quay Street, London", description: "Booking reference MP-48213", attendees: [{ email: MARA }] });
+    s.say("Updated the dinner: 19:00 tomorrow at Marlow & Pine, 14 Quay Street, booking ref MP-48213. Mara is invited.");
   },
 };
 
@@ -356,7 +356,7 @@ const MEDIA = { id: "db-media", title: "Media", dataSourceId: "ds-media", schema
 const e10: Case = {
   id: "e10",
   title: "a book recommendation goes where the notes say, not onto the task list",
-  turns: ["Mara Linden book recommended by Anna, 'The Quiet Orbit', add to reading recommendations"],
+  turns: ["Vera Linden book recommended by Mara, 'The Quiet Orbit', add to reading recommendations"],
   world: () => ({
     notion: [MEDIA],
     notes: { "context-media-recommendations.md": "Book and film recommendations go into my Notion Media database (the one called Media) as a new row: Name is the title, Author, Type, Status \"Ready to Start\", and Notes says who recommended it. They are never tasks." },
@@ -369,18 +369,18 @@ const e10: Case = {
     return [
       check("exactly one Media row was created", rows.length === 1 && row?.dataSourceId === "ds-media", `${rows.length} pages`),
       check("with the title", /quiet orbit/i.test(row?.title ?? ""), row?.title),
-      check("with the author", /mara linden/i.test(all), all.slice(0, 120)),
+      check("with the author", /vera linden/i.test(all), all.slice(0, 120)),
       check("with status Ready to Start", /ready to start/i.test(JSON.stringify(row?.properties ?? {})), JSON.stringify(row?.properties)),
-      check("recommended by Anna is noted", /anna/i.test(all), all.slice(0, 120)),
-      check("no task was made instead", !o.tasks.some((x) => /quiet orbit|mara linden/i.test(`${x.title} ${x.details ?? ""}`)), o.tasks.map((x) => x.title).join("; ")),
+      check("recommended by Mara is noted", /mara/i.test(all), all.slice(0, 120)),
+      check("no task was made instead", !o.tasks.some((x) => /quiet orbit|vera linden/i.test(`${x.title} ${x.details ?? ""}`)), o.tasks.map((x) => x.title).join("; ")),
     ];
   },
   never: (o) => sends(o),
   reply: ["It says the recommendation was added to the Media list.", "It is one or two short lines.", "It does not ask where to put it."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool("mcp__claude_ai_Notion__notion-create-pages", { parent: { type: "data_source_id", data_source_id: "ds-media" }, pages: [{ properties: { Name: "The Quiet Orbit", Author: "Mara Linden", Type: "Book", Status: "Ready to Start", Notes: "Recommended by Anna" } }] });
-    s.say("Added The Quiet Orbit by Mara Linden to Media as Ready to Start, recommended by Anna.");
+    await s.tool("mcp__claude_ai_Notion__notion-create-pages", { parent: { type: "data_source_id", data_source_id: "ds-media" }, pages: [{ properties: { Name: "The Quiet Orbit", Author: "Vera Linden", Type: "Book", Status: "Ready to Start", Notes: "Recommended by Mara" } }] });
+    s.say("Added The Quiet Orbit by Vera Linden to Media as Ready to Start, recommended by Mara.");
   },
 };
 
@@ -567,7 +567,7 @@ const e15: Case = {
   id: "e15",
   title: "a group member says 'check out the MECS website': search and open it now, reply with what it says",
   turns: [],
-  group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: "Ted check out MECS programme website, modern energy cooking services, it's all on there", addressed: true }] }, // (tagged, so the participation gate does not decide)
+  group: { members: ["Mara", "Jo"], turns: [{ from: "Mara", text: "Ted check out MECS programme website, modern energy cooking services, it's all on there", addressed: true }] }, // (tagged, so the participation gate does not decide)
   world: (t) => ({ fetch: { [MECS_URL]: mecsPage(t) } }),
   maxQuestions: 0,
   state: (o) => {
@@ -595,7 +595,7 @@ const e15b: Case = {
   ...e15,
   id: "e15b",
   title: "the same, but only named in the text (not tagged): the participation gate decides",
-  group: { members: ["Anna", "Jo"], turns: [{ from: "Anna", text: e15.group!.turns[0]!.text }] },
+  group: { members: ["Mara", "Jo"], turns: [{ from: "Mara", text: e15.group!.turns[0]!.text }] },
 };
 
 // ---- e17: a correction arrives while the task is still running ----
@@ -672,18 +672,18 @@ const e16b: Case = {
 };
 
 // ---- e19: "is registration open?": the event's site wants the access key from the invite mail; typing it is no question, the page behind it is read ----
-const POLARIS_AUTH = "https://polaris.example.lovable.app/auth";
-const POLARIS_HOME = "https://polaris.example.lovable.app/event";
+const MERIDIAN_AUTH = "https://meridian.example.lovable.app/auth";
+const MERIDIAN_HOME = "https://meridian.example.lovable.app/event";
 const e19: Case = {
   id: "e19",
   title: "check whether an event's registration is open: the site wants the access key from the invite mail, no question",
-  turns: ["Is registration for the Polaris event still open? The invite is in my inbox."],
+  turns: ["Is registration for the Meridian event still open? The invite is in my inbox."],
   world: (t) => ({
-    mail: [{ from: { email: "hello@example.com", displayName: "Polaris Events" }, subject: "You are invited: Visionaries Polaris", body: `<p>Join us for Visionaries Polaris. Details and registration: ${POLARIS_AUTH}</p><p>Access key: polaris2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
-    fetch: { [POLARIS_AUTH]: `<html><head><title>Visionaries Polaris</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
+    mail: [{ from: { email: "hello@example.com", displayName: "Meridian Events" }, subject: "You are invited: Meridian Circle", body: `<p>Join us for Meridian Circle. Details and registration: ${MERIDIAN_AUTH}</p><p>Access key: meridian2026</p>`, receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "inbox", read: false }],
+    fetch: { [MERIDIAN_AUTH]: `<html><head><title>Meridian Circle</title></head><body><div id="root"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>` },
     web: {
-      [POLARIS_AUTH]: { url: POLARIS_AUTH, heading: "Visionaries Polaris", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "polaris2026", to: POLARIS_HOME } },
-      [POLARIS_HOME]: { url: POLARIS_HOME, heading: "Visionaries Polaris", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
+      [MERIDIAN_AUTH]: { url: MERIDIAN_AUTH, heading: "Meridian Circle", text: ["Enter the access key from your invitation."], fields: [{ name: "Access key" }], gate: { code: "meridian2026", to: MERIDIAN_HOME } },
+      [MERIDIAN_HOME]: { url: MERIDIAN_HOME, heading: "Meridian Circle", text: ["Registration is open until the 14th. Seats are limited."], buttons: [{ name: "Register", submit: true }] },
     },
   }),
   maxQuestions: 0,
@@ -699,18 +699,18 @@ const e19: Case = {
   reply: ["It says registration is open, with the closing date (the 14th).", "It does not ask whether to type the access key or to go ahead.", "It is short."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${MB}search_conversations`, { query: "Polaris" });
-    await s.tool("mcp__browser__browser_navigate", { url: POLARIS_AUTH });
-    await s.tool("mcp__browser__browser_type", { target: "e3", text: "polaris2026", submit: true });
-    s.say("Yes, registration for Visionaries Polaris is open until the 14th, seats are limited.");
+    await s.tool(`${MB}search_conversations`, { query: "Meridian" });
+    await s.tool("mcp__browser__browser_navigate", { url: MERIDIAN_AUTH });
+    await s.tool("mcp__browser__browser_type", { target: "e3", text: "meridian2026", submit: true });
+    s.say("Yes, registration for Meridian Circle is open until the 14th, seats are limited.");
   },
 };
 
-// ---- e20: a trip appears (a look): the whereabouts note is updated, one message mentions the London task and the person ----
+// ---- e20: a trip appears (a look): the whereabouts note may be updated; the look may stay silent (the daily brief arranges the stay), nothing is sent ----
 const NOTE_ZURICH = (t: Time) => `---\nname: whereabouts\ndescription: Whereabouts: Zurich since ${t.day(-30)}; no trip known\n---\nAt home in Zurich.\n`;
 const e20: Case = {
   id: "e20",
-  title: "a look sees a flight to London tomorrow: the whereabouts note is updated and the London task and person are mentioned once, no question",
+  title: "a look sees a flight to London tomorrow: it may stay silent, nothing is sent, no question, and any whereabouts note change keeps Zurich as now and names London",
   turns: [],
   look: true,
   world: (t) => ({
@@ -726,23 +726,20 @@ const e20: Case = {
   }),
   maxQuestions: 0,
   state: (o) => {
-    const said = o.turns.flatMap((t) => t.messages).join("\n");
     const note = o.notes["context-whereabouts.md"] ?? "";
     const description = /^description:(.*)$/m.exec(note)?.[1] ?? "";
     return [
       check("the whereabouts note still exists and its description names London", /london/i.test(description), description),
       check("the description keeps Zurich as where they are now", /zurich/i.test(description), description),
-      check("one message mentions the London task", /london/i.test(said) && /dana/i.test(said), said.slice(0, 200)),
       check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It mentions the trip to London tomorrow and the open task to meet Dana there (Dana lives in London).", "It is one short message (a few lines; it may say a coffee note or hold for Dana is ready) and asks no question."],
+  reply: ["Either nothing was said, or one short message; it asks no question and does not claim anything was sent."],
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
     s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Zurich; next London from ${s.time.day(1)} to ${s.time.day(5)} (flight ZU 318)\n---\nFlight ZU 318 Zurich - London on ${s.time.day(1)}, hotel Example Court until ${s.time.day(5)}. Source: calendar.\n`);
-    s.say("Heads up: you fly to London tomorrow morning and stay four nights. You have an open task there, meeting Dana about the Example Labs intro, and she lives in London.");
   },
 };
 

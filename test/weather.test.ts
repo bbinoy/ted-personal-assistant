@@ -42,7 +42,7 @@ test("forecast: knots, local daylight hours from now, hourly for two days then e
 
 test("forecast: errors are short plain text the model can act on", async () => {
   assert.match(await getForecast({ lat: 1, lon: 1 }, io({ error: true, reason: "Latitude must be in range" })), /^weather service: Latitude must be in range/);
-  assert.match(await searchPlaces("Yvonand", io({ generationtime_ms: 1 })), /no place found for "Yvonand".*coordinates/);
+  assert.match(await searchPlaces("Larkmere", io({ generationtime_ms: 1 })), /no place found for "Larkmere".*coordinates/);
 });
 
 test("marine: a lake gives a plain message, a coast gives a table", async () => {
@@ -106,13 +106,13 @@ test("weather: a 429 is retried after the Retry-After the service sends; a 5xx a
   assert.equal(retryDelayMs("Mon, 19 Oct 2026 08:30:05 GMT", 0, Date.parse("2026-10-19T08:30:00Z")), 5000, "an HTTP date is a pause too");
   assert.equal(retryDelayMs("soon", 0), 1500);
   const waits: number[] = [];
-  const seq = [new Response("{}", { status: 429, headers: { "Retry-After": "2" } }), new Response("", { status: 503 }), json({ results: [{ name: "Yvonand", latitude: 46.8, longitude: 6.7, timezone: "Europe/Zurich" }] })];
+  const seq = [new Response("{}", { status: 429, headers: { "Retry-After": "2" } }), new Response("", { status: 503 }), json({ results: [{ name: "Larkmere", latitude: 46.8, longitude: 6.7, timezone: "Europe/Zurich" }] })];
   const flaky: WeatherIo = { fetch: async () => seq.shift()!, now: () => new Date("2026-10-19T08:30:00Z"), sleep: async (ms) => void waits.push(ms) };
-  assert.match(await searchPlaces("Yvonand", flaky), /^Yvonand.*lat 46\.800/);
+  assert.match(await searchPlaces("Larkmere", flaky), /^Larkmere.*lat 46\.800/);
   assert.deepEqual(waits, [2000, 3000]);
   // a service that wants more than the bound: say so, do not stall the tool call
   const never: WeatherIo = { fetch: async () => new Response("{}", { status: 429, headers: { "Retry-After": "600" } }), now: () => new Date(), sleep: async () => { throw new Error("must not wait"); } };
-  assert.match(await searchPlaces("Yvonand", never), /busy \(rate limited\), try again in a minute/);
+  assert.match(await searchPlaces("Larkmere", never), /busy \(rate limited\), try again in a minute/);
 });
 
 test("weather: the owner's background look has the weather tools (the surf-conditions skill's unprompted look needs them)", () => {

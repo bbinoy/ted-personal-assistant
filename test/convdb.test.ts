@@ -365,7 +365,7 @@ test("a reset WITH salvage: the session pointer is copied out of the damaged cop
   noticeDamaged(new Date(2026, 9, 21, 14, 0, 0));
   const told = heldPosts(owner()).map((h) => h.text);
   assert.match(told.join("\n"), /set the file aside/);
-  assert.doesNotMatch(told.join("\n"), /Reply to Anna|approval/i);
+  assert.doesNotMatch(told.join("\n"), /Reply to Mara|approval/i);
   clearDamage(c);
 });
 

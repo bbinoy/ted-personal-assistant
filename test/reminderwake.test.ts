@@ -25,7 +25,7 @@ test("with WAKEUPS off (no look to say them) the wake tick sends the fallback li
   const g = group("remwake-group-0123456789abcdef");
   const o = owner();
   S.addItem(scope(o.key, NOW - 3_600_000), { title: "Call Sam", remindAt: NOW - 60_000 });
-  S.addItem(scope(g.key, NOW - 3_600_000), { title: "ferry tickets", remindAt: NOW - 60_000, assignee: "Anna" });
+  S.addItem(scope(g.key, NOW - 3_600_000), { title: "ferry tickets", remindAt: NOW - 60_000, assignee: "Mara" });
   const sent: { conv: string; text: string }[] = [];
   let looks = 0;
   const pipeline = {
@@ -49,7 +49,7 @@ test("with WAKEUPS off (no look to say them) the wake tick sends the fallback li
     guards: { paused: () => false },
   });
   await w.tick(new Date(NOW));
-  assert.deepEqual(sent.map((x) => x.text).sort(), ["⏰ @Anna: ferry tickets", "⏰ Call Sam"]);
+  assert.deepEqual(sent.map((x) => x.text).sort(), ["⏰ @Mara: ferry tickets", "⏰ Call Sam"]);
   assert.equal(looks, 0, "no heartbeat run: WAKEUPS is off");
   // the pause switch still stops them
   S.addItem(scope(o.key, NOW - 3_600_000), { title: "Paused one", remindAt: NOW - 60_000 });

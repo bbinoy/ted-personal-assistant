@@ -34,10 +34,10 @@ const { GOOGLE_PREFIX } = await import("../src/modules/google/module.ts");
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;
 const LOG = join(dir, "google.log");
 const STATE = join(dir, "mailboxes.json");
-const TOKENS: Record<string, string> = { anna: "fake-refresh-token-anna-0001", bea: "fake-refresh-token-bea-0002" };
-const MAIL: Record<string, string> = { anna: "anna@example.com", bea: "bea@example.com" };
+const TOKENS: Record<string, string> = { mara: "fake-refresh-token-mara-0001", bea: "fake-refresh-token-bea-0002" };
+const MAIL: Record<string, string> = { mara: "mara@example.com", bea: "bea@example.com" };
 const msg = (id: string, from: string, subject: string, body: string) => ({ id, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
-writeFileSync(STATE, JSON.stringify({ "anna@example.com": { messages: [msg("a1", "Carl <carl@example.org>", "Lunch?", "Are you free Thursday?")] }, "bea@example.com": { messages: [msg("b1", "Dora <dora@example.org>", "Invoice", "Bea's private invoice 4711")] } }));
+writeFileSync(STATE, JSON.stringify({ "mara@example.com": { messages: [msg("a1", "Carl <carl@example.org>", "Lunch?", "Are you free Thursday?")] }, "bea@example.com": { messages: [msg("b1", "Dora <dora@example.org>", "Invoice", "Bea's private invoice 4711")] } }));
 
 const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, never into the shared temp folder (another test file may be running at the same time)
 const hub = () => new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: MAIL[t]! } : undefined)));
@@ -53,20 +53,20 @@ test("google: one server process per friend, each with her own token and address
   process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
   process.env.ANTHROPIC_API_KEY = "instance-key-not-real";
   try {
-    const a = await probe(h, "anna");
+    const a = await probe(h, "mara");
     const b = await probe(h, "bea");
     assert.notEqual(a.pid, b.pid, "two friends, two processes");
-    assert.equal(a.refresh, TOKENS.anna);
+    assert.equal(a.refresh, TOKENS.mara);
     assert.equal(b.refresh, TOKENS.bea);
-    assert.equal(a.email, "anna@example.com");
+    assert.equal(a.email, "mara@example.com");
     assert.equal(b.email, "bea@example.com");
     assert.equal(a.single, "1");
     assert.deepEqual(a.hasOpenAi, [], "no Anthropic, Claude or tenant variable reaches her server");
     // The same session is reused: one process for all her calls.
-    assert.equal((await probe(h, "anna")).pid, a.pid);
-    assert.equal(h.session("anna").starts, 1);
+    assert.equal((await probe(h, "mara")).pid, a.pid);
+    assert.equal(h.session("mara").starts, 1);
     // Her mail is hers alone.
-    const mailA = (await h.session("anna").call("search_gmail_messages", { query: "in:inbox" })).text;
+    const mailA = (await h.session("mara").call("search_gmail_messages", { query: "in:inbox" })).text;
     const mailB = (await h.session("bea").call("search_gmail_messages", { query: "in:inbox" })).text;
     assert.match(mailA, /Lunch\?/);
     assert.doesNotMatch(mailA, /Invoice/);
@@ -82,23 +82,23 @@ test("google: one server process per friend, each with her own token and address
 test("google: the token is in a private folder only while her server runs; it is on no command line and the folder is gone after", async () => {
   const root = mkdtempSync(join(TMP, "own-")); // this test's own temp root: nothing else can create or remove a folder in it
   const h = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
-  const s = h.session("anna");
+  const s = h.session("mara");
   try {
-    await probe(h, "anna");
+    await probe(h, "mara");
     const folders = readdirSync(root).filter((n) => n.startsWith(TMP_PREFIX));
     assert.equal(folders.length, 1, "her credentials are in one temp folder named for the server");
     const folder = join(root, folders[0]!);
     assert.equal(statSync(folder).mode & 0o077, 0, "owner-only folder");
-    assert.equal(statSync(join(folder, credentialFile("anna@example.com"))).mode & 0o077, 0, "owner-only file");
-    const creds = JSON.parse(readFileSync(join(folder, credentialFile("anna@example.com")), "utf8"));
-    assert.equal(creds.refresh_token, TOKENS.anna);
+    assert.equal(statSync(join(folder, credentialFile("mara@example.com"))).mode & 0o077, 0, "owner-only file");
+    const creds = JSON.parse(readFileSync(join(folder, credentialFile("mara@example.com")), "utf8"));
+    assert.equal(creds.refresh_token, TOKENS.mara);
     assert.equal(creds.client_id, settings.google.clientId);
     // The server is started with the folder in its environment, not the token: nothing the transport is given as an argument holds it.
-    assert.ok(!JSON.stringify([process.execPath, FAKE]).includes(TOKENS.anna!));
+    assert.ok(!JSON.stringify([process.execPath, FAKE]).includes(TOKENS.mara!));
     s.close();
     assert.equal(existsSync(folder), false, "deleted when the process stops");
     // And it starts again on demand.
-    assert.equal((await probe(h, "anna")).refresh, TOKENS.anna);
+    assert.equal((await probe(h, "mara")).refresh, TOKENS.mara);
     assert.equal(s.starts, 2);
   } finally {
     h.closeAll();
@@ -148,7 +148,7 @@ test("google: the proxy fails closed: without her address the call is not forwar
   const root = mkdtempSync(join(TMP, "closed-"));
   const h = new SessionHub((id) => new Unknown(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
   try {
-    const cfg = googleProxy("anna", () => true, h);
+    const cfg = googleProxy("mara", () => true, h);
     const [a, b] = InMemoryTransport.createLinkedPair();
     await cfg.instance.connect(a as never);
     const client = new Client({ name: "t", version: "1" });
@@ -166,7 +166,7 @@ test("google: the proxy fails closed: without her address the call is not forwar
 test("google: a friend who has not connected, or an instance without an OAuth client, gets a plain refusal, not a process", async () => {
   const h = hub();
   await assert.rejects(h.session("cleo").call("list_calendars", {}), /has not connected Google/);
-  const none = new GoogleSession("anna", () => ({ command: process.execPath, args: [FAKE], clientId: undefined, clientSecret: undefined, tokenUrl: "", scopes: [], idleMs: 1000, callMs: 1000 }), async () => ({ refreshToken: "x", email: "a@b.c" }));
+  const none = new GoogleSession("mara", () => ({ command: process.execPath, args: [FAKE], clientId: undefined, clientSecret: undefined, tokenUrl: "", scopes: [], idleMs: 1000, callMs: 1000 }), async () => ({ refreshToken: "x", email: "a@b.c" }));
   await assert.rejects(none.call("list_calendars", {}), /not set up on this instance/);
 });
 
@@ -181,8 +181,8 @@ test("google: a grant Google no longer accepts is recorded, her server stopped, 
   assert.ok(!grantGone({ isError: false, text: "Subject: ACTION REQUIRED: Google Authentication Needed\nFrom: phisher@example.org\n\n--- BODY ---\nclick here" }), "mail text is someone else's");
   assert.ok(!grantGone({ isError: true, text: "Message zz not found" }));
   const REVOKED = join(TMP, "revoked-flag");
-  const who = "revoked-anna";
-  const flaggedHub = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 10_000, tmpRoot: TMP, env: { FAKE_GOOGLE_REVOKED: REVOKED, FAKE_GOOGLE_STATE: STATE } }), async () => ({ refreshToken: TOKENS.anna!, email: MAIL.anna! })));
+  const who = "revoked-mara";
+  const flaggedHub = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 10_000, tmpRoot: TMP, env: { FAKE_GOOGLE_REVOKED: REVOKED, FAKE_GOOGLE_STATE: STATE } }), async () => ({ refreshToken: TOKENS.mara!, email: MAIL.mara! })));
   try {
     const cfg = googleProxy(who, () => true, flaggedHub, ["search_gmail_messages", "send_gmail_message"]);
     const [a, b] = InMemoryTransport.createLinkedPair();
@@ -279,7 +279,7 @@ test("google: the proxy lists only her allowed tools, forces her own address int
   try {
     const ctx = friend(["google", "mail", "calendar"]);
     const offered = tenantTools(ctx);
-    const cfg = googleProxy("anna", (name) => offered.has(GOOGLE_PREFIX + name), h);
+    const cfg = googleProxy("mara", (name) => offered.has(GOOGLE_PREFIX + name), h);
     const [a, b] = InMemoryTransport.createLinkedPair();
     await cfg.instance.connect(a as never);
     const client = new Client({ name: "t", version: "1" });
@@ -291,7 +291,7 @@ test("google: the proxy lists only her allowed tools, forces her own address int
     assert.match(res.content[0]!.text, /Lunch\?/, "she asked for bea's account and got her own");
     assert.doesNotMatch(res.content[0]!.text, /Invoice/);
     const last = calls().filter((c) => c.tool === "search_gmail_messages").pop()!;
-    assert.equal(last.args.user_google_email, "anna@example.com");
+    assert.equal(last.args.user_google_email, "mara@example.com");
     const refused = (await client.callTool({ name: "_probe", arguments: {} })) as { isError?: boolean };
     assert.equal(refused.isError, true);
   } finally {

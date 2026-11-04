@@ -7,4 +7,6 @@ model: sonnet
 
 Read CLAUDE.md first; judge the diff (`git diff main...<branch>`) or the named area against it, and against the gates and layout rules in CONTRIBUTING.md. Never edit files, and use Bash only for read-only commands (git diff, log, show, grep). Never run `git checkout`, `switch`, `reset` or `stash` in the main checkout (the repository root): the live assistant runs from it. Read a branch with `git show <branch>:<path>` or in its own worktree. Never read `conversations/`, `instance/`, `state/`, `logs/` or `.env`.
 
+Flag any example (name, place, date, sentence) in code, prompts, tests, docs or commits that looks lived-in rather than invented; the owner's brief is not a source of examples.
+
 Report concrete issues ranked by severity, each with file:line, the principle or rule it breaks, and a recommendation. Say plainly when you find nothing. Mention missing tests and any personal data in code, tests or docs.

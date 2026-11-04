@@ -163,13 +163,13 @@ test("quiet hours hold a reminder until they end (then it is claimed for the loo
 
 test("the facts a look gets: the reminders due now, with when they were due, and the open items due by tomorrow or overdue", () => {
   const conv = fresh();
-  const a = S.addItem(scope(conv.key), { title: "Call Sam", due: "2026-10-22T14:30", assignee: "Anna" }).item;
+  const a = S.addItem(scope(conv.key), { title: "Call Sam", due: "2026-10-22T14:30", assignee: "Mara" }).item;
   const b = S.addItem(scope(conv.key), { title: "Pay rent", due: "2026-10-20" }).item;
   const c = S.addItem(scope(conv.key), { title: "Dentist", due: "2026-10-23" }).item;
   S.addItem(scope(conv.key), { title: "Far away", due: "2026-11-30" });
   const text = R.reminderFacts([{ item: a, fireAt: NOW - 3 * HOUR }], S.activeItems(conv.key), { now: NOW, zone: ZONE, group: true });
   assert.match(text, /^Reminders that came due \(do what you can of the task yourself first and say what is left; for what you cannot do, a plain short reminder in your own words naming who it is for;/);
-  assert.match(text, new RegExp(`#${a.id} Call Sam \\(reminder for Thu 22 Oct 09:00; for Anna; due today 14:30\\)`));
+  assert.match(text, new RegExp(`#${a.id} Call Sam \\(reminder for Thu 22 Oct 09:00; for Mara; due today 14:30\\)`));
   assert.match(text, /Open items due by tomorrow or overdue \(for your awareness/);
   assert.match(text, new RegExp(`#${b.id} Pay rent \\(was due Tue 20 Oct\\)`));
   assert.match(text, new RegExp(`#${c.id} Dentist \\(due tomorrow\\)`));

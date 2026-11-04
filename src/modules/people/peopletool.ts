@@ -10,7 +10,7 @@ import { findPerson } from "./people.ts";
 // so one conversation can never see another's contacts. What it returns is third-party text (a contact's name is whatever its owner typed): fenced as data.
 
 const FIND_PERSON_DESCRIPTION =
-  "Find a person by name (or part of one, or an address) and get their email address and phone number, if known. Use it BEFORE asking the owner for an address, whenever a mail or an invitation names someone (\"invite Sam\", \"write to Anna\"). " +
+  "Find a person by name (or part of one, or an address) and get their email address and phone number, if known. Use it BEFORE asking the owner for an address, whenever a mail or an invitation names someone (\"invite Sam\", \"write to Mara\"). " +
   "It looks in this conversation's people notes and, where there is one, in Google Contacts, and says which sources it used and which were not available. " +
   "If one person fits, use that address and say whose it is. If none does, look further before asking: past messages (search_logs), and the mail (from or to the name) and calendar guests if you have those tools; then save who you found as a people note, so this finds them next time. " +
   "If several fit, pick by recent contact and what was asked and say which one you picked, so it can be corrected. Never make up an address. " +
@@ -29,7 +29,7 @@ export function createPeopleServer(scope: PeopleScope) {
     name: "people",
     version: "1.0.0",
     tools: [
-      tool("find_person", FIND_PERSON_DESCRIPTION, { name: z.string().min(1).max(100).describe("A name, part of a name, or an email address, like Sam or Anna Silva") }, async ({ name }) => {
+      tool("find_person", FIND_PERSON_DESCRIPTION, { name: z.string().min(1).max(100).describe("A name, part of a name, or an email address, like Sam or Mara Silva") }, async ({ name }) => {
         emitRecord("people", "find", scope.source);
         const text = await findPerson(name, { notesDir: scope.notesDir, zone: scope.zone?.(), contacts: scope.contacts, contactsWhy: scope.contactsWhy });
         return { content: [{ type: "text" as const, text: fence("people", text, 8_000) }] };

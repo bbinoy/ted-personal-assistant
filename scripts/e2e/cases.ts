@@ -42,10 +42,10 @@ const e1: Case = {
 const e5: Case = {
   id: "e5",
   title: "a dessert reminder; the dinner is already in the calendar",
-  turns: ["Dinner tomorrow at Hanbury with Angie, remind me to bring something for dessert"],
+  turns: ["Dinner tomorrow at Larkfield with Nadia, remind me to bring something for dessert"],
   world: (t) => ({
     calendar: [
-      { summary: "Dinner with Angie", start: t.local(t.day(1), "19:30"), end: t.local(t.day(1), "22:00") },
+      { summary: "Dinner with Nadia", start: t.local(t.day(1), "19:30"), end: t.local(t.day(1), "22:00") },
       { summary: "Team sync", start: t.local(t.day(1), "10:00"), end: t.local(t.day(1), "10:30") },
     ],
   }),
@@ -69,23 +69,23 @@ const e5: Case = {
   reply: ["It says the dessert reminder is set and when, or that the dinner was already in the calendar.", "It is short: three lines at most, in plain words.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    s.tasks.add({ title: "Bring something for dessert (dinner with Angie at Hanbury)", due: s.time.day(1), remindAtMs: s.time.at(s.time.day(1), "17:00") });
-    s.say("The dinner with Angie was already in your calendar. I added a task to bring dessert, with a reminder at 17:00 tomorrow.");
+    s.tasks.add({ title: "Bring something for dessert (dinner with Nadia at Larkfield)", due: s.time.day(1), remindAtMs: s.time.at(s.time.day(1), "17:00") });
+    s.say("The dinner with Nadia was already in your calendar. I added a task to bring dessert, with a reminder at 17:00 tomorrow.");
   },
 };
 
 // ---- e6: draft, then send on one word, over two turns ----
-const PHILIP = "philip.hartmann@example.com";
+const PETER = "peter.lindgren@example.com";
 const e6: Case = {
   id: "e6",
   title: "draft a follow-up, then send on a word",
   turns: [
-    "Draft follow up to Philip. Notes from the coffee: I'll intro him to Henrik Vogel (henrik.vogel@example.org) at Aldermere Labs; he asked for an intro to someone in Fieldwork's data team, I'll check who; his questions were how we price pilots and when we could start.",
+    "Draft follow up to Peter. Notes from the coffee: I'll intro him to Leif Vogel (leif.vogel@example.org) at Aldermere Labs; he asked for an intro to someone in Fieldwork's data team, I'll check who; his questions were how we price pilots and when we could start.",
     "Send",
   ],
   world: (t) => ({
     mail: [
-      { from: { email: PHILIP, displayName: "Philip Hartmann" }, subject: "Coffee next week?", body: "<p>Hi, would Tuesday work for a coffee? Philip</p>", receivedAt: new Date(t.now.getTime() - 6 * 86_400_000).toISOString(), read: true },
+      { from: { email: PETER, displayName: "Peter Lindgren" }, subject: "Coffee next week?", body: "<p>Hi, would Tuesday work for a coffee? Peter</p>", receivedAt: new Date(t.now.getTime() - 6 * 86_400_000).toISOString(), read: true },
       { from: { email: "news.weeklyloop@example.com", displayName: "The Weekly Loop" }, subject: "The Weekly Loop #212", body: "<p>This week in climate tech.</p>", receivedAt: new Date(t.now.getTime() - 3_600_000).toISOString() },
     ],
   }),
@@ -99,10 +99,10 @@ const e6: Case = {
     const missing = lines.filter((l) => !shown.includes(l));
     return [
       check("after turn 1: nothing was sent", !!t1 && t1.sent.length === 0, `${t1?.sent.length} sent`),
-      check("after turn 1: exactly one draft, to Philip", !!t1 && t1.drafts.length === 1 && t1.drafts[0]!.to.join() === PHILIP, JSON.stringify(t1?.drafts.map((d) => d.to))),
+      check("after turn 1: exactly one draft, to Peter", !!t1 && t1.drafts.length === 1 && t1.drafts[0]!.to.join() === PETER, JSON.stringify(t1?.drafts.map((d) => d.to))),
       check("the draft is shown in the chat in full", !!draft && lines.length > 0 && missing.length === 0, missing[0] ? `missing: ${missing[0].slice(0, 60)}` : "no draft"),
       check("after turn 2: exactly that draft was sent, once", finalSent.length === 1 && !!draft && finalSent[0]!.messageId === draft.id, `${finalSent.length} sent`),
-      check("it went to Philip only", finalSent.length === 1 && finalSent[0]!.to.join() === PHILIP && !finalSent[0]!.cc.length && !finalSent[0]!.bcc.length),
+      check("it went to Peter only", finalSent.length === 1 && finalSent[0]!.to.join() === PETER && !finalSent[0]!.cc.length && !finalSent[0]!.bcc.length),
       check("with HTML line breaks (<p> or <br>)", finalSent.length === 1 && /<p[ >]|<br/i.test(finalSent[0]!.body), finalSent[0]?.body.slice(0, 80)),
       check("turn 2 made no new draft", !!t2 && o.calls.filter((c) => c.turn === 1 && /create_draft|reply_|forward_/.test(c.tool)).length === 0),
     ];
@@ -115,8 +115,8 @@ const e6: Case = {
   ],
   perfect: async (s) => {
     s.turn(0);
-    const made = JSON.parse(await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: PHILIP, name: "Philip Hartmann" }], subject: "Good to see you", body: "<p>Hi Philip,</p><p>Great to catch up over coffee. I will introduce you to Henrik Vogel at Aldermere Labs, and I will find out who is right for Fieldwork's data team.</p><p>On your questions: how we price pilots, and when we could start. I will come back to you on both.</p><p>Best</p>" })) as { messageId: number };
-    s.say("Here is the draft to Philip:\n\nHi Philip,\nGreat to catch up over coffee. I will introduce you to Henrik Vogel at Aldermere Labs, and I will find out who is right for Fieldwork's data team.\nOn your questions: how we price pilots, and when we could start. I will come back to you on both.\nBest\n\nSay send when you are happy with it.");
+    const made = JSON.parse(await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: PETER, name: "Peter Lindgren" }], subject: "Good to see you", body: "<p>Hi Peter,</p><p>Great to catch up over coffee. I will introduce you to Leif Vogel at Aldermere Labs, and I will find out who is right for Fieldwork's data team.</p><p>On your questions: how we price pilots, and when we could start. I will come back to you on both.</p><p>Best</p>" })) as { messageId: number };
+    s.say("Here is the draft to Peter:\n\nHi Peter,\nGreat to catch up over coffee. I will introduce you to Leif Vogel at Aldermere Labs, and I will find out who is right for Fieldwork's data team.\nOn your questions: how we price pilots, and when we could start. I will come back to you on both.\nBest\n\nSay send when you are happy with it.");
     s.turn(1);
     await s.tool(`${MB}send_message_now`, { messageId: made.messageId, confirm: true });
     s.say("Sent.");
