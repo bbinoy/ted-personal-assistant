@@ -24,18 +24,18 @@ Likes surf and long dinners. Her first child is due in November.
 
 ## When the owner will be away
 
-The `whereabouts` line in your memory says where the owner is and the next change; it is kept from the calendar (flights, hotels, events with a location, an out-of-office), booking and confirmation mails, and what the owner tells you ("I'm in Porto next week"). Ignore the owner's home: if home is not in a note, do not treat every day as a trip.
+One note, `context-whereabouts.md`, says where the owner is now and the next stays with their dates (its description is the index line every run sees). Any run updates it when the calendar (flights, hotels, events with a location, an out-of-office), a booking mail, a plan note or the owner's words show a change ("I'm in Porto next week"). A planned stay counts even if nothing is booked yet (a plan note, a tentative calendar block): record it with its first and last day and say "draft" while it is not firm. Ignore the owner's home: if home is not in a note, do not treat every day as a trip. Never state the location as certain.
 
-For a trip that starts within about 10 days (or is under way):
+### Before a stay
 
-1. Find the people whose "Lives in" is the place (or its country, for a short trip across a region) is where the owner will be. Be generous about the area: a person in Cascais counts for a Lisbon trip. Check the dates: if the owner is there only at the airport for two hours, it does not count.
-2. For each person, find when the owner last was in touch: search the mail for that person's name or address, and the calendar for events with them. Use what you find to say it ("last wrote in March"), never to save it. If you cannot tell, say nothing about it.
-3. Skip anyone a note says is not to be bothered, or whose cadence says they were just seen.
-4. Send ONE short message to the owner, in your voice: where and when, who lives there, how long since you were in touch, and one useful detail from the note (a birthday, a baby, the thing they like). Write the draft note to them (say "draft ready") and, where a visit fits, a tentative hold on the owner's own calendar. Never contact the person yourself: a draft or an invitation goes through the usual approval.
+About 10 days before a stay starts (or at the first sight of it, if closer), and again when its dates move, once per stay otherwise, in a look or in a chat turn that notices it, the same way: gather everything that waits for the place, look at the free time of the stay, and arrange what you can without asking.
 
-Also mention the owner's open tasks that wait on the place, as `ted-personal-assistant:tasks` says ("Tasks that fit a place or a moment"), in the same message.
+1. Gather: `list_tasks` with a `query` for the place and its variants (city, country), and the `people-` notes whose "Lives in" is the place (generous about the area: Cascais counts for Lisbon; skip a stay of a few hours at an airport, anyone a note says not to bother, anyone just seen by their cadence). Search mail and calendar for when the owner last was in touch with each person, to say it ("last wrote in March"), never to save it.
+2. Look at the owner's calendar across the stay for free time. If the stay is too short or too full for everything, say which wishes do not fit rather than forcing them.
+3. Arrange: a draft to each person proposing a concrete time (a mail draft when you have an address, via `find_person` or a note; otherwise the ready-to-paste text in the message, without asking for the address), and a tentative hold on the owner's own calendar where a slot is obvious. A person needs notice, so propose, do not just list.
+4. Send ONE short message: where and when, who and which wishes are ready ("draft ready"), what does not fit, one useful detail from a note (a birthday, a baby). Never contact anyone yourself: every draft and invitation goes through the usual approval.
 
-Do not repeat yourself. If your recent messages show you already told the owner about this trip, say nothing again unless the dates changed or the owner answered.
+Do not repeat yourself: if your recent messages show you already told the owner about this stay, say nothing again unless the dates changed or the owner answered.
 
 ## Reaching out without a trip
 

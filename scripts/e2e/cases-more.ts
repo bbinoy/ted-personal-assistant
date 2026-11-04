@@ -737,7 +737,7 @@ const e20: Case = {
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It mentions the trip to London tomorrow and the open task to meet Dana there (Dana lives in London).", "It is one short message and asks no question."],
+  reply: ["It mentions the trip to London tomorrow and the open task to meet Dana there (Dana lives in London).", "It is one short message (a few lines; it may say a coffee note or hold for Dana is ready) and asks no question."],
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
@@ -1067,6 +1067,86 @@ const e31 = (rigid: boolean): Case => ({
   },
 });
 
+// ---- e32 / e33: a wish tied to a place stays on the place (chat); the stay's wishes are arranged about 10 days ahead (look) ----
+const dateWords = (d: string): RegExp => {
+  const dt = new Date(`${d}T12:00:00Z`);
+  const day = dt.getUTCDate();
+  const mon = dt.toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
+  const m = `(${mon}|${mon.slice(0, 3)})`;
+  return new RegExp(`\\b${d}\\b|\\b0?${day}(st|nd|rd|th)?\\s+(of\\s+)?${m}\\b|\\b${m}\\.?\\s+0?${day}\\b`, "i");
+};
+const e32: Case = {
+  id: "e32",
+  title: "'next time I'm in Valmora, coffee with Sam': the task stays on the place with no due date, and the reply gives the first day of the stay",
+  turns: ["Remind me to have coffee with Sam next time I'm in Valmora"],
+  world: (t) => ({
+    calendar: [
+      { summary: "Valmora stay (tentative)", start: t.local(t.day(30), "09:00"), end: t.local(t.day(44), "18:00"), zone: t.zone, location: "Valmora" },
+      { summary: "Dinner with the Example Labs team, Valmora", start: t.local(t.day(43), "19:30"), end: t.local(t.day(43), "22:00"), zone: t.zone, location: "Valmora" },
+    ],
+    notes: {
+      "context-valmora-stay.md": `---\nname: valmora-stay\ndescription: Planned stay in Valmora from ${t.day(30)} to ${t.day(44)}, flights not booked\n---\nPlan: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked yet; a tentative block is on the calendar. The team dinner is on ${t.day(43)}.\n`,
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const task = o.tasks.find((x) => /coffee.*sam/i.test(x.title));
+    return [
+      check("a coffee task exists", !!task, o.tasks.map((x) => x.title).join("; ")),
+      check("its title leads with the place", /^\W*(when in |in )?valmora/i.test(task?.title ?? ""), task?.title),
+      check("it has no due date before the late dinner", !task?.due || task.due.slice(0, 10) < o.time.day(43), task?.due),
+      check("the reply names the first day of the stay", dateWords(o.time.day(30)).test(said), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms the coffee with Sam is kept for the next stay in Valmora, in a line or two.", "It gives the start of the stay (the first day, not the late dinner) and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(60), "00:00") });
+    s.tasks.add({ title: "When in Valmora: coffee with Sam" });
+    s.say(`Saved: when in Valmora, coffee with Sam. Your next stay starts on ${s.time.day(30)}.`);
+  },
+};
+
+const SAM_E = "sam.ortiz@example.com";
+const e33: Case = {
+  id: "e33",
+  title: "a look 10 days before a stay: the place tasks and the people there are gathered, drafts are ready, nothing is sent, one message says what is ready",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Valmora stay", start: t.local(t.day(10), "09:00"), end: t.local(t.day(24), "18:00"), zone: t.zone, location: "Valmora" }],
+    tasks: [{ title: "When in Valmora: coffee with Sam" }, { title: "When in Valmora: coffee with Mia Okoye" }, { title: "When in Valmora: buy a rail pass" }],
+    notes: {
+      "context-whereabouts.md": `---\nname: whereabouts\ndescription: Whereabouts: home; next Valmora from ${t.day(10)} to ${t.day(24)}\n---\nAt home. Valmora stay from ${t.day(10)} to ${t.day(24)} (calendar).\n`,
+      "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
+      "people-mia-okoye.md": `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email mia.okoye@example.org. Busy, needs notice.\n`,
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
+    const drafts = o.mail.drafts();
+    return [
+      check("a draft to Sam exists", drafts.some((d) => d.to.some((p) => p.email === SAM_E)), drafts.map((d) => d.to.map((p) => p.email).join(",")).join("; ")),
+      check("a draft to Mia exists", drafts.some((d) => d.to.some((p) => p.email === "mia.okoye@example.org"))),
+      check("exactly one message to the owner, naming Valmora", said.length === 1 && /valmora/i.test(said[0] ?? ""), `${said.length}`),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is one short message that says the stay in Valmora starts soon and that drafts to Sam and Mia are ready (proposing a time), and may mention the rail pass.", "It asks no question and does not claim anything was sent."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(30), "00:00") });
+    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 10th. Coffee on the 12th at 10?</p>" });
+    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: "mia.okoye@example.org", name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 10th. Coffee on the 13th at 10?</p>" });
+    s.say("Your Valmora stay starts in 10 days. Drafts to Sam and Mia are ready, each proposing a coffee; the rail pass is still open.");
+  },
+};
+
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
 const e22: Case = {
@@ -1162,4 +1242,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true)];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33];
