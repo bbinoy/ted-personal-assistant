@@ -1097,6 +1097,7 @@ const e32: Case = {
       check("its title leads with the place", /^\W*(when in |in )?valmora/i.test(task?.title ?? ""), task?.title),
       check("it has no due date before the late dinner", !task?.due || task.due.slice(0, 10) < o.time.day(43), task?.due),
       check("the reply names the first day of the stay", dateWords(o.time.day(30)).test(said), said.slice(0, 200)),
+      check("context-whereabouts.md exists and holds the first day of the stay", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(30)), Object.keys(o.notes).join(", ")),
       check("the owner was not asked anything", o.asks.length === 0),
     ];
   },
@@ -1106,6 +1107,7 @@ const e32: Case = {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(60), "00:00") });
     s.tasks.add({ title: "When in Valmora: coffee with Sam" });
+    s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: home; next Valmora from ${s.time.day(30)} to ${s.time.day(44)} (draft)\n---\nPlanned stay, flights not booked.\n`);
     s.say(`Saved: when in Valmora, coffee with Sam. Your next stay starts on ${s.time.day(30)}.`);
   },
 };

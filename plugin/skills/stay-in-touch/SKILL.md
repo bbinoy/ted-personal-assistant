@@ -35,6 +35,8 @@ About 10 days before a stay starts (or at the first sight of it, if closer), and
 3. Arrange: a draft to each person proposing a concrete time (a mail draft when you have an address, via `find_person` or a note; otherwise the ready-to-paste text in the message, without asking for the address), and a tentative hold on the owner's own calendar where a slot is obvious. A person needs notice, so propose, do not just list.
 4. Send ONE short message: where and when, who and which wishes are ready ("draft ready"), what does not fit, one useful detail from a note (a birthday, a baby). Never contact anyone yourself: every draft and invitation goes through the usual approval.
 
+A stay already under way with open place wishes gets the same pass once, and a brief mention on arrival.
+
 Do not repeat yourself: if your recent messages show you already told the owner about this stay, say nothing again unless the dates changed or the owner answered.
 
 ## Reaching out without a trip
