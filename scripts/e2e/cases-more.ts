@@ -1067,13 +1067,20 @@ const e31 = (rigid: boolean): Case => ({
   },
 });
 
-// ---- e32 / e33: a wish tied to a place stays on the place (chat); the stay's wishes are arranged about 10 days ahead (look) ----
+// ---- e32 / e33: a wish tied to a place stays on the place (chat); the stay's wishes are arranged about 5 days ahead, woken by a reminder task (look); a moved stay, a stay found in plan notes, two notes that disagree ----
 const dateWords = (d: string): RegExp => {
   const dt = new Date(`${d}T12:00:00Z`);
   const day = dt.getUTCDate();
   const mon = dt.toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
   const m = `(${mon}|${mon.slice(0, 3)})`;
   return new RegExp(`\\b${d}\\b|\\b0?${day}(st|nd|rd|th)?\\s+(of\\s+)?${m}\\b|\\b${m}\\.?\\s+0?${day}\\b`, "i");
+};
+// The one "Prepare <place> stay" task: exactly one that is not dropped, open or done as the case says, with its reminder on `day`.
+const prepareTasks = (o: Outcome) => o.tasks.filter((x) => /prepare.*valmora/i.test(x.title) && x.status !== "dropped");
+const prepareWhy = (o: Outcome): string => JSON.stringify(prepareTasks(o).map((x) => ({ t: x.title, s: x.status, r: x.remindAt && o.time.dateOf(x.remindAt) })));
+const prepareOk = (o: Outcome, day: string): boolean => {
+  const p = prepareTasks(o);
+  return p.length === 1 && !!p[0]!.remindAt && o.time.dateOf(p[0]!.remindAt) === day;
 };
 const e32: Case = {
   id: "e32",
@@ -1098,6 +1105,7 @@ const e32: Case = {
       check("it has no due date before the late dinner", !task?.due || task.due.slice(0, 10) < o.time.day(43), task?.due),
       check("the reply names the first day of the stay", dateWords(o.time.day(30)).test(said), said.slice(0, 200)),
       check("context-whereabouts.md exists and holds the first day of the stay", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(30)), Object.keys(o.notes).join(", ")),
+      check("one 'Prepare Valmora stay' task, reminded 5 days before the first day", prepareOk(o, o.time.day(25)), prepareWhy(o)),
       check("the owner was not asked anything", o.asks.length === 0),
     ];
   },
@@ -1108,33 +1116,49 @@ const e32: Case = {
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(60), "00:00") });
     s.tasks.add({ title: "When in Valmora: coffee with Sam" });
     s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: home; next Valmora from ${s.time.day(30)} to ${s.time.day(44)} (draft)\n---\nPlanned stay, flights not booked.\n`);
+    s.tasks.add({ title: "Prepare Valmora stay", remindAtMs: s.time.at(s.time.day(25), "09:00") });
     s.say(`Saved: when in Valmora, coffee with Sam. Your next stay starts on ${s.time.day(30)}.`);
   },
 };
 
 const SAM_E = "sam.ortiz@example.com";
+const MIA_E = "mia.okoye@example.org";
+const whereaboutsNote = (desc: string, body: string): string => `---\nname: whereabouts\ndescription: ${desc}\n---\n${body}\n`;
 const e33: Case = {
   id: "e33",
-  title: "a look 10 days before a stay: the place tasks and the people there are gathered, drafts are ready, nothing is sent, one message says what is ready",
+  title: "the 'Prepare Valmora stay' reminder wakes a look 5 days before the stay: drafts ready, nothing sent, one message, the prepare task done, a dated place wish back on the place, a dated booking keeps its date",
   turns: [],
   look: true,
   world: (t) => ({
-    calendar: [{ summary: "Valmora stay", start: t.local(t.day(10), "09:00"), end: t.local(t.day(24), "18:00"), zone: t.zone, location: "Valmora" }],
-    tasks: [{ title: "When in Valmora: coffee with Sam" }, { title: "When in Valmora: coffee with Mia Okoye" }, { title: "When in Valmora: buy a rail pass" }],
+    calendar: [{ summary: "Valmora stay", start: t.local(t.day(5), "09:00"), end: t.local(t.day(19), "18:00"), zone: t.zone, location: "Valmora" }],
+    tasks: [
+      { title: "Prepare Valmora stay", remindAt: t.now.getTime() - 60_000 },
+      { title: "When in Valmora: coffee with Sam" },
+      { title: "When in Valmora: coffee with Mia Okoye", due: t.day(18), remindAt: t.at(t.day(18), "09:00") },
+      { title: "When in Valmora: buy a rail pass" },
+      { title: "Pay the Valmora hotel deposit", due: t.day(4) },
+    ],
     notes: {
-      "context-whereabouts.md": `---\nname: whereabouts\ndescription: Whereabouts: home; next Valmora from ${t.day(10)} to ${t.day(24)}\n---\nAt home. Valmora stay from ${t.day(10)} to ${t.day(24)} (calendar).\n`,
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(5)} to ${t.day(19)}`, `At home. Valmora stay from ${t.day(5)} to ${t.day(19)} (calendar).`),
       "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
-      "people-mia-okoye.md": `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email mia.okoye@example.org. Busy, needs notice.\n`,
+      "people-mia-okoye.md": `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`,
     },
   }),
   maxQuestions: 0,
   state: (o) => {
     const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
     const drafts = o.mail.drafts();
+    const by = (re: RegExp) => o.tasks.find((x) => re.test(x.title));
+    const prep = by(/^prepare valmora stay/i);
+    const mia = by(/mia/i);
+    const dep = by(/deposit/i);
     return [
       check("a draft to Sam exists", drafts.some((d) => d.to.some((p) => p.email === SAM_E)), drafts.map((d) => d.to.map((p) => p.email).join(",")).join("; ")),
-      check("a draft to Mia exists", drafts.some((d) => d.to.some((p) => p.email === "mia.okoye@example.org"))),
+      check("a draft to Mia exists", drafts.some((d) => d.to.some((p) => p.email === MIA_E))),
       check("exactly one message to the owner, naming Valmora", said.length === 1 && /valmora/i.test(said[0] ?? ""), `${said.length}`),
+      check("the prepare task is done", prep?.status === "done", prep?.status),
+      check("Mia's dated wish lost its due date and reminder", !!mia && !mia.due && !mia.remindAt, JSON.stringify({ due: mia?.due, r: mia?.remindAt })),
+      check("the hotel deposit kept its due date", dep?.status === "open" && dep.due?.slice(0, 10) === o.time.day(4), JSON.stringify({ s: dep?.status, due: dep?.due })),
       check("the owner was not asked anything", o.asks.length === 0),
     ];
   },
@@ -1143,9 +1167,199 @@ const e33: Case = {
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(30), "00:00") });
-    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 10th. Coffee on the 12th at 10?</p>" });
-    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: "mia.okoye@example.org", name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 10th. Coffee on the 13th at 10?</p>" });
-    s.say("Your Valmora stay starts in 10 days. Drafts to Sam and Mia are ready, each proposing a coffee; the rail pass is still open.");
+    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 5th. Coffee on the 7th at 10?</p>" });
+    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: MIA_E, name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 5th. Coffee on the 8th at 10?</p>" });
+    s.tasks.edit(s.tasks.find("Mia Okoye"), { due: null, remindAtMs: null });
+    s.tasks.done(s.tasks.find("Prepare Valmora stay"));
+    s.say("Your Valmora stay starts in 5 days. Drafts to Sam and Mia are ready, each proposing a coffee; the rail pass is still open.");
+  },
+};
+
+const noorOk = (o: Outcome): boolean => {
+  const n = o.tasks.find((x) => /noor/i.test(x.title) && x.status === "open");
+  return !!n && !(n.due ?? "").startsWith(o.time.day(33)) && !n.title.includes(o.time.day(33)) && !(n.details ?? "").includes(o.time.day(33));
+};
+const e34: Case = {
+  id: "e34",
+  title: "'the Valmora trip moved a week later': the whereabouts note follows, the one prepare task's reminder moves, no second task",
+  turns: ["The Valmora trip has moved a week later"],
+  world: (t) => ({
+    tasks: [{ title: "Prepare Valmora stay", remindAt: t.at(t.day(25), "09:00") }, { title: "When in Valmora: coffee with Sam" }, { title: `Meet Noor during the Valmora stay (around ${t.day(33)})`, details: `Noor is free ${t.day(33)}`, due: t.day(33) }, { title: "Renew the library card", due: t.day(33) }],
+    notes: { "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(30)} to ${t.day(44)}`, `At home. Valmora stay from ${t.day(30)} to ${t.day(44)}.`) },
+  }),
+  maxQuestions: 0,
+  state: (o) => [
+    check("the whereabouts note holds the new first day", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(37)), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("one prepare task, its reminder 5 days before the new first day", prepareOk(o, o.time.day(32)), prepareWhy(o)),
+    check("the Noor task no longer repeats the old day (moved or back on the place)", noorOk(o), JSON.stringify(o.tasks.filter((x) => /noor/i.test(x.title)).map((x) => ({ t: x.title, d: x.details, due: x.due })))),
+    check("the unrelated dated task is unchanged", o.tasks.some((x) => x.title === "Renew the library card" && x.status === "open" && x.due?.slice(0, 10) === o.time.day(33))),
+    check("the owner was not asked anything", o.asks.length === 0),
+  ],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms in a line or two that the Valmora stay now starts a week later.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(37)} to ${s.time.day(51)}`, `Moved a week later by the owner.`));
+    s.tasks.edit(s.tasks.find("Prepare Valmora stay"), { remindAtMs: s.time.at(s.time.day(32), "09:00") });
+    s.tasks.edit(s.tasks.find("Noor"), { title: "Meet Noor during the Valmora stay", due: null, details: null });
+    s.say(`Done: the Valmora stay now starts on ${s.time.day(37)}.`);
+  },
+};
+
+const e35: Case = {
+  id: "e35",
+  title: "a look finds a Valmora stay in a plan note and the calendar, 20 days out, and no whereabouts note: the note is written, the prepare task is reminded 5 days before, no drafts yet",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Valmora stay", start: t.local(t.day(20), "09:00"), end: t.local(t.day(30), "18:00"), zone: t.zone, location: "Valmora" }],
+    notes: { "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
+  }),
+  maxQuestions: 0,
+  state: (o) => [
+    check("context-whereabouts.md holds the first day", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(20)), Object.keys(o.notes).join(", ")),
+    check("one prepare task, its reminder 5 days before the first day", prepareOk(o, o.time.day(15)), prepareWhy(o)),
+    check("no drafts yet", o.mail.drafts().length === 0),
+    check("the owner was not asked anything", o.asks.length === 0),
+  ],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["Either nothing was said, or one short message that mentions the planned Valmora stay; it asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(40), "00:00") });
+    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(20)} to ${s.time.day(30)} (draft)`, "Planned stay, flights not booked."));
+    s.tasks.add({ title: "Prepare Valmora stay", remindAtMs: s.time.at(s.time.day(15), "09:00") });
+  },
+};
+
+const e36: Case = {
+  id: "e36",
+  title: "two notes disagree on the start of a stay, the newer says the earlier date: the reply names the newer date and the older note is corrected",
+  turns: ["Remind me to have lunch with Priya next time I'm in Valmora"],
+  world: (t) => ({
+    notes: {
+      "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan, written ${t.day(-20)}: Valmora from ${t.day(30)} to ${t.day(44)}\n---\nPlan written ${t.day(-20)}: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked.\n`,
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(27)} to ${t.day(41)}`, `Updated ${t.day(-2)} after the flights were booked: Valmora from ${t.day(27)} to ${t.day(41)}.`),
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const plan = o.notes["context-valmora-plan.md"] ?? "";
+    const task = o.tasks.find((x) => /lunch.*priya/i.test(x.title));
+    return [
+      check("the reply names the newer first day", dateWords(o.time.day(27)).test(said), said.slice(0, 200)),
+      check("the reply does not name the older first day", !dateWords(o.time.day(30)).test(said), said.slice(0, 200)),
+      check("the older plan note now holds the newer day and not the older start", plan.includes(o.time.day(27)) && !plan.includes(o.time.day(30)), plan.slice(0, 200)),
+      check("the lunch task has no due date", !!task && !task.due, task?.due),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms the lunch with Priya is kept for the next stay in Valmora, in a line or two, and gives the stay's first day.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "When in Valmora: lunch with Priya" });
+    s.note("context-valmora-plan.md", `---\nname: valmora-plan\ndescription: Plan: Valmora from ${s.time.day(27)} to ${s.time.day(41)}\n---\nWorking from Valmora from ${s.time.day(27)} to ${s.time.day(41)}. Flights booked.\n`);
+    s.say(`Saved: when in Valmora, lunch with Priya. Your stay starts on ${s.time.day(27)}.`);
+  },
+};
+
+const LENA_E = "lena.hart@example.com";
+const lenaNote = `---\nname: Lena Hart\ndescription: Lena Hart. Lives in: Ostrand. Friend\n---\nLena Hart. Lives in: Ostrand. Friend; email ${LENA_E}. Sees the owner every week.\n`;
+const e37: Case = {
+  id: "e37",
+  title: "'next time I'm in Ostrand, coffee with Lena' while away in Valmora until day 8, home in Ostrand after: place-first task, no due date, the reply gives day 8, the prepare task is reminded about 5 days before",
+  turns: ["Next time I'm in Ostrand, coffee with Lena"],
+  world: (t) => ({
+    notes: {
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(8)}; then home in Ostrand`, `In Valmora until ${t.day(8)}, then back home in Ostrand (home city).`),
+      "people-lena-hart.md": lenaNote,
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const task = o.tasks.find((x) => /coffee.*lena/i.test(x.title));
+    const w = o.notes["context-whereabouts.md"] ?? "";
+    const prep = o.tasks.filter((x) => /prepare.*ostrand/i.test(x.title) && x.status !== "dropped");
+    const rd = prep[0]?.remindAt ? o.time.dateOf(prep[0].remindAt) : "";
+    return [
+      check("the coffee task leads with the place", /^\W*(when in |in )?ostrand/i.test(task?.title ?? ""), task?.title),
+      check("it has no due date", !!task && !task.due, task?.due),
+      check("the reply names day 8 as the start", dateWords(o.time.day(8)).test(said), said.slice(0, 200)),
+      check("the whereabouts note holds the Ostrand stretch from day 8", /ostrand/i.test(w) && w.includes(o.time.day(8)), w.slice(0, 200)),
+      check("one 'Prepare Ostrand stay' task reminded 3 to 5 days before day 8 (or soonest)", prep.length === 1 && rd >= o.time.day(2) && rd <= o.time.day(4), JSON.stringify(prep.map((x) => ({ t: x.title, r: rd })))),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms the coffee with Lena is kept for when the owner is back in Ostrand, in a line or two, and gives the day the owner is back.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "When in Ostrand: coffee with Lena" });
+    s.tasks.add({ title: "Prepare Ostrand stay", remindAtMs: s.time.at(s.time.day(3), "09:00") });
+    s.say(`Saved: when in Ostrand, coffee with Lena. You are back there on ${s.time.day(8)}.`);
+  },
+};
+
+const e38: Case = {
+  id: "e38",
+  title: "'next time I'm in Ostrand, coffee with Lena' while in Ostrand now until day 6: the reply says they are there now and until when, the coffee is arranged now, no question",
+  turns: ["Next time I'm in Ostrand, coffee with Lena"],
+  world: (t) => ({
+    notes: {
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand until ${t.day(6)}; next Valmora from ${t.day(6)} to ${t.day(20)}`, `In Ostrand until ${t.day(6)}, then Valmora ${t.day(6)} to ${t.day(20)}.`),
+      "people-lena-hart.md": lenaNote.replace("Sees the owner every week.", "Has not seen the owner in months."),
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const task = o.tasks.find((x) => /lena/i.test(x.title));
+    const handled = o.mail.drafts().some((d) => d.to.some((p) => p.email === LENA_E)) || o.calendar.some((e) => /lena/i.test(e.summary ?? "")) || task?.status === "done";
+    return [
+      check("the reply says they are there until day 6", dateWords(o.time.day(6)).test(said), said.slice(0, 200)),
+      check("it is handled now: a draft to Lena, a calendar entry, or the task done", handled, `${o.mail.drafts().length} drafts`),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says the owner is in Ostrand now and until when, and that the coffee with Lena is being arranged now (a draft or a proposed time), not left for a next stay.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: LENA_E, name: "Lena Hart" }], subject: "Coffee?", body: "<p>Hi Lena, coffee before I leave on the 6th?</p>" });
+    s.say(`You are in Ostrand until ${s.time.day(6)}, so I drafted a note to Lena proposing coffee before you leave.`);
+  },
+};
+
+const e39: Case = {
+  id: "e39",
+  title: "a look when the owner is at home in Ostrand with no place wishes and nobody waiting: nothing sent, no prepare task",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Dentist", start: t.local(t.day(2), "10:00"), end: t.local(t.day(2), "11:00"), zone: t.zone, location: "Ostrand" }],
+    notes: {
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand (home); no change known`, `At home in Ostrand.`),
+      "people-lena-hart.md": lenaNote,
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
+    return [
+      check("nothing was said", said.length === 0, said.join(" | ").slice(0, 200)),
+      check("no prepare task", !o.tasks.some((x) => /prepare/i.test(x.title)), o.tasks.map((x) => x.title).join("; ")),
+      check("no drafts", o.mail.drafts().length === 0),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["Nothing meaningful was said, or at most one short line; it does not talk about a trip or a stay."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
   },
 };
 
@@ -1244,4 +1458,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39];

@@ -194,7 +194,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         find: (part) => listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.title.toLowerCase().includes(part.toLowerCase()))!.id,
         done: (id) => void completeItem(scope, id),
         drop: (id) => void dropItem(scope, id),
-        edit: (id, patch) => void editItem(scope, id, patch),
+        edit: (id, patch) => void editItem(scope, id, { ...patch, remindAt: patch.remindAtMs }),
       },
       ask: (tool, question, answer, payment = false) => void scriptedAsks.push({ turn, tool, question, payment, answer }),
       note: (file, text) => void writeFileSync(join(owner().notesDir, file), text),

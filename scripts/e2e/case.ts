@@ -81,7 +81,7 @@ export interface PerfectScript {
     find(titlePart: string): number; // the id of the open task whose title has this text
     done(id: number): void;
     drop(id: number): void;
-    edit(id: number, patch: { title?: string; due?: string | null; details?: string | null }): void;
+    edit(id: number, patch: { title?: string; due?: string | null; details?: string | null; remindAtMs?: number | null }): void;
   };
   ask(tool: string, question: string, answer: string, payment?: boolean): void; // a question the scripted run put to the owner
   note(file: string, text: string): void; // a note file the run saved
