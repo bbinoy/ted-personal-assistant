@@ -269,6 +269,20 @@ test("a routine note is done when its expert came back with a result and the loo
   assert.match(F.factsFor(d, at("2026-10-22T06:30:00Z"), false).status.join("\n"), /routine-y: did not run on 2026-10-22 \(two attempts failed\)/);
 });
 
+test("a look the API refused (an expired login) is no attempt: the routine is still due on recovery within the catch-up window, and skipped past it", () => {
+  const conv = groupWith("every day at 08:00", "Do r", "routine-r.md");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  for (const m of ["05", "15", "25"]) {
+    const l = F.factsFor(conv, at(`2026-10-22T06:${m}:00Z`), false);
+    delegateNote(l, false);
+    l.done({ ended: false, said: false, abandoned: true }); // (look.ts passes abandoned for a refused run)
+  }
+  const back = F.factsFor(conv, at("2026-10-22T08:30:00Z"), false);
+  assert.match(back.routines, /routine-r: due now/, "three refused runs used no attempt");
+  assert.equal(readRecord(conv.convId, "routine-r")?.attempts, 0);
+  assert.match(F.factsFor(conv, at("2026-10-22T11:00:00Z"), false).status.join("\n"), /routine-r: did not run on 2026-10-22 \(the Mac was asleep|routine-r: skipped/);
+});
+
 test("a due routine makes the conversation's look due on the next tick: at its time, until handed over, and not once done", () => {
   const conv = groupWith("every day at 08:00");
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false }); // first sight

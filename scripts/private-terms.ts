@@ -12,7 +12,8 @@ export type Terms = { deny: string[]; allowFiles: RegExp[] };
 // The main checkout's root: the parent of the git common dir (the same for every worktree).
 export function mainCheckout(cwd = process.cwd()): string | undefined {
   try {
-    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const { GIT_DIR: _dir, GIT_WORK_TREE: _tree, ...env } = process.env; // a git hook sets these: `cwd` decides, not the repository the hook runs for
+    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     return dirname(resolve(cwd, common));
   } catch {
     return undefined;

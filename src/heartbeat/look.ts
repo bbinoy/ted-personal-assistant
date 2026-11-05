@@ -25,6 +25,7 @@ import { fence } from "../core/fence.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { heldWaiting, observeLook, postNotice, submitPost } from "./notices.ts";
 import { factsFor, routinesWaiting } from "./facts.ts";
+import { isApiRefusal } from "../tenants/errors.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { waitingReminders, remindersWaiting } from "./remindtick.ts";
 import { meetingsWaiting, waitingMeetings } from "./preptick.ts";
@@ -244,7 +245,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (outcome !== "preempted" && !interrupted) await observeLook(pipeline, conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look was handed is settled by facts.ts: held posts when it ended posted or silent, reminders and learned changes when it posted or held, a prep when it posted, a routine when its expert came back (a look a message overtook settles none of the last two).
-    facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted, sends: sent, acted });
+    facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted || isApiRefusal(failure), sends: sent, acted });
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     console.log(`${conv.kind} look ${outcome} ($${(reply?.costUsd ?? 0).toFixed(4)}, ${toolCalls} tool call(s), ${delegations} delegation(s))`); // the cost line a chat turn has ("replied"), for doctor and the heartbeat report
