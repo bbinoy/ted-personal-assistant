@@ -1638,13 +1638,14 @@ const e47: Case = {
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It shows the draft text and says how to send it.", "It never states that the draft is unsent or still a draft, or that nothing went out or that it leaves anything alone (offering \"say send\" is fine)."],
+  reply: ["It shows the draft text and says how to send it.", "It does not use phrases like \"not sent\", \"unsent\", \"nothing has gone out\", \"still a draft\" or \"I'll leave it alone\" (calling it a draft, ready, or offering \"say send\" is fine)."],
   perfect: e46.perfect,
 };
 
 // ---- e48: a background look drafts a reply and offers the send, naming the address and not saying it was not sent ----
 const e48: Case = {
   id: "e48",
+  zone: "America/New_York", // (a look is silent in the owner's night hours, and the clock is the real one: this keeps the run in daytime for most of the day)
   title: "a look that drafts a reply and offers the send names the address and does not say nothing was sent",
   turns: [],
   look: true,
@@ -1662,7 +1663,7 @@ const e48: Case = {
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It tells the owner a reply to Dana is ready and gives her address in full.", "It never states that the draft is unsent or still a draft, or that nothing went out or that it leaves anything alone (offering \"say send\" is fine)."],
+  reply: ["It tells the owner a reply to Dana is ready and gives her address in full.", "It does not use phrases like \"not sent\", \"unsent\", \"nothing has gone out\", \"still a draft\" or \"I'll leave it alone\" (calling it a draft, ready, or offering \"say send\" is fine)."],
   perfect: async (s) => {
     s.turn(0);
     const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string }[];
