@@ -190,7 +190,7 @@ export function noticeDamaged(now: Date = new Date()): number {
 }
 
 // 2. Looks that fail. Called by look.ts with each finished look (not one called off or stopped by a sleep); `error` is what the run threw, if it did; `mono`: the monotonic clock now.
-// When no look can run and only she can fix it (NO_MODEL), she gets the fixed line once per streak (see the tracker); a send that failed is tried again at the next failing look, unless it may have gone out.
+// When no look can run and only she can fix it (NO_MODEL), she gets the fixed line once per streak (see the tracker); a send refused before anything went out is tried again at the next failing look.
 const tracker = createFailureTracker();
 export async function observeLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): Promise<void> {
   try {
@@ -200,7 +200,7 @@ export async function observeLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn"
     if (!text || holdingNow(conv, now)) return;
     tracker.told(conv.key, true);
     const res = await postNotice(pipeline, conv, text);
-    if (res.error && classifySendError(res.error) !== "unsure") tracker.told(conv.key, false);
+    if (res.error && classifySendError(res.error) === "refused") tracker.told(conv.key, false); // (only a send that proves nothing went out: a later step of the turn can fail after delivery)
   } catch (e) {
     console.error("notices: could not track a look:", (e as Error).message);
   }

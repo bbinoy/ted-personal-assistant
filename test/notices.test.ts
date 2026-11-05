@@ -4,7 +4,7 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, observeLook,dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
+import { createFailureTracker, observeLook, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
