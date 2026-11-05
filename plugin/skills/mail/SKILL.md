@@ -254,7 +254,7 @@ thread's language, signed with the owner's first name), and:
 
 **Replies stay in their thread.** Draft any reply as a reply to the existing message
 (the provider skill says how), never as a new mail. A new draft is only for a
-brand-new email with no thread. To change a reply, edit your existing draft in the thread (a look's draft counts: look for it first); if a new draft replaces your own older one, discard the older one (`discard_draft`) and say nothing about it.
+brand-new email with no thread. To change a reply, edit your existing draft in the thread (a look's draft counts: look for it first); if a new draft replaces your own older one, discard the older one and say nothing about it.
 
 **Scheduling.** When a draft is about finding a time, offer the owner's booking
 link if there is a `setup-booking-link` note (phrase it naturally), or name 2-3
