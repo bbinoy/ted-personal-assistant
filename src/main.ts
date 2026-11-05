@@ -14,6 +14,7 @@ import { createApprovers } from "./approvals/approvers.ts";
 import { rehydrate } from "./approvals/handoff.ts";
 import { isTenantKey, OWNER_KEY } from "./core/ownerkey.ts";
 import { acceptOwner } from "./conversation/guards.ts";
+import { refreshLoginExpiry } from "./core/loginwatch.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
 import { groupName, sponsorInGroup, sponsorOfMember } from "./conversation/group.ts";
 import { groupDir, loadSponsors, recordGroup } from "./conversation/groupstore.ts";
@@ -272,6 +273,7 @@ startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      login: () => (settings.credential === "login" ? refreshLoginExpiry(new Date()) : undefined), // when the login ends: read at most once a day, a fact for the owner's runs under three days (core/loginwatch.ts)
       retention: () => retentionAtItsHour(), // the first tick at or after 03:30, once a day, never while a chat turn runs (core/retention.ts)
       dream: () => dreamAtItsHour(), // the first tick at or after the preset's dream hour; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
     });

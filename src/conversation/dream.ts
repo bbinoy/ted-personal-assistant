@@ -4,6 +4,7 @@ import { emit } from "../core/events.ts";
 import { allows } from "../policy/capabilities.ts";
 import { owner as ownerConversation, group as groupConversation, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
 import { oneShot } from "../tenants/haiku.ts";
+import { isApiRefusal } from "../tenants/errors.ts";
 import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
 import { applyPlan, baseOf } from "../memory/dreamapply.ts";
 import { planOps, type NoteFile, type Plan, type Scope } from "../memory/dreamplan.ts";
@@ -217,6 +218,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
       if (snapshot && rules.logWords && !conv.sponsor) console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
     } catch (e) {
+      if (isApiRefusal(e)) writeDream(stateConv, state); // the login or the key said no: the day is not lost, the hourly retry (dreamTrigger) comes back after recovery; a crash keeps its day
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
       emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: !!conv.sponsor, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
     }

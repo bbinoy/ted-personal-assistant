@@ -1,4 +1,5 @@
 import { LIMITS } from "./core/sanitize.ts";
+import { loginEndsSoon, parseLoginExpiry } from "./core/loginwatch.ts";
 import { providerReady } from "@ted-assistant/speech/tts";
 import { voiceReady } from "@ted-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
@@ -405,6 +406,9 @@ export async function doctor() {
 
   const auth = run("claude", ["auth", "status"]);
   line(!!auth && !/not logged in|logged out/i.test(auth), "Claude login valid (needed for Notion/Calendar/Gmail connectors)", !!auth && !/not logged in|logged out/i.test(auth) ? "" : "fix: claude auth login");
+
+  const endsAt = parseLoginExpiry(auth);
+  if (loginEndsSoon(endsAt, Date.now())) line("warn", "Claude login ends within 3 days", `${new Date(endsAt!).toISOString().slice(0, 10)}; fix: claude auth login`);
 
   const lc = run("launchctl", ["list", settings.launchdLabel]);
   line(lc ? (/"PID"/.test(lc) ? true : "warn") : false, `launchd job ${settings.launchdLabel} loaded and running`, lc ? "" : "not loaded; fix: scripts/install-launchd.sh");
