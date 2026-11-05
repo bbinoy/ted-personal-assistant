@@ -4,7 +4,8 @@ import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { inQuietHours, timeIn } from "../core/timezone.ts";
-import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
+import { causeOf, FIXES, refusal, type Cause } from "../tenants/errors.ts";
+import { classifySendError } from "../conversation/outbound.ts";
 import { isQuiet } from "../conversation/quiet.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { emit } from "../core/events.ts";
@@ -46,7 +47,11 @@ export const stillTrue = (held: readonly Held[], now: number): Held[] => held.fi
 // at least LONG_AWAKE_MS of time the Mac was AWAKE. Awake time is the monotonic clock (on macOS it stands still while the Mac sleeps, heartbeat.ts sleptFor), so a night of sleep between
 // two failures adds nothing; a look stopped by a sleep, or cut by its ceiling across one, is not a failure at all (look.ts). The look that then runs reads the fact and decides whether it is
 // worth one line. A look that works ends the streak, with no "back to normal".
+// The exception to the exception: a cause where NO look can run and only she can fix it (NO_MODEL: the login expired). A fact for the next look would never reach her, so after LONG_FAILS
+// failures (no awake stretch: the cause is certain) she gets the chat turn's fixed line (errors.ts refusal) ONCE per streak, through postNotice, held while quiet hours or /quiet last and sent
+// at the first failing look after. The streak lives in memory: a restart may tell once more. Such a cause is not also a fact for a look.
 const LONG_FAILS = 3;
+const NO_MODEL: ReadonlySet<Cause> = new Set<Cause>(["login"]); // (billing and refused are the shared friends' key, which the owner's looks do not run on)
 const LONG_AWAKE_MS = 2 * 3_600_000;
 type Scope = "owner" | "group" | "tenant";
 interface Streak {
@@ -55,6 +60,7 @@ interface Streak {
   monoSince: number; // the monotonic clock then: how long the Mac has been awake since
   mono: number; // the monotonic clock at the latest failure
   cause: Cause;
+  told: boolean; // NO_MODEL: her fixed line was sent (or may have been) for this streak
 }
 
 export interface FailureTracker {
@@ -62,6 +68,9 @@ export interface FailureTracker {
   observe(key: string, scope: Scope, failed: boolean, cause: Cause | undefined, now: number, mono: number): void;
   // The fact for the conversation's next look, or "" while its failures are not a long awake stretch.
   fact(key: string, zone?: string): string;
+  // The cause to tell her in a fixed line now (NO_MODEL, LONG_FAILS reached, not yet told this streak), or undefined. `told(key, true)` marks it sent; `false` lets the next failing look try again.
+  toTell(key: string): Cause | undefined;
+  told(key: string, yes: boolean): void;
 }
 
 export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {}): FailureTracker {
@@ -72,7 +81,7 @@ export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {
     observe(key, scope, failed, cause, now, mono) {
       if (scope !== "owner") return;
       if (!failed) return void streaks.delete(key);
-      const st = streaks.get(key) ?? { n: 0, since: now, monoSince: mono, mono, cause: cause ?? "other" };
+      const st = streaks.get(key) ?? { n: 0, since: now, monoSince: mono, mono, cause: cause ?? "other", told: false };
       st.n++;
       st.mono = mono;
       st.cause = cause ?? "other";
@@ -80,10 +89,18 @@ export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {
     },
     fact(key, zone) {
       const st = streaks.get(key);
-      if (!st || st.n < fails || st.mono - st.monoSince < awake) return "";
+      if (!st || NO_MODEL.has(st.cause) || st.n < fails || st.mono - st.monoSince < awake) return "";
       const c = FIXES[st.cause];
       const hours = Math.round(((st.mono - st.monoSince) / 3_600_000) * 10) / 10;
       return `Your own background looks have failed ${st.n} times in a row since ${timeIn(new Date(st.since), zone)} (${hours} hours of that with the Mac awake; time asleep does not count). Cause as code classifies it: ${c.what}. What would fix it: ${c.fix} This is system status: say it only if it still matters to ${OWNER} and they have to do something, in one short line in your own words; otherwise say nothing about it.`;
+    },
+    toTell(key) {
+      const st = streaks.get(key);
+      return st && NO_MODEL.has(st.cause) && st.n >= fails && !st.told ? st.cause : undefined;
+    },
+    told(key, yes) {
+      const st = streaks.get(key);
+      if (st) st.told = yes;
     },
   };
 }
@@ -173,10 +190,17 @@ export function noticeDamaged(now: Date = new Date()): number {
 }
 
 // 2. Looks that fail. Called by look.ts with each finished look (not one called off or stopped by a sleep); `error` is what the run threw, if it did; `mono`: the monotonic clock now.
+// When no look can run and only she can fix it (NO_MODEL), she gets the fixed line once per streak (see the tracker); a send refused before anything went out is tried again at the next failing look.
 const tracker = createFailureTracker();
-export function observeLook(conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): void {
+export async function observeLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): Promise<void> {
   try {
     tracker.observe(conv.key, conv.kind, outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), mono);
+    const cause = tracker.toTell(conv.key);
+    const text = cause && refusal(cause, "owner");
+    if (!text || holdingNow(conv, now)) return;
+    tracker.told(conv.key, true);
+    const res = await postNotice(pipeline, conv, text);
+    if (res.error && classifySendError(res.error) === "refused") tracker.told(conv.key, false); // (only a send that proves nothing went out: a later step of the turn can fail after delivery)
   } catch (e) {
     console.error("notices: could not track a look:", (e as Error).message);
   }

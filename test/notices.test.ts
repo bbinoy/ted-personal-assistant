@@ -4,7 +4,7 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
+import { createFailureTracker, observeLook, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -118,14 +118,14 @@ test("failure tracker: the owner's looks become a fact only after 3 failures ove
   const H = 3_600_000;
   const T = 1_000_000_000_000;
   const t = createFailureTracker();
-  t.observe("owner", "owner", true, "login", T, 0);
-  t.observe("owner", "owner", true, "login", T + 600_000, 0.2 * H);
-  t.observe("owner", "owner", true, "login", T + 1_200_000, 0.4 * H);
+  t.observe("owner", "owner", true, "connector", T, 0);
+  t.observe("owner", "owner", true, "connector", T + 600_000, 0.2 * H);
+  t.observe("owner", "owner", true, "connector", T + 1_200_000, 0.4 * H);
   assert.equal(t.fact("owner"), "", "three failures, but only 24 minutes awake");
-  t.observe("owner", "owner", true, "login", T + 2.5 * H, 2.1 * H);
+  t.observe("owner", "owner", true, "connector", T + 2.5 * H, 2.1 * H);
   const fact = t.fact("owner");
   assert.match(fact, /failed 4 times in a row/);
-  assert.match(fact, /claude auth login/);
+  assert.match(fact, /Connectors/);
   assert.match(fact, /system status/);
   t.observe("owner", "owner", false, undefined, T + 3 * H, 2.5 * H);
   assert.equal(t.fact("owner"), "", "a look that works ends it: no 'back to normal' anywhere");
@@ -215,4 +215,56 @@ test("a system matter for the owner (the shared key, a friend's damaged file) is
   assert.match(t.held[0]!.text, /^System status for .*The shared API key was refused\.$/);
   t.done();
   reset();
+});
+
+test("observeLook: a login that stops every run is told to the owner once per streak, after 3 failures, not in quiet hours", async () => {
+  const o = { ...owner(), logFile: scratchLog(`ol-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const sent: string[] = [];
+  let sendError: unknown;
+  const pipeline = {
+    enqueue: <X,>(_c: unknown, job: () => Promise<X>) => job(),
+    runTurn: async (_c: unknown, t: { run: () => Promise<{ text: string }> }) => {
+      sent.push((await t.run()).text);
+      if (sendError) throw sendError;
+      return { spoke: true };
+    },
+  } as never;
+  const DAY = new Date(2026, 9, 15, 12, 0, 0);
+  const NIGHT = new Date(2026, 9, 14, 22, 35, 0);
+  const fail = (e: unknown, at = DAY) => observeLook(pipeline, o, "failed", e, at, 0);
+  await observeLook(pipeline, o, "silent", undefined, DAY, 0); // a clean start
+  await fail(new AuthError("x"));
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 0, "not at 2");
+  await fail(new AuthError("x"));
+  assert.deepEqual(sent, [refusal("login", "owner")]);
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 1, "once per streak");
+  // a good look ends it; the next streak tells again
+  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
+  for (let i = 0; i < 3; i++) await fail(new AuthError("x"));
+  assert.equal(sent.length, 2);
+  // quiet hours hold it; the first failing look after quiet sends it
+  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
+  for (let i = 0; i < 4; i++) await fail(new AuthError("x"), NIGHT);
+  assert.equal(sent.length, 2, "held at night");
+  await fail(new AuthError("x"), MORNING);
+  assert.equal(sent.length, 3);
+  // other causes are never told
+  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
+  for (let i = 0; i < 5; i++) await fail(new RunTimeout(60_000));
+  for (let i = 0; i < 5; i++) await fail(new Error("fetch failed"));
+  assert.equal(sent.length, 3);
+  // a send that failed is tried again, but not one that may have gone out
+  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
+  sendError = new Error("Failed to send message");
+  for (let i = 0; i < 3; i++) await fail(new AuthError("x"));
+  assert.equal(sent.length, 4);
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 5, "refused: tried again");
+  sendError = new Error("socket closed");
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 6);
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 6, "unsure: not repeated");
 });
