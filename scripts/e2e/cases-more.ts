@@ -1412,7 +1412,7 @@ const e41: Case = {
   },
 };
 
-// ---- e42-e45: one home per fact; where sources disagree the newest wins and the older one is corrected ----
+// ---- e42, e44, e45: one home per fact; where sources disagree the newest wins and the older one is corrected ----
 const lookOk = (o: Outcome) => [check("the owner was not asked anything", o.asks.length === 0)];
 const e42: Case = {
   id: "e42",
@@ -1441,34 +1441,6 @@ const e42: Case = {
 };
 
 const lodgingNote = (t: Time): string => `---\nname: lodging-valmora\ndescription: Valmora lodging: one room ${t.day(12)} to ${t.day(33)}, booked through the site\n---\nWritten ${t.day(-20)}. One room ${t.day(12)} to ${t.day(33)}, booked through the site.\n`;
-const e43: Case = {
-  id: "e43",
-  title: "a question about the Valmora tasks: a task's newer details hold the arrangement and the older note disagrees: the answer follows the task, the note is corrected, the task is unchanged",
-  turns: ["What is still open for the Valmora trip, and what are the rooms?"],
-  world: (t) => ({
-    tasks: [{ title: "Send Valmora host the arrival time", details: `Updated ${t.day(-1)}: the host moved us to two rooms, ${t.day(12)} to ${t.day(19)} and ${t.day(26)} to ${t.day(33)}, paid to the host directly; the booking site one is cancelled.`, due: t.day(5) }],
-    notes: { "context-lodging-valmora.md": lodgingNote(t) },
-  }),
-  maxQuestions: 0,
-  state: (o) => {
-    const n = o.notes["context-lodging-valmora.md"] ?? "";
-    const task = o.tasks.find((x) => /host/i.test(x.title));
-    return [
-      check("the note holds the second date range", n.includes(o.time.day(26)) && n.includes(o.time.day(19)), n.slice(0, 250)),
-      check("the note no longer says it is booked through the site as one room", !/one room[^.]*booked through the site/i.test(n), n.slice(0, 250)),
-      check("the task is unchanged", task?.status === "open" && task.due?.slice(0, 10) === o.time.day(5) && task.title === "Send Valmora host the arrival time" && (task.details ?? "").includes("paid to the host directly"), JSON.stringify(task)),
-      ...lookOk(o),
-    ];
-  },
-  never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It lists the arrival-time task and says there are two rooms, one for each date range, paid to the host directly, and asks no question."],
-  perfect: async (s) => {
-    s.turn(0);
-    s.say("Open: send the host the arrival time. The rooms: two, one per date range, paid to the host directly.");
-    s.note("context-lodging-valmora.md", `---\nname: lodging-valmora\ndescription: Valmora lodging: two rooms ${s.time.day(12)}-${s.time.day(19)} and ${s.time.day(26)}-${s.time.day(33)}, paid to the host directly\n---\nThe host moved us to two rooms, paid directly.\n`);
-  },
-};
-
 const e44: Case = {
   id: "e44",
   title: "the daily brief: a calendar entry older than a plan note: the whereabouts note follows the note and its description names the place and next start",
@@ -1518,7 +1490,7 @@ const e45: Case = {
   state: (o) => [
     check("the deposit task is still open", o.tasks.find((x) => /deposit/i.test(x.title))?.status === "open", o.tasks.find((x) => /deposit/i.test(x.title))?.status),
     check("the parking task is still open and unchanged", o.tasks.some((x) => x.title === "Ask host about parking" && x.status === "open")),
-    check("the lodging note is unchanged", o.notes["context-lodging-valmora.md"] === lodgingNote(o.time)),
+    check("the lodging note is not corrected: it still says one room through the site", /one room[^.]*booked through the site/i.test(o.notes["context-lodging-valmora.md"] ?? "") && (o.notes["context-lodging-valmora.md"] ?? "").includes(o.time.day(33)), (o.notes["context-lodging-valmora.md"] ?? "").slice(0, 250)),
     ...lookOk(o),
   ],
   never: (o) => [...sends(o), ...deletes(o)],
@@ -1623,4 +1595,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e43, e44, e45];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45];

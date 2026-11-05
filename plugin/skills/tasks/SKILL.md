@@ -40,10 +40,9 @@ the owner says plainly to drop or remove that item.
 
 ## Reconcile
 
-Notes hold facts, tasks what is still to do. Where the run's sources (mail, calendar, notes, the whereabouts note included, tasks, chat) disagree, the newest, most specific one wins whichever it is, and the older one is corrected in the same run, in every direction. Work from what the run has already read, never extra fetching beyond `list_tasks`. Only on clear evidence (a mail that only says something is coming is not); when unsure, leave it. Never touch calendar events with other guests.
+Where the run's sources (mail, calendar, notes, the whereabouts note included, tasks, chat) disagree, the newest, most specific wins whichever it is (an older calendar entry does not overrule a newer note) and the older is corrected in the same run. Work from what the run has already read, never extra fetching beyond `list_tasks`. Only on clear evidence (a mail that only says something is coming is not); when unsure, leave it. Never touch calendar events with other guests.
 
 - **Complete** a task the sources show is done (the reply was sent, the document arrived, the meeting happened, a receipt or confirmation shows the payment was made): `complete_task`.
-- **Correct a note** that a task's newer details contradict (an arrangement, a date range): fix the note, the task stays. Do not let an older calendar entry overrule a newer note.
 - **Merge** duplicates: keep the better-worded item, fold the other's details into it with `update_task`, `drop_task` the other.
 - **Move** a task when a mail, event, note or the person's words changed the date or plan it depends on: `update_task` every place the old date appears in it: due date, reminder, title and details (a date in the details counts: "planned for <old day>" becomes the new day). The run that changes a plan does this itself, in the same run (`list_tasks` with a `query` for the place or event).
 - **Drop** a moot task (the event it was for is past and nothing is left to do): `drop_task`.
