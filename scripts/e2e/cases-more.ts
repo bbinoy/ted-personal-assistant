@@ -1621,4 +1621,54 @@ const e46: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46];
+// ---- e47: a shown reply draft gives the address and the text, and does not say it was not sent ----
+const NOT_SENT = /not (yet |been )?sent|nothing (has )?(gone|been sent)|unsent|still (a )?draft|leave (it|them) alone|won't go out|haven't sent/i;
+const e47: Case = {
+  id: "e47",
+  title: "a reply draft is shown with the address and text and without saying it was not sent",
+  turns: ["Draft a reply to Dana: Thursday afternoon works for the roadmap review."],
+  world: e46.world,
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("one draft, to Dana", o.mail.drafts().length === 1 && o.mail.drafts()[0]!.to.every((p) => p.email === DANA_W), JSON.stringify(o.mail.drafts().map((d) => d.to))),
+      check("the reply shows her address verbatim", said.includes(DANA_W), said.slice(0, 200)),
+      check("it does not say the draft was not sent", !NOT_SENT.test(said), said.match(NOT_SENT)?.[0] ?? ""),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It shows the draft text and says how to send it.", "It never states that the draft is unsent or still a draft, or that nothing went out or that it leaves anything alone (offering \"say send\" is fine)."],
+  perfect: e46.perfect,
+};
+
+// ---- e48: a background look drafts a reply and offers the send, naming the address and not saying it was not sent ----
+const e48: Case = {
+  id: "e48",
+  title: "a look that drafts a reply and offers the send names the address and does not say nothing was sent",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    notes: { "context-roadmap.md": "---\ndescription: Roadmap review\n---\nI told Dana by phone that Thursday afternoon works for the roadmap review. Just confirm it in writing for me.\n" },
+    mail: [{ from: { email: DANA_W, displayName: "Dana Reyes" }, subject: "Roadmap review: when can you do it?", body: "<p>Hi, we need 45 minutes for the Q4 roadmap review this week. When suits you? Dana</p>", receivedAt: new Date(t.now.getTime() - 5 * 3_600_000).toISOString() }],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("a draft to Dana", o.mail.drafts().length >= 1 && o.mail.drafts().every((d) => d.to.every((p) => p.email === DANA_W)), JSON.stringify(o.mail.drafts().map((d) => d.to))),
+      check("the message names her address", said.includes(DANA_W), said.slice(0, 200)),
+      check("it does not say the draft was not sent", !NOT_SENT.test(said), said.match(NOT_SENT)?.[0] ?? ""),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It tells the owner a reply to Dana is ready and gives her address in full.", "It never states that the draft is unsent or still a draft, or that nothing went out or that it leaves anything alone (offering \"say send\" is fine)."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string }[];
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hi Dana,</p><p>Thursday afternoon works for the roadmap review.</p><p>Best</p>" });
+    s.say(`Reply to Dana is ready.\n\nTo: ${DANA_W}\n\nHi Dana,\nThursday afternoon works for the roadmap review.\nBest\n\nSay send to send it.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48];
