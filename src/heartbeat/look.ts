@@ -241,7 +241,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
     const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..60 rule), not after the day's 30 minutes
-    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
+    if (outcome !== "preempted" && !interrupted) await observeLook(pipeline, conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look was handed is settled by facts.ts: held posts when it ended posted or silent, reminders and learned changes when it posted or held, a prep when it posted, a routine when its expert came back (a look a message overtook settles none of the last two).
     facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted, sends: sent, acted });
