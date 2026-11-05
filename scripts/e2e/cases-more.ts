@@ -1595,4 +1595,30 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45];
+// ---- e46: a shown reply draft names the recipient address, so the owner's "send" needs no second question ----
+const e46: Case = {
+  id: "e46",
+  title: "a reply draft is shown to the owner with the recipient's address verbatim above the text",
+  turns: ["Draft a reply to Dana: Thursday afternoon works for the roadmap review."],
+  world: (t) => ({
+    mail: [{ from: { email: DANA_W, displayName: "Dana Reyes" }, subject: "Roadmap review: when can you do it?", body: "<p>Hi, we need 45 minutes for the Q4 roadmap review this week. When suits you? Dana</p>", receivedAt: new Date(t.now.getTime() - 5 * 3_600_000).toISOString() }],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("one draft, to Dana", o.mail.drafts().length === 1 && o.mail.drafts()[0]!.to.every((p) => p.email === DANA_W), JSON.stringify(o.mail.drafts().map((d) => d.to))),
+      check("the reply shows her address verbatim", said.includes(DANA_W), said.slice(0, 200)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It shows the draft text in full and says how to send it.", "It gives Dana's email address in full, not only her name."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string }[];
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hi Dana,</p><p>Thursday afternoon works for me for the roadmap review.</p><p>Best</p>" });
+    s.say(`To: ${DANA_W}\n\nHi Dana,\nThursday afternoon works for me for the roadmap review.\nBest\n\nSay send to send it.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46];
