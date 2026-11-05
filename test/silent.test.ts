@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hasSilent, isSilent } from "../src/core/silent.ts";
+import { hasSilent, isSilent, withoutSilent } from "../src/core/silent.ts";
 
 // A model that means "say nothing" sometimes drops the brackets; the bare word must not reach a person.
 test("slipped forms of the silent marker are silent", () => {
@@ -11,4 +11,11 @@ test("real sentences that contain the word are not silent", () => {
   for (const t of ["I'll stay silent on that", "Silent night tickets are booked", "silent mode is on", "", "hello"]) assert.equal(isSilent(t), false, t);
   assert.equal(hasSilent("[[silent]] nothing to say"), true);
   assert.equal(hasSilent("I'll stay silent on that"), false);
+});
+
+test("the marker is removed from words that carry it, the words stay", () => {
+  assert.equal(withoutSilent("Calendar is done.\n\n[[silent]]"), "Calendar is done.");
+  assert.equal(withoutSilent("[[SILENT]] Done."), "Done.");
+  assert.equal(withoutSilent("[[silent]]"), "");
+  assert.equal(withoutSilent("I'll stay silent on that"), "I'll stay silent on that");
 });

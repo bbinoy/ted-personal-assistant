@@ -10,3 +10,6 @@ export const isSilent = (text: string): boolean => BARE.test(text);
 
 // The exact marker anywhere in a message (a heartbeat answer that mentions it is silent), or the text is only a slipped form.
 export const hasSilent = (text: string): boolean => text.toLowerCase().includes(SILENT) || isSilent(text);
+
+// The text without the exact marker (any case), trimmed: words a model wrote beside it still go out, an empty rest sends nothing.
+export const withoutSilent = (text: string): string => text.replace(/\[\[silent\]\]/gi, "").trim();
