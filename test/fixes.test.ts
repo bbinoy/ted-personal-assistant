@@ -40,7 +40,8 @@ test("the failing-looks fact carries the cause's what and fix, for the owner onl
     const t = createFailureTracker();
     for (let i = 0; i < 3; i++) t.observe("k", "owner", true, c, 1_000 + i, i * H);
     const fact = t.fact("k");
-    assert.ok(fact.includes(FIXES[c].what) && fact.includes(FIXES[c].fix), `${c}: ${fact}`);
+    if (c === "login") assert.equal(fact, "", "no look can run on it: the owner gets the fixed line instead (notices.ts observeLook)");
+    else assert.ok(fact.includes(FIXES[c].what) && fact.includes(FIXES[c].fix), `${c}: ${fact}`);
     for (const scope of ["tenant", "group"] as const) {
       const f = createFailureTracker();
       for (let i = 0; i < 3; i++) f.observe("x", scope, true, c, 1_000 + i, i * H);
