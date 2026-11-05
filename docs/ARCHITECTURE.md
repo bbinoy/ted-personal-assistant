@@ -699,6 +699,7 @@ src/core/brief.ts  the clock line of unattended prompts
 src/core/budget.ts  spend ledger and spend warnings
 src/core/callkey.ts  identity of a tool call
 src/core/capnotice.ts  the instance-wide notice throttle (takeCapNotice, over told.ts) and the friends' cap fact
+src/core/loginwatch.ts  when the Claude login ends: read once a day, a fact under three days
 src/core/until.ts  the one "until" value of /pause and /quiet: parse, test, words
 src/core/ownerfact.ts  holdFact: a system matter as a fact for the owner's next run
 src/core/contain.ts  `isInside`: path containment
