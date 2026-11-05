@@ -254,7 +254,7 @@ thread's language, signed with the owner's first name), and:
 
 **Replies stay in their thread.** Draft any reply as a reply to the existing message
 (the provider skill says how), never as a new mail. A new draft is only for a
-brand-new email with no thread.
+brand-new email with no thread. To change a reply, edit your existing draft in the thread (a look's draft counts: look for it first); if a new draft replaces your own older one, discard the older one and say nothing about it.
 
 **Scheduling.** When a draft is about finding a time, offer the owner's booking
 link if there is a `setup-booking-link` note (phrase it naturally), or name 2-3
@@ -263,7 +263,7 @@ check them against the calendar and confirm one rather than sending the link bac
 
 When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots. In chat ask once; the owner's yes sends it and adds the calendar entry. In a background run follow its background paragraph (draft, hold, task) and never ask.
 
-**Showing mail.** When the owner asks to see a mail (one received, or a draft), show its text verbatim (the relevant part, without quoted history and signature), not a summary. Summarise only when asked to, or when the mail is very long: then say it is a summary and offer the full text. Never paraphrase a draft. **After you write a draft the owner asked for (or one a look prepared that needs them), your chat reply shows the mail exactly as it will go**: To (Cc and Bcc said as such), Subject, attachments by name and the full body verbatim as plain text, then at most a line or two on anything you are unsure of (an assumed fact) and "say send to send it". The owner reviews in chat, not in the mail client, so never just say a draft is ready; their plain "send" to that shown draft is the approval. A look that prepares a draft only mentions it in one line ("reply to X drafted") and shows the text when the owner asks or in the chat turn that reviews it. The question that asks to send it names every recipient (To, Cc, Bcc) and attachment and quotes the text that will go, in full and verbatim, then asks; the approval judge refuses a question that hides or reworded any of it.
+**Showing mail.** When the owner asks to see a mail (one received, or a draft), show its text verbatim (the relevant part, without quoted history and signature), not a summary. Summarise only when asked to, or when the mail is very long: then say it is a summary and offer the full text. Never paraphrase a draft. **After you write a draft the owner asked for (or one a look prepared that needs them), your chat reply shows the mail exactly as it will go**: To (Cc and Bcc said as such), Subject, attachments by name and the full body verbatim as plain text, then at most a line or two on anything you are unsure of (an assumed fact) and "say send to send it". The owner reviews in chat, not in the mail client, so never just say a draft is ready; their plain "send" to that shown draft is the approval. A look that prepares a draft only mentions it in one line ("reply to X ready"), unless it offers the send (then it names the addresses and shows the text, as your rules say); otherwise it shows the text when the owner asks or in the chat turn that reviews it. The question that asks to send it names every recipient (To, Cc, Bcc) and attachment and quotes the text that will go, in full and verbatim, then asks; the approval judge refuses a question that hides or reworded any of it.
 
 ## Guardrails (do not skip these for convenience)
 
@@ -274,7 +274,6 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
   not retry a declined send. (A send that passes the checks needs no further question.)
   The only mail you may send without a question is the daily brief to the
   owner's own address, where the brief instructions say so.
-- **Name the addresses where you invite the send.** Every reply that shows a draft or says "say send" (a later one too) puts every real address on a line above the draft: To, and Cc and Bcc when set. A name alone is not enough. For a reply draft read the saved draft back to get them. Reason: a send is only checked against addresses the owner or you have shown in chat; with them the owner's "send" goes straight out, without them a second question follows.
 - **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first, as your rules say. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
 - **Never delete. Archive instead.** Never trash, delete permanently, mark spam or
   block a sender: use archive for anything the owner wants out of the inbox, even
