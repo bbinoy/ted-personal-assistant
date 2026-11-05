@@ -1412,6 +1412,122 @@ const e41: Case = {
   },
 };
 
+// ---- e42-e45: one home per fact; where sources disagree the newest wins and the older one is corrected ----
+const lookOk = (o: Outcome) => [check("the owner was not asked anything", o.asks.length === 0)];
+const e42: Case = {
+  id: "e42",
+  title: "a look sees the receipt for a payment that has an open task: the task is completed, the mail archived, nothing sent or asked",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [{ title: "Pay the Lumen Rail season ticket", due: t.day(2), remindAt: t.at(t.day(1), "09:00") }, { title: "Renew library card", due: t.day(9) }],
+    mail: [{ from: { email: "receipts.lumenrail@example.com", displayName: "Lumen Rail" }, subject: "Your receipt: season ticket payment", body: "<p>Thank you. We received your payment of GBP 310.00 for the season ticket. Paid.</p>", receivedAt: new Date(t.now.getTime() - 3 * 3_600_000).toISOString(), read: false }],
+  }),
+  maxQuestions: 0,
+  state: (o) => [
+    check("the payment task is done", o.tasks.find((x) => /season ticket/i.test(x.title))?.status === "done", o.tasks.find((x) => /season ticket/i.test(x.title))?.status),
+    check("the receipt mail is archived", o.mail.folderOf("receipt: season ticket").includes("archive"), o.mail.folderOf("receipt: season ticket").join(",")),
+    check("the other task is untouched", o.tasks.some((x) => x.title === "Renew library card" && x.status === "open" && x.due?.slice(0, 10) === o.time.day(9))),
+    ...lookOk(o),
+  ],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is short, says the season ticket task was ticked off, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string }[];
+    for (const r of rows) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
+    s.tasks.done(s.tasks.find("season ticket"));
+  },
+};
+
+const lodgingNote = (t: Time): string => `---\nname: lodging-valmora\ndescription: Valmora lodging: one room ${t.day(12)} to ${t.day(33)}, booked through the site\n---\nWritten ${t.day(-20)}. One room ${t.day(12)} to ${t.day(33)}, booked through the site.\n`;
+const e43: Case = {
+  id: "e43",
+  title: "a question about the Valmora tasks: a task's newer details hold the arrangement and the older note disagrees: the answer follows the task, the note is corrected, the task is unchanged",
+  turns: ["What is still open for the Valmora trip, and what are the rooms?"],
+  world: (t) => ({
+    tasks: [{ title: "Send Valmora host the arrival time", details: `Updated ${t.day(-1)}: the host moved us to two rooms, ${t.day(12)} to ${t.day(19)} and ${t.day(26)} to ${t.day(33)}, paid to the host directly; the booking site one is cancelled.`, due: t.day(5) }],
+    notes: { "context-lodging-valmora.md": lodgingNote(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const n = o.notes["context-lodging-valmora.md"] ?? "";
+    const task = o.tasks.find((x) => /host/i.test(x.title));
+    return [
+      check("the note holds the second date range", n.includes(o.time.day(26)) && n.includes(o.time.day(19)), n.slice(0, 250)),
+      check("the note no longer says it is booked through the site as one room", !/one room[^.]*booked through the site/i.test(n), n.slice(0, 250)),
+      check("the task is unchanged", task?.status === "open" && task.due?.slice(0, 10) === o.time.day(5) && task.title === "Send Valmora host the arrival time" && (task.details ?? "").includes("paid to the host directly"), JSON.stringify(task)),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It lists the arrival-time task and says there are two rooms, one for each date range, paid to the host directly, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.say("Open: send the host the arrival time. The rooms: two, one per date range, paid to the host directly.");
+    s.note("context-lodging-valmora.md", `---\nname: lodging-valmora\ndescription: Valmora lodging: two rooms ${s.time.day(12)}-${s.time.day(19)} and ${s.time.day(26)}-${s.time.day(33)}, paid to the host directly\n---\nThe host moved us to two rooms, paid directly.\n`);
+  },
+};
+
+const e44: Case = {
+  id: "e44",
+  title: "the daily brief: a calendar entry older than a plan note: the whereabouts note follows the note and its description names the place and next start",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Valmora stay", start: t.local(t.day(10), "09:00"), end: t.local(t.day(24), "18:00"), zone: t.zone, location: "Valmora" }],
+    notes: {
+      "routine-daily-brief.md": routineBrief(t),
+      "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Valmora stay moved to ${t.day(17)} to ${t.day(31)}\n---\nWritten ${t.day(-1)}: the Valmora stay moved a week later, ${t.day(17)} to ${t.day(31)}. The original booking is cancelled; the calendar entry has not been changed yet.\n`,
+      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(10)} to ${t.day(24)}`, `At home. Valmora stay from ${t.day(10)} to ${t.day(24)} (calendar).`),
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const w = o.notes["context-whereabouts.md"] ?? "";
+    const desc = /^description:\s*(.*)$/m.exec(w)?.[1] ?? "";
+    return [
+      check("the whereabouts body follows the newer plan note", w.includes(o.time.day(17)), w.slice(0, 250)),
+      check("the description names the place and the next start", /valmora/i.test(desc) && desc.includes(o.time.day(17)) && !desc.includes(o.time.day(10)), desc),
+      check("the calendar entry was not deleted", !deletes(o).length),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is a short chat message (the brief itself went by mail); it asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(17)} to ${s.time.day(31)}`, `At home. Valmora stay moved to ${s.time.day(17)} to ${s.time.day(31)} (plan note, newer than the calendar).`));
+    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Today\nNothing pressing." });
+    s.say("Your brief is in your inbox.");
+  },
+};
+
+const e45: Case = {
+  id: "e45",
+  title: "guard: a mail that only says a payment will be taken, and a vague task remark: the task stays open, the note is unchanged",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [{ title: "Pay the Valmora hotel deposit", due: t.day(3) }, { title: "Ask host about parking", details: "maybe the stay is a few days later?" }],
+    mail: [{ from: { email: "bookings.valmorahotel@example.com", displayName: "Valmora Hotel" }, subject: "Your upcoming deposit", body: `<p>Your deposit of EUR 200 will be requested on ${t.day(3)}. A payment link will follow.</p>`, receivedAt: new Date(t.now.getTime() - 3 * 3_600_000).toISOString(), read: false }],
+    notes: { "context-lodging-valmora.md": lodgingNote(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => [
+    check("the deposit task is still open", o.tasks.find((x) => /deposit/i.test(x.title))?.status === "open", o.tasks.find((x) => /deposit/i.test(x.title))?.status),
+    check("the parking task is still open and unchanged", o.tasks.some((x) => x.title === "Ask host about parking" && x.status === "open")),
+    check("the lodging note is unchanged", o.notes["context-lodging-valmora.md"] === lodgingNote(o.time)),
+    ...lookOk(o),
+  ],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["If it says anything, it is short, does not claim the deposit was paid, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+  },
+};
+
 // ---- e22: a rail ticket mail has a link and no date; the plain fetch is blocked (403), the browser opens the order page: use it, no offer, no question ----
 const TICKET_URL = "https://tickets.example.org/order/TK-5521";
 const e22: Case = {
@@ -1507,4 +1623,4 @@ const e23b: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e43, e44, e45];

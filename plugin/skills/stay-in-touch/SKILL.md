@@ -24,7 +24,7 @@ Likes surf and long dinners. Her first child is due in November.
 
 ## Where the owner is
 
-One note, `context-whereabouts.md`, holds a sequence of stretches: where the owner is now and until when, then the next ones, each with place and first and last day (its description is the index line every run sees). Going back to the home city is a stretch like any other; many people split their time between cities. Any run updates it when the calendar, a booking mail, a plan note or the owner's words show a change; the daily brief brings it up to date each morning. A planned stretch counts even if nothing is booked yet: say "draft" while it is not firm. Never state the location as certain. When notes disagree on a date, the newer, more specific one wins, and you correct the older one in the same turn.
+One note, `context-whereabouts.md`, holds a sequence of stretches: where the owner is now and until when, then the next ones, each with place and first and last day (its description is the index line every run sees). Going back to the home city is a stretch like any other; many people split their time between cities. Any run updates it when the calendar, a booking mail, a plan note or the owner's words show a change; the daily brief brings it up to date each morning. A planned stretch counts even if nothing is booked yet: say "draft" while it is not firm. Never state the location as certain. The calendar and the notes both count; the newer, more specific wins, so a calendar entry for a cancelled or changed booking does not overrule a newer note. The description names where the owner is now and the next change with its first day ("Porto since 3 May; next Lisbon 12-26 May").
 
 ### Before a stay
 
