@@ -59,6 +59,49 @@ const cases: Case[] = [
     },
     ok: (plan) => (plan.actions.length === 0 ? undefined : `changed: ${plan.actions.map((a) => `${a.kind} ${a.file}`).join(", ")}`),
   },
+  {
+    id: "d",
+    title: "an incident rule without never/always wording: rewritten into the need behind it, as a merge naming itself",
+    notes: {
+      "triage-invoices-inbox.md": note("Invoices stay in the inbox", "Invoices from suppliers stay in the inbox; archive only after the person has acted on them. Set after the 4 May reminder from Example Supplies Ltd was archived on sight, the invoice went unpaid and a late fee followed. Since then no supplier invoice, reminder or statement is archived when it arrives.", 6),
+    },
+    ok: (plan, after) => {
+      const m = plan.actions.find((x) => x.kind === "merge" && x.merged.includes(x.file));
+      if (!m || plan.actions.length !== 1) return `expected one self-merge rewrite, got: ${plan.actions.map((x) => `${x.kind} ${x.file}`).join(", ") || "no actions"}`;
+      if (!/fee|unpaid|pay|due/i.test(after[m.file] ?? "")) return "the need behind the rule is missing";
+      return undefined;
+    },
+  },
+  {
+    id: "e",
+    title: "a note repeating two narrower notes, plus cross-references: one merged note, every distinct rule kept",
+    notes: {
+      "style-short-replies.md": note("Keep replies short", "Replies to the team are short: three sentences at most.", 12),
+      "style-greeting-first-names.md": note("Greet by first name", "Open every email to the team with the first name, then a comma.", 11),
+      "style-team-email-overview.md": note("Team email style (overrides the notes on replies and greetings)", "Team email: replies are short, three sentences at most; open with the first name and a comma. This overrides the older notes on replies and greetings. Sign off with only the initial J.", 4),
+    },
+    ok: (_plan, after) => {
+      const names = Object.keys(after);
+      if (names.length !== 1) return `expected one note left, got ${names.length}`;
+      const t = Object.values(after)[0] ?? "";
+      if (!/three sentences/i.test(t)) return "the three-sentence limit was lost";
+      if (!/first name/i.test(t)) return "the first-name greeting was lost";
+      if (!/initial/i.test(t)) return "the sign-off was lost";
+      return undefined;
+    },
+  },
+  {
+    id: "f",
+    title: "a strict preference in the person's own quoted words, next to those: left untouched",
+    notes: {
+      "triage-newsletters.md": note("Newsletters stay out of the brief", 'In their own words: "never show me newsletters in the daily brief, not even once". A lasting preference.', 9),
+      "triage-invoices-inbox.md": note("Invoices stay in the inbox", "Invoices from suppliers stay in the inbox; archive only after the person has acted on them. Set after one invoice was archived unpaid in the week of 3 May and a late fee followed.", 6),
+    },
+    ok: (plan) => {
+      const bad = plan.actions.filter((x) => x.file === "triage-newsletters.md" || (x.kind !== "delete" && x.merged.includes("triage-newsletters.md")));
+      return bad.length ? `touched the quoted preference: ${bad.map((x) => `${x.kind} ${x.file}`).join(", ")}` : undefined;
+    },
+  },
 ];
 
 const only = process.env.EVAL_ONLY?.split(",").map((s) => s.trim());
