@@ -4,6 +4,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 
 ## 1. Model judgement over code
 
+- **In doubt, trust the model.** Let it make the judgement call, and keep things safe with backups, logs, caps and easy undo instead of strict rules or code limits. Limits stay only where a model cannot be trusted: the §5 invariants, and text from mail or the web becoming memory or action without the person's words.
 - **Keep code minimal.** Prefer telling the model (persona, skills, context) over hard-coded cases, thresholds and special branches. Fewer lines is a feature.
 - **Skills over code.** New behaviour starts as a skill or instruction text. Write code only for what a model cannot be trusted with: safety guardrails, money, data integrity, durable state, timers and scheduling, logging and audit.
 - **Give facts, not decisions.** Where the model is weak (dates, time zones, counts, "is this due", "was this already sent"), code computes the fact and hands it to the run as context. The run decides what to do with it.
