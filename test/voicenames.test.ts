@@ -1,51 +1,39 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { namesPrompt } from "../src/memory/notes.ts";
 
 const folder = () => mkdtempSync(join(tmpdir(), "voicenames-"));
-const person = (dir: string, file: string, name: string, age = 0) => {
-  writeFileSync(join(dir, file), `---\nname: ${name}\ndescription: someone\n---\n\nLives far away.\n`);
-  const t = new Date(Date.now() - age * 1000);
-  utimesSync(join(dir, file), t, t);
-};
+const note = (dir: string, body: string, file = "context-hard-names.md") => writeFileSync(join(dir, file), `---\nname: hard names\ndescription: spellings\n---\n\n${body}\n`);
 
-test("voice names: only this conversation's people notes make the prompt", () => {
+test("voice names: the prompt is the conversation's own hard-names note, without front matter", () => {
   const mine = folder();
   const other = folder();
-  person(mine, "people-sam.md", "Sam Ortiz");
-  person(mine, "triage-bills.md", "Bills Sorting");
-  person(other, "people-mia.md", "Mia Okoye");
-  assert.equal(namesPrompt(mine), "Names: Sam Ortiz.");
-  assert.equal(namesPrompt(other), "Names: Mia Okoye.");
+  note(mine, "Sam Ortiz,\nQuillfeather Logistics");
+  note(other, "Mia Okoye");
+  note(mine, "Not Me", "people-nora.md");
+  assert.equal(namesPrompt(mine), "Sam Ortiz, Quillfeather Logistics");
+  assert.equal(namesPrompt(other), "Mia Okoye");
   rmSync(mine, { recursive: true });
   rmSync(other, { recursive: true });
 });
 
-test("voice names: the newest notes come first and the size is capped", () => {
+test("voice names: the size is capped", () => {
   const dir = folder();
-  person(dir, "people-a.md", "Old Person", 1000);
-  person(dir, "people-b.md", "Middle Person", 500);
-  person(dir, "people-c.md", "New Person", 1);
-  assert.equal(namesPrompt(dir), "Names: New Person, Middle Person, Old Person.");
-  const capped = namesPrompt(dir, 40);
-  assert.equal(capped, "Names: New Person, Middle Person.");
-  assert.ok(capped!.length <= 40);
+  note(dir, "Aaa Bbb, ".repeat(100));
+  assert.ok(namesPrompt(dir)!.length <= 300);
+  assert.equal(namesPrompt(dir, 12), "Aaa Bbb, Aaa");
   rmSync(dir, { recursive: true });
 });
 
-test("voice names: a slug name reads as words, a note with no name adds nothing", () => {
+test("voice names: no note, an empty one, other notes only or an unreadable folder mean no prompt", () => {
   const dir = folder();
-  person(dir, "people-x.md", "people-nora-lindqvist");
-  writeFileSync(join(dir, "people-y.md"), "Just text.\n");
-  assert.equal(namesPrompt(dir), "Names: nora lindqvist.");
-  rmSync(dir, { recursive: true });
-});
-
-test("voice names: no notes or an unreadable folder means no prompt", () => {
-  const dir = folder();
+  assert.equal(namesPrompt(dir), undefined);
+  note(dir, "Not Me", "people-nora.md");
+  assert.equal(namesPrompt(dir), undefined);
+  writeFileSync(join(dir, "context-hard-names.md"), "---\nname: x\n---\n\n   \n");
   assert.equal(namesPrompt(dir), undefined);
   assert.equal(namesPrompt(join(dir, "missing")), undefined);
   rmSync(dir, { recursive: true });

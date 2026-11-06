@@ -1672,4 +1672,50 @@ const e48: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48];
+// ---- e49, e50: the list of hard names the voice transcriber is given (context-hard-names.md) ----
+const WOJ = "w.czarnecki@example.org";
+const VOICE = "[Voice message, transcribed automatically, so words may be misheard]";
+const hardNames = (o: Outcome) => o.notes["context-hard-names.md"] ?? "";
+const e49: Case = {
+  id: "e49",
+  title: "a voice transcript misspells a surname the mail thread spells right: the draft uses the right one and the list of hard names gains it",
+  turns: [`${VOICE} Draft a reply to Voychek Charnetsky: yes, the Friday call at ten is fine.`],
+  world: (t) => ({
+    mail: [{ from: { email: WOJ, displayName: "Wojciech Czarnecki" }, subject: "Friday call", body: "<p>Hello, can we talk on Friday at ten about the supplier contract? Regards, Wojciech Czarnecki</p>", receivedAt: new Date(t.now.getTime() - 5 * 3_600_000).toISOString() }],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const text = [o.mail.drafts().map((d) => d.body).join(" "), o.turns.flatMap((x) => x.messages).join(" ")].join(" ");
+    return [
+      check("one draft, to Wojciech", o.mail.drafts().length === 1 && o.mail.drafts()[0]!.to.every((p) => p.email === WOJ), JSON.stringify(o.mail.drafts().map((d) => d.to))),
+      check("the wrong spelling appears nowhere", !/charnetsky|voychek/i.test(text), text.slice(0, 200)),
+      check("the list of hard names holds Czarnecki", /czarnecki/i.test(hardNames(o)), hardNames(o)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It does not repeat the misheard spelling of the name.", "It is short."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string }[];
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hello Wojciech,</p><p>Yes, Friday at ten is fine.</p><p>Best</p>" });
+    s.note("context-hard-names.md", "---\nname: hard names\ndescription: spellings for the voice transcriber\n---\nWojciech Czarnecki");
+    s.say(`To: ${WOJ}\n\nHello Wojciech,\nYes, Friday at ten is fine.\nBest\n\nSay send to send it.`);
+  },
+};
+const e50: Case = {
+  id: "e50",
+  title: "an ordinary voice message with common names leaves the list of hard names unchanged",
+  turns: [`${VOICE} Remind me on Friday to call Greta and Paul about the lunch.`],
+  world: () => ({ notes: { "context-hard-names.md": "---\nname: hard names\ndescription: spellings for the voice transcriber\n---\nWojciech Czarnecki\n" } }),
+  maxQuestions: 0,
+  state: (o) => [check("the list of hard names is unchanged", hardNames(o).replace(/^---[\s\S]*?---/, "").trim() === "Wojciech Czarnecki", hardNames(o)), check("a task was added", o.tasks.length >= 1)],
+  never: (o) => sends(o),
+  reply: ["It confirms the reminder in a line."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "Call Greta and Paul about the lunch" });
+    s.say("Done, I will remind you on Friday.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e49, e50];

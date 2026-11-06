@@ -133,7 +133,7 @@ function systemFor(conv: Pick<Conversation, "kind">, caps: ReadonlySet<Capabilit
       channel: own ? (settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`) : "",
     }),
     rules(s, timed),
-    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, categories: identity(own ? ownerConv : { kind: "group" }).categories.join(", "), own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
+    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, categories: identity(own ? ownerConv : { kind: "group" }).categories.join(", "), hardNames: identity(own ? ownerConv : { kind: "group" }).categories.includes("context"), own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
     timed ? say("routine") : undefined,
     caps.has("tasks") ? say("tasks", { own, group, who, reads: looker.reads, mail: s.mail }) : undefined,
     background(looker, caps),
@@ -195,7 +195,7 @@ function peopleGuide(): string {
 // JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
 // conversation has (the preset's notes.dream, .tenant or .group).
 export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
+  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), hardNames: d.categories.includes("context"), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
 }
 
 // The general expert every run may delegate to (run/delegation.ts): the persona's expert text, the same rules and the same notes as the run it works for (`for`: that conversation's

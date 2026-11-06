@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
@@ -112,22 +112,15 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
   return out;
 }
 
-// The names in this conversation's own people-* notes (front matter `name:`), newest note first, as whisper's initial prompt ("Names: Sam Ortiz, Mia Okoye."), so a voice note spells them as the notes do. Capped at `max` characters; nothing when there are none or the folder cannot be read.
+// The hard names the assistant keeps in this conversation's notes (context-hard-names.md, one list of correct spellings) as whisper's initial prompt, so a voice note spells them as the list does. Capped at `max` characters; nothing when the note is missing, empty or unreadable.
+export const HARD_NAMES_NOTE = "context-hard-names.md";
 export function namesPrompt(dir: string, max = 300): string | undefined {
-  const names: string[] = [];
   try {
-    const files = readdirSync(dir).filter((f) => f.startsWith("people-") && f.endsWith(".md")).map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs })).sort((a, b) => b.t - a.t);
-    let size = "Names: .".length;
-    for (const { f } of files) {
-      const front = /^---\n([\s\S]*?)\n---/.exec(readFileSync(join(dir, f), "utf8").replace(/\r\n/g, "\n"))?.[1] ?? "";
-      const name = unquote(/^\s*name:[ \t]*(.*?)[ \t]*$/m.exec(front)?.[1] ?? "").replace(/^people[-: ]+/i, "").replace(/-/g, " ").replace(/\s+/g, " ").trim();
-      if (!name || names.includes(name)) continue;
-      if (size + name.length + 2 > max) break;
-      names.push(name);
-      size += name.length + 2;
-    }
-  } catch { /* unreadable: no names */ }
-  return names.length ? `Names: ${names.join(", ")}.` : undefined;
+    const list = parseNote(HARD_NAMES_NOTE, readFileSync(join(dir, HARD_NAMES_NOTE), "utf8"))?.text.replace(/\s+/g, " ").trim().slice(0, max).trim();
+    return list || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const gistOf = (text: string): string => text.split("\n").map((l) => l.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, LIMITS.gist) ?? "";
