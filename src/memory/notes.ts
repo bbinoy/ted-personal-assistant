@@ -113,7 +113,7 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
 }
 
 // The hard names the assistant keeps in this conversation's notes (context-hard-names.md, one list of correct spellings) as whisper's initial prompt, so a voice note spells them as the list does. Capped at `max` characters; nothing when the note is missing, empty or unreadable.
-const HARD_NAMES_NOTE = "context-hard-names.md";
+export const HARD_NAMES_NOTE = "context-hard-names.md";
 export function namesPrompt(dir: string, max = 300): string | undefined {
   try {
     const list = parseNote(HARD_NAMES_NOTE, readFileSync(join(dir, HARD_NAMES_NOTE), "utf8"))?.text.replace(/\s+/g, " ").trim().slice(0, max).trim();
