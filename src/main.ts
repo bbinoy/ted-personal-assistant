@@ -1,7 +1,7 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import "./core/agentstart.ts"; // second: a data folder in another layout stops the start before any module opens a file (core/requirelayout.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
-import type { PipelineDeps } from "./conversation/conversationmodel.ts";
+import type { Conversation, PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runLook } from "./run/agent.ts";
 import { chatTurn } from "./run/chattail.ts";
@@ -20,7 +20,7 @@ import { groupName, sponsorInGroup, sponsorOfMember } from "./conversation/group
 import { groupDir, loadSponsors, recordGroup } from "./conversation/groupstore.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
-import { ensureNotesDir } from "./memory/notes.ts";
+import { ensureNotesDir, namesPrompt } from "./memory/notes.ts";
 import { searchScope, warmSearchIndexes } from "./memory/search.ts";
 import { compactIfNeeded, GROUP_LOG_MAX_BYTES, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
@@ -98,10 +98,10 @@ const transcribing = new Limiter(() => 2) // voice notes transcribed at the same
 
 // A voice message's words, from the local speech model; the transcript goes into the message log like any message (a
 // mishearing can be searched there). Throws a sentence the user can be told if it cannot be made out.
-async function transcript(m: IncomingMessage): Promise<string> {
+async function transcript(m: IncomingMessage, conv: Conversation): Promise<string> {
   let heard = "";
   try {
-    heard = await transcribing.run(async () => transcribe(await messenger.attachmentFile(m.audio!), settings.whisperModel));
+    heard = await transcribing.run(async () => transcribe(await messenger.attachmentFile(m.audio!), settings.whisperModel, undefined, namesPrompt(conv.notesDir)));
   } catch (e) {
     const gaps = voiceReady(settings.whisperModel);
     console.error("voice: transcription failed:", (e as Error).message);

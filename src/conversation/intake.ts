@@ -67,7 +67,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     const target = { author: m.from, timestamp: m.timestamp };
     if (waysOf(conv).everyone) status(conv, "👂", target);
     try {
-      const text = clean("voice transcript", await deps.transcript(m), { max: LIMITS.body });
+      const text = clean("voice transcript", await deps.transcript(m, conv), { max: LIMITS.body });
       // Kept (id only, no copy) so the voice tool can build a cloned voice from it: per conversation, never across conversations.
       if (settings.tts.provider === "qwen" && m.audio) holdVoiceNote(conv.key, { ts: m.timestamp, id: m.audio.id, size: m.audio.size, by: m.from || m.fromUuid || "", byName: m.fromName && oneLine("sender name", m.fromName, 40), snippet: oneLine("voice note", text, 60) });
       return { ...m, text, audio: undefined, voice: true };

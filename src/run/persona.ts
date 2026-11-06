@@ -195,7 +195,7 @@ function peopleGuide(): string {
 // JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
 // conversation has (the preset's notes.dream, .tenant or .group).
 export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
+  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), hardNames: d.categories.includes("context"), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
 }
 
 // The general expert every run may delegate to (run/delegation.ts): the persona's expert text, the same rules and the same notes as the run it works for (`for`: that conversation's

@@ -112,6 +112,17 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
   return out;
 }
 
+// The hard names the assistant keeps in this conversation's notes (context-hard-names.md, one list of correct spellings) as whisper's initial prompt, so a voice note spells them as the list does. Capped at `max` characters; nothing when the note is missing, empty or unreadable.
+const HARD_NAMES_NOTE = "context-hard-names.md";
+export function namesPrompt(dir: string, max = 300): string | undefined {
+  try {
+    const list = parseNote(HARD_NAMES_NOTE, readFileSync(join(dir, HARD_NAMES_NOTE), "utf8"))?.text.replace(/\s+/g, " ").trim().slice(0, max).trim();
+    return list || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const gistOf = (text: string): string => text.split("\n").map((l) => l.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, LIMITS.gist) ?? "";
 
 // Pure: the index, MEMORY.md, as the SDK reads it: one line per note, "- people: [Mara](people-mara.md) - Mara lives in Lisbon (until 2026-11-01)". Expired notes are not passed in, the assistant's

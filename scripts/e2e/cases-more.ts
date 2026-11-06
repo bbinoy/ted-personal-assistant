@@ -1672,4 +1672,23 @@ const e48: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48];
+// ---- e50: the list of hard names the voice transcriber is given (context-hard-names.md) ----
+const VOICE = "[Voice message, transcribed automatically, so words may be misheard]";
+const hardNames = (o: Outcome) => o.notes["context-hard-names.md"] ?? "";
+const e50: Case = {
+  id: "e50",
+  title: "an ordinary voice message with common names leaves the list of hard names unchanged",
+  turns: [`${VOICE} Remind me on Friday to call Greta and Paul about the lunch.`],
+  world: () => ({ notes: { "context-hard-names.md": "---\nname: hard names\ndescription: spellings for the voice transcriber\n---\nWojciech Czarnecki\n" } }),
+  maxQuestions: 0,
+  state: (o) => [check("the list of hard names is unchanged", hardNames(o).replace(/^---[\s\S]*?---/, "").trim() === "Wojciech Czarnecki", hardNames(o)), check("a task was added", o.tasks.length >= 1)],
+  never: (o) => sends(o),
+  reply: ["It confirms the reminder in a line."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "Call Greta and Paul about the lunch" });
+    s.say("Done, I will remind you on Friday.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50];
