@@ -6,10 +6,11 @@ import { LIMITS } from "../core/sanitize.ts";
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
 // shape or content; a scope says where a dream works and what it may touch.
 
-const MAX_OPS = 16;
-const MAX_WRITES = 8;
+const MAX_OPS = 30;
+const MAX_WRITES = 12; // a merge, a split and a few new people notes in one night
 const MAX_DELETES = 12;
 const MIN_EVIDENCE = 12; // characters of the owner's own words a new fact must quote
+const MIN_REASON = 10; // characters of the model's own reason for deleting a note
 
 
 // What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
@@ -82,11 +83,12 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
       const note = existing.get(file);
       if (!existsSync(join(scope.notesDir, file)) || gone.has(file)) { reject(file, "no such note"); continue; }
       const expired = !!note?.expires && note.expires < ctx.today;
-      if (!expired && !quoted(o.evidence)) { reject(file, "not expired, and no quote from the owner"); continue; }
+      const reasoned = typeof o.reason === "string" && o.reason.trim().length >= MIN_REASON;
+      if (!expired && !quoted(o.evidence) && !reasoned) { reject(file, "not expired, no quote from the owner and no reason"); continue; }
       if (deleted.length >= MAX_DELETES) { reject(file, "too many deletions"); continue; }
       gone.add(file);
       deleted.push(file);
-      plan.actions.push({ kind: "delete", file, why: expired ? "expired" : "the owner said so" });
+      plan.actions.push({ kind: "delete", file, why: expired ? "expired" : reasoned ? String(o.reason).trim().slice(0, 120) : "the owner said so" });
       count--;
       continue;
     }
@@ -101,26 +103,17 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     const sources = [...new Set(Array.isArray(o.consolidates) ? o.consolidates.filter((s): s is string => typeof s === "string") : [])];
     let kind: "add" | "update" | "merge";
     if (sources.length > 0) {
-      // A merge may only shorten: it can carry no new information, so it needs no quote.
-      if (!sources.every((s) => writable(s) && existing.get(s) && !gone.has(s))) { reject(file, "merge of a note that does not exist or is not the dream's"); continue; }
-      const total = sources.reduce((n, s) => n + (existing.get(s)?.text.length ?? 0), 0);
-      if (text.length > total) { reject(file, "a merge must not be longer than what it merges"); continue; }
+      // Written from existing notes (merge, split, reformat, a note for a person they mention): what they hold is already memory, so no quote and no length limit.
+      if (!sources.every((s) => writable(s) && existing.get(s))) { reject(file, "built from a note that does not exist or is not the dream's"); continue; }
       kind = "merge";
     } else {
       if (!quoted(o.evidence)) { reject(file, "no verbatim quote from the owner's own words"); continue; }
       kind = existing.has(file) ? "update" : "add";
     }
-    if (kind === "add" && count >= (ctx.maxNotes ?? scope.maxNotes)) { reject(file, "memory is full"); continue; }
+    if (!existing.has(file) && count >= (ctx.maxNotes ?? scope.maxNotes)) { reject(file, "memory is full"); continue; }
     writes++;
-    if (kind === "add") count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: sources });
-    for (const s of sources) {
-      if (s !== file && !gone.has(s)) {
-        gone.add(s);
-        plan.actions.push({ kind: "delete", file: s, why: `merged into ${file}` });
-        count--;
-      }
-    }
+    if (!existing.has(file)) count++;
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: sources }); // (sources are only deleted by a delete of their own)
   }
   return plan;
 }

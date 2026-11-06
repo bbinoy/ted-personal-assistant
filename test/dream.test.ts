@@ -57,31 +57,50 @@ test("dream: setup and voice notes, odd names and bad input are never touched", 
   assert.equal(planOps({ ops: [write({ evidence, expires: "2020-01-01" })] }, ctx()).actions.length, 0); // already past
 });
 
-test("dream: a merge may only shorten; it needs no quote, and it removes what it merges", () => {
+test("dream: a write built from existing notes needs no quote and no length limit; sources stay unless deleted", () => {
   const a = note("people-mara.md", "Mara is Alex's sister and lives in Bern and likes tea.");
   const b = note("people-mara-birthday.md", "Mara's birthday is 3 March.");
   seed([a, b]);
-  const short = planOps({ ops: [write({ file: "people-mara.md", text: "Mara: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-mara.md", "people-mara-birthday.md"] })] }, ctx([a, b]));
-  assert.deepEqual(short.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md", "delete:people-mara-birthday.md"]);
-  // a "merge" that adds information (longer than its sources) is refused
+  const merged = planOps({ ops: [write({ file: "people-mara.md", text: "Mara: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-mara.md", "people-mara-birthday.md"] })] }, ctx([a, b]));
+  assert.deepEqual(merged.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md"]);
+  const gone = planOps({ ops: [write({ file: "people-mara.md", text: "Mara: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-mara.md", "people-mara-birthday.md"] }), { op: "delete", file: "people-mara-birthday.md", reason: "merged into people-mara.md" }] }, ctx([a, b]));
+  assert.deepEqual(gone.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md", "delete:people-mara-birthday.md"]);
   const longer = planOps({ ops: [write({ file: "people-mara.md", text: "x".repeat(300), consolidates: ["people-mara.md"] })] }, ctx([a, b]));
-  assert.equal(longer.actions.length, 0);
+  assert.equal(longer.actions.length, 1);
+  assert.equal(planOps({ ops: [write({ text: "x".repeat(MAX_NOTE_CHARS + 1), consolidates: ["people-mara.md"] })] }, ctx([a])).actions.length, 0); // the note size stays
+  // a split: one source feeds two new notes and is rewritten
+  const split = planOps({ ops: [write({ file: "people-lena.md", consolidates: ["people-mara.md"] }), write({ file: "people-jonas.md", consolidates: ["people-mara.md"] }), write({ file: "people-mara.md", text: "Mara: Alex's sister.", consolidates: ["people-mara.md"] })] }, ctx([a]));
+  assert.deepEqual(split.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md", "merge:people-jonas.md", "merge:people-mara.md"]);
   assert.equal(planOps({ ops: [write({ consolidates: ["people-nobody.md"] })] }, ctx([a])).actions.length, 0);
+  // setup and voice notes can not be a source, and a fact with no source still needs the quote
+  const setup = note("setup-calendar.md", "calendar ids");
+  assert.equal(planOps({ ops: [write({ consolidates: ["setup-calendar.md"] })] }, ctx([setup])).actions.length, 0);
+  assert.equal(planOps({ ops: [write({ file: "people-lena.md" })] }, ctx([a])).actions.length, 0);
 });
 
-test("dream: deleting needs an expired date (checked in code) or the owner's own words", () => {
+test("dream: the hard-names list is built from notes like any other write", () => {
+  const a = note("people-mara.md", "Mara Quispe-Valdivia is Alex's sister.");
+  seed([a]);
+  const ok = planOps({ ops: [write({ file: "context-hard-names.md", text: "Quispe-Valdivia, Szczecin", consolidates: ["people-mara.md"] })] }, ctx([a]));
+  assert.deepEqual(ok.actions.map((x) => `${x.kind}:${x.file}`), ["merge:context-hard-names.md"]);
+});
+
+test("dream: deleting needs an expired date (checked in code), the owner's own words or a reason", () => {
   const old = note("context-trip.md", "Trip to Geneva", "2026-10-01");
   const live = note("context-move.md", "Moving flats in November", "2026-12-01");
   seed([old, live]);
-  assert.equal(planOps({ ops: [{ op: "delete", file: "context-trip.md", reason: "expired" }] }, ctx([old, live])).actions.length, 1);
-  assert.equal(planOps({ ops: [{ op: "delete", file: "context-move.md", reason: "expired" }] }, ctx([old, live])).actions.length, 0); // claimed expired, is not
+  assert.equal(planOps({ ops: [{ op: "delete", file: "context-trip.md" }] }, ctx([old, live])).actions.length, 1);
+  assert.equal(planOps({ ops: [{ op: "delete", file: "context-move.md", reason: "expired" }] }, ctx([old, live])).actions.length, 0); // claimed expired, is not, and no real reason
+  assert.equal(planOps({ ops: [{ op: "delete", file: "context-move.md" }] }, ctx([old, live])).actions.length, 0);
   assert.equal(planOps({ ops: [{ op: "delete", file: "context-move.md", evidence: "I prefer meetings in the afternoon" }] }, ctx([old, live])).actions.length, 1);
+  const r = planOps({ ops: [{ op: "delete", file: "context-move.md", reason: "the move is long over" }] }, ctx([old, live]));
+  assert.equal(r.actions.length, 1);
 });
 
 test("dream: capped changes per run, and memory has a size limit", () => {
   seed([]);
-  const many = Array.from({ length: 12 }, (_, i) => write({ file: `people-p${i}.md`, evidence: "Mara is my sister and her birthday" }));
-  assert.equal(planOps({ ops: many }, ctx()).actions.length, 8);
+  const many = Array.from({ length: 16 }, (_, i) => write({ file: `people-p${i}.md`, evidence: "Mara is my sister and her birthday" }));
+  assert.equal(planOps({ ops: many }, ctx()).actions.length, 12);
   const full = planOps({ ops: [write({ evidence: "Mara is my sister and her birthday" })] }, ctx([], { maxNotes: 0 }));
   assert.equal(full.actions.length, 0);
 });

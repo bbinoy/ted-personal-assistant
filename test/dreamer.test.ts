@@ -136,7 +136,7 @@ test("one prompt: the same template for the owner, a friend and a group, with th
   assert.match(group, /what the group's members wrote/);
   for (const [p, list] of [[owned, cats.dream], [friend, cats.others], [group, cats.others]] as const) {
     assert.ok(p.includes(`with a category of ${list.join(", ")}.`), "the categories of that conversation, from the preset");
-    assert.match(p, /Every NEW fact or change needs "evidence"/);
+    assert.match(p, /Every NEW fact, one that no existing note holds, needs "evidence"/);
   }
   assert.match(dreamPrompt(NOW, "Mia", [], ["[10-13 20:00] Mia: hi"]), /The notes you keep about Mia right now/);
 });
