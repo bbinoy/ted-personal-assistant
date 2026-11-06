@@ -290,3 +290,164 @@ test("sub-headings follow the owner's local day, not UTC's", () => {
   assert.ok(html.includes('<li class="sub">Sat 7 Nov</li>'), html);
   assert.ok(html.includes('<li class="sub">Week of Mon 2 Nov</li>'), html);
 });
+
+// The date buttons: POST /tasks/<id>/move.
+const { stepDate } = await import("../src/tasks/taskspage.ts");
+const { systemZone } = await import("../src/core/timezone.ts");
+const { addDays, localOf, wallToUtc, todayIn } = await import("../src/tasks/when.ts");
+const { ledgerEntries } = await import("../src/core/messages.ts");
+const { convIdOfKey, convPaths } = await import("../src/core/convpaths.ts");
+const { peekConvDb } = await import("../src/core/convdb.ts");
+
+test("the date rule: today is the minimum, a past date never jumps past today", () => {
+  const rows: [string | undefined, "earlier" | "later", string, string | undefined][] = [
+    [undefined, "earlier", "2026-10-22", "2026-10-22"],
+    [undefined, "later", "2026-10-22", "2026-10-22"],
+    ["2026-10-10", "earlier", "2026-10-22", "2026-10-22"],
+    ["2026-10-10T09:00", "later", "2026-10-22", "2026-10-22"],
+    ["2026-10-21", "later", "2026-10-22", "2026-10-22"],
+    ["2026-10-22", "later", "2026-10-22", "2026-10-23"],
+    ["2026-10-22T09:00", "earlier", "2026-10-22", undefined],
+    ["2026-10-24", "later", "2026-10-22", "2026-10-25"],
+    ["2026-10-24", "earlier", "2026-10-22", "2026-10-23"],
+    ["2026-10-23", "earlier", "2026-10-22", "2026-10-22"], // (tomorrow back to today, never below)
+    ["2026-10-31", "later", "2026-10-22", "2026-11-01"], // month end
+    ["2026-11-01", "earlier", "2026-10-22", "2026-10-31"],
+    ["2026-12-31", "later", "2026-10-22", "2027-01-01"], // year end
+    ["2027-01-01", "earlier", "2026-10-22", "2026-12-31"],
+    ["2028-02-28", "later", "2026-10-22", "2028-02-29"], // leap day
+    ["2026-03-01", "later", "2026-02-28", "2026-03-02"],
+    ["2026-03-01", "earlier", "2026-02-28", "2026-02-28"],
+  ];
+  for (const [due, dir, today, want] of rows) assert.equal(stepDate(due, dir, today), want, `${due} ${dir} on ${today}`);
+});
+
+const today = () => todayIn(Date.now(), systemZone());
+const sc = (now = Date.now()) => ({ key: OWNER_KEY, zone: systemZone(), by: "owner", origin: "owner" as const, source: "chat" as const, now });
+const addNow = (title: string, o: Partial<import("../src/tasks/store.ts").NewItem> = {}) => S.addItem(sc(), { kind: "task", title, ...o }).item.id;
+const dueOf = (id: number) => S.getItem(OWNER_KEY, id)!.due;
+const moveBody = async (port: number, id: number, token: string, dir: string, json = false) => {
+  const r = await fetch(`http://127.0.0.1:${port}/tasks/${id}/move`, { method: "POST", redirect: "manual", headers: { origin: `http://127.0.0.1:${port}`, "content-type": "application/x-www-form-urlencoded", ...(json ? { accept: "application/json" } : {}) }, body: `token=${token}&dir=${dir}` });
+  return { status: r.status, location: r.headers.get("location"), text: await r.text() };
+};
+
+test("a move changes only the date, keeps the time, and answers with what to show", async () => {
+  const t = today();
+  const timed = addNow("Dentist", { due: `${addDays(t, 3)}T14:30` });
+  const dateless = addNow("Sort drawer");
+  const late = addNow("Old bill", { due: addDays(t, -9) });
+  const todayId = addNow("Standup", { due: t });
+  await withServer(async (port, token) => {
+    let r = await moveBody(port, timed, token, "later");
+    assert.deepEqual([r.status, r.location], [303, "/tasks"]);
+    assert.equal(dueOf(timed), `${addDays(t, 4)}T14:30`);
+    assert.equal(S.getItem(OWNER_KEY, timed)!.dueZone, systemZone());
+    r = await moveBody(port, timed, token, "earlier", true);
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.text), { due: JSON.parse(r.text).due, late: false, canEarlier: true });
+    assert.equal(dueOf(timed), `${addDays(t, 3)}T14:30`);
+
+    r = await moveBody(port, dateless, token, "later", true);
+    assert.equal(dueOf(dateless), t); // (no date: today, with no time)
+    assert.equal(JSON.parse(r.text).canEarlier, false);
+    r = await moveBody(port, late, token, "later", true);
+    assert.equal(dueOf(late), t);
+    assert.deepEqual([JSON.parse(r.text).late, JSON.parse(r.text).canEarlier], [false, false]);
+    r = await moveBody(port, todayId, token, "earlier", true); // (does nothing)
+    assert.equal(dueOf(todayId), t);
+    for (let i = 1; i <= 3; i++) await moveBody(port, todayId, token, "later");
+    assert.equal(dueOf(todayId), addDays(t, 3)); // (three taps, three days)
+    assert.equal((await moveBody(port, todayId, token, "sideways")).status, 400);
+  });
+});
+
+test("a move needs the token and the page's origin, and only touches the owner's open tasks", async () => {
+  const id = addNow("Hold", { due: addDays(today(), 2) });
+  const done = addNow("Finished", { due: addDays(today(), 2) });
+  S.completeItem(sc(), done);
+  let other = 0;
+  for (let i = 0; i < 60; i++) other = add("another-key", `Other errand ${i}`, { due: addDays(today(), 2) }).item.id;
+  await withServer(async (port, token) => {
+    const url = `/tasks/${id}/move`;
+    const zeros = "0".repeat(token.length);
+    for (const r of [await post(port, url, { token: null, body: "dir=later" }), await post(port, url, { body: `token=${zeros}&dir=later` }), await post(port, url, { origin: "http://evil.example", body: `token=${token}&dir=later` }), await post(port, url, { origin: null, body: `token=${token}&dir=later` })])
+      assert.deepEqual([r.status, r.body], [403, "forbidden"]);
+    assert.equal(dueOf(id), addDays(today(), 2));
+    assert.equal((await moveBody(port, 999_999, token, "later")).status, 404);
+    assert.equal((await moveBody(port, done, token, "later")).status, 404);
+    assert.equal(dueOf(done), addDays(today(), 2));
+    assert.equal((await moveBody(port, other, token, "later")).status, 404);
+    assert.equal(S.getItem("another-key", other)!.due, addDays(today(), 2));
+  });
+});
+
+test("a move shifts the reminder by the same days, drops today's focus mark when it leaves today, and is in the history and journal", async () => {
+  const t = today();
+  const zone = systemZone();
+  const id = addNow("Ring plumber", { due: addDays(t, 5), remindAt: wallToUtc(zone, addDays(t, 5), "08:15") });
+  S.editItem(sc(), id, { focus: true });
+  const overdue = addNow("Late thing", { due: addDays(t, -4), remindAt: wallToUtc(zone, addDays(t, 1), "09:00") });
+  const soon = addNow("Soon thing", { due: addDays(t, 2), remindAt: wallToUtc(zone, t, "00:01") });
+  const dateless = addNow("Loose end", { remindAt: wallToUtc(zone, addDays(t, 2), "10:00") });
+  await withServer(async (port, token) => {
+    await moveBody(port, id, token, "later");
+    const it = S.getItem(OWNER_KEY, id)!;
+    assert.equal(it.due, addDays(t, 6));
+    assert.deepEqual(localOf(it.remindAt!, zone), { date: addDays(t, 6), time: "08:15" });
+    assert.equal(it.focusOn, undefined); // (the new date is after today)
+    await moveBody(port, overdue, token, "earlier"); // (4 days late to today: the reminder moves 4 days with it)
+    assert.deepEqual(localOf(S.getItem(OWNER_KEY, overdue)!.remindAt!, zone), { date: addDays(t, 5), time: "09:00" });
+    await moveBody(port, soon, token, "earlier"); // (a day back would put the reminder in the past, where it would fire at once: it stays)
+    assert.equal(dueOf(soon), addDays(t, 1));
+    assert.deepEqual(localOf(S.getItem(OWNER_KEY, soon)!.remindAt!, zone), { date: t, time: "00:01" });
+    await moveBody(port, dateless, token, "later");
+    assert.equal(dueOf(dateless), t);
+    assert.deepEqual(localOf(S.getItem(OWNER_KEY, dateless)!.remindAt!, zone), { date: addDays(t, 2), time: "10:00" }); // (nothing to shift)
+  });
+  const ev = peekConvDb(convIdOfKey(OWNER_KEY))!.all<{ item_id: number; by: string; action: string; after: string }>("SELECT * FROM task_events WHERE item_id = ? ORDER BY id", id).at(-1)!;
+  assert.deepEqual([ev.by, ev.action], ["owner", "edited"]);
+  assert.ok(Object.keys(JSON.parse(ev.after)).includes("due"));
+  const lines = ledgerEntries(convPaths(convIdOfKey(OWNER_KEY)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
+  assert.ok(lines.some((l) => l.startsWith(`Edited task #${id} 'Ring plumber' (changed due, reminder, focus)`) && l.includes("moved on the task page")), lines.join("\n"));
+});
+
+test("a focus mark stays when the task moves to today", async () => {
+  const id = addNow("Keep focus", { due: addDays(today(), -2) });
+  S.editItem(sc(), id, { focus: true });
+  await withServer(async (port, token) => {
+    await moveBody(port, id, token, "later");
+    assert.equal(S.getItem(OWNER_KEY, id)!.focusOn, today());
+  });
+});
+
+test("a repeating task moves only this occurrence: the rule stays and the next one follows from the new date", async () => {
+  const t = today();
+  const id = addNow("Water plants", { due: addDays(t, 2), repeat: "every day" });
+  await withServer(async (port, token) => {
+    await moveBody(port, id, token, "later");
+    const it = S.getItem(OWNER_KEY, id)!;
+    assert.deepEqual([it.due, it.repeat, it.status], [addDays(t, 3), "every day", "open"]);
+    S.completeItem(sc(), id);
+    assert.equal(dueOf(id), addDays(t, 4)); // (the day after the moved one, one live item)
+    assert.equal(S.getItem(OWNER_KEY, id)!.repeat, "every day");
+  });
+});
+
+test("the buttons are on open rows with the title in their label, off done rows, and earlier is disabled for a task due today", () => {
+  const key = "stepper-key";
+  const t = todayIn(NOW, ZONE);
+  S.addItem(scope(key), { kind: "task", title: "Due today", due: t });
+  S.addItem(scope(key), { kind: "task", title: "Due soon", due: addDays(t, 2) });
+  const closed = S.addItem(scope(key), { kind: "task", title: "Closed one", due: addDays(t, 2) }).item.id;
+  S.completeItem(scope(key), closed);
+  const html = tasksPage(key, NOW, ZONE, "tok", "N");
+  const li = (title: string) => new RegExp(`<li[^>]*>(?:(?!</li>).)*${title}(?:(?!</li>).)*</li>`, "s").exec(html)![0];
+  assert.equal((li("Due today").match(/class="step"/g) ?? []).length, 1);
+  assert.match(li("Due today"), /<button name="dir" value="earlier"[^>]* aria-label="Move earlier: Due today" disabled>/);
+  assert.ok(!/value="later"[^>]* disabled/.test(li("Due today")));
+  assert.ok(!/value="earlier"[^>]* disabled/.test(li("Due soon")));
+  assert.match(li("Due soon"), /aria-label="Move later: Due soon"/);
+  assert.ok(!li("Closed one").includes('class="step"'));
+  assert.ok(!tasksPage(key, NOW, ZONE).includes('class="step"')); // (no token, no buttons)
+  assert.doesNotThrow(() => new Function(/<script nonce="N">(.*)<\/script>/s.exec(html)![1]!));
+});
