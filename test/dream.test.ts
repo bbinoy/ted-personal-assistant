@@ -62,7 +62,7 @@ test("dream: a write built from existing notes needs no quote and no length limi
   const b = note("people-mara-birthday.md", "Mara's birthday is 3 March.");
   seed([a, b]);
   const merged = planOps({ ops: [write({ file: "people-mara.md", text: "Mara: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-mara.md", "people-mara-birthday.md"] })] }, ctx([a, b]));
-  assert.deepEqual(merged.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md"]);
+  assert.deepEqual(merged.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md", "delete:people-mara-birthday.md"]); // shorter, same kind, not kept on purpose: the source goes
   const gone = planOps({ ops: [write({ file: "people-mara.md", text: "Mara: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-mara.md", "people-mara-birthday.md"] }), { op: "delete", file: "people-mara-birthday.md", reason: "merged into people-mara.md" }] }, ctx([a, b]));
   assert.deepEqual(gone.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-mara.md", "delete:people-mara-birthday.md"]);
   const longer = planOps({ ops: [write({ file: "people-mara.md", text: "x".repeat(300), consolidates: ["people-mara.md"] })] }, ctx([a, b]));
@@ -78,10 +78,64 @@ test("dream: a write built from existing notes needs no quote and no length limi
   assert.equal(planOps({ ops: [write({ file: "people-lena.md" })] }, ctx([a])).actions.length, 0);
 });
 
+const acts = (p: { actions: { kind: string; file: string }[] }) => p.actions.map((x) => `${x.kind}:${x.file}`);
+
+test("dream: a write built from notes adds no new number, name, address or link", () => {
+  const a = note("people-mara.md", "Mara is Alex's sister and lives in Bern. Call her on Sundays at 18:00.");
+  seed([a]);
+  const w = (text: string) => planOps({ ops: [write({ file: "people-mara.md", text, consolidates: ["people-mara.md"] })] }, ctx([a])).actions.length;
+  assert.equal(w("Always call Mara on Sundays at 18:00; she lives in Bern. During the week, keep it short. The sister of Alex."), 1); // reworded, sentence-start capitals
+  assert.equal(w("Mara is Alex's sister. See https://example.org/mara"), 0);
+  assert.equal(w("Mara is Alex's sister and works with Brindlemoor."), 0);
+  assert.equal(w("Mara is Alex's sister. Call at 19:00."), 0);
+  assert.equal(w("Mara is Alex's sister. Mail mara@example.org"), 0);
+  assert.equal(planOps({ ops: [write({ file: "people-mara.md", text: "Mara is Alex's sister, born 3 March.", consolidates: ["people-mara.md"] })] }, ctx([a])).actions.length, 1); // 3 March is the owner's own words
+});
+
+test("dream: reason-only deletes are capped at three, unless the note feeds a surviving write", () => {
+  const ns = ["a", "b", "c", "d", "e"].map((x) => note(`context-${x}.md`, `Note ${x}`));
+  seed(ns);
+  const dels = ns.map((n) => ({ op: "delete", file: n.file, reason: "this one is obsolete now" }));
+  assert.equal(planOps({ ops: dels }, ctx(ns)).actions.length, 3);
+  const fed = planOps({ ops: [write({ file: "context-all.md", text: "Note a, b, c, d, e.", consolidates: ns.map((n) => n.file) }), ...dels] }, ctx(ns));
+  assert.equal(fed.actions.length, 6);
+});
+
+test("dream: a rejected write leaves its sources alone, and a split is all or nothing", () => {
+  const a = note("people-mara.md", "Mara is Alex's sister and lives in Bern.");
+  seed([a]);
+  const gone = planOps({ ops: [write({ file: "people-lena.md", text: "Lena lives in Paris.", consolidates: ["people-mara.md"] }), { op: "delete", file: "people-mara.md", reason: "moved into the new note" }] }, ctx([a]));
+  assert.deepEqual(acts(gone), []);
+  const split = planOps({ ops: [write({ file: "people-lena.md", text: "Lena is Alex's cousin.", consolidates: ["people-mara.md"] }), write({ file: "people-jonas.md", text: "Jonas lives in Paris.", consolidates: ["people-mara.md"] }), write({ file: "people-mara.md", text: "Mara is Alex's sister.", consolidates: ["people-mara.md"] })] }, ctx([a]));
+  assert.deepEqual(acts(split), ["merge:people-lena.md"]);
+});
+
+test("dream: merging into another note of the same kind removes the source; a split, a rewrite or another kind keeps it", () => {
+  const a = note("style-short.md", "Replies are short, three sentences.");
+  const b = note("style-greet.md", "Greet by first name.");
+  const c = note("context-trip.md", "Alex goes to Bern in May.");
+  seed([a, b, c]);
+  const both = write({ file: "style-team.md", text: "Short replies, greet by first name.", consolidates: ["style-short.md", "style-greet.md"] });
+  assert.deepEqual(acts(planOps({ ops: [both] }, ctx([a, b, c]))), ["merge:style-team.md", "delete:style-short.md", "delete:style-greet.md"]);
+  const other = write({ file: "people-bern.md", text: "Bern.", consolidates: ["context-trip.md"] });
+  assert.deepEqual(acts(planOps({ ops: [other] }, ctx([a, b, c]))), ["merge:people-bern.md"]);
+  const second = write({ file: "style-tone.md", text: "Short.", consolidates: ["style-short.md"] });
+  assert.deepEqual(acts(planOps({ ops: [write({ file: "style-team.md", text: "Short replies.", consolidates: ["style-short.md"] }), second] }, ctx([a, b, c]))), ["merge:style-team.md", "merge:style-tone.md"]);
+});
+
+test("dream: a file is not both written and deleted in one plan", () => {
+  const a = note("people-mara.md", "Mara is Alex's sister.");
+  seed([a]);
+  const w = write({ file: "people-mara.md", text: "Mara is Alex's sister.", consolidates: ["people-mara.md"] });
+  const d = { op: "delete", file: "people-mara.md", reason: "this is obsolete now" };
+  assert.deepEqual(acts(planOps({ ops: [w, d] }, ctx([a]))), ["merge:people-mara.md"]);
+  assert.deepEqual(acts(planOps({ ops: [d, w] }, ctx([a]))), []); // the refused write takes its source's delete with it
+});
+
 test("dream: the hard-names list is built from notes like any other write", () => {
   const a = note("people-mara.md", "Mara Quispe-Valdivia is Alex's sister.");
   seed([a]);
-  const ok = planOps({ ops: [write({ file: "context-hard-names.md", text: "Quispe-Valdivia, Szczecin", consolidates: ["people-mara.md"] })] }, ctx([a]));
+  const ok = planOps({ ops: [write({ file: "context-hard-names.md", text: "Quispe-Valdivia", consolidates: ["people-mara.md"] })] }, ctx([a]));
   assert.deepEqual(ok.actions.map((x) => `${x.kind}:${x.file}`), ["merge:context-hard-names.md"]);
 });
 
