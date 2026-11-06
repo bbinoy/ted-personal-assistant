@@ -451,3 +451,91 @@ test("the buttons are on open rows with the title in their label, off done rows,
   assert.ok(!tasksPage(key, NOW, ZONE).includes('class="step"')); // (no token, no buttons)
   assert.doesNotThrow(() => new Function(/<script nonce="N">(.*)<\/script>/s.exec(html)![1]!));
 });
+
+// The pin button: POST /tasks/<id>/focus.
+const focusBody = async (port: number, id: number, token: string, on: string) => {
+  const r = await fetch(`http://127.0.0.1:${port}/tasks/${id}/focus`, { method: "POST", redirect: "manual", headers: { origin: `http://127.0.0.1:${port}`, "content-type": "application/x-www-form-urlencoded" }, body: `token=${token}&on=${on}` });
+  return { status: r.status, location: r.headers.get("location") };
+};
+const clearFocus = () => {
+  for (const it of S.listItems(OWNER_KEY, { limit: 200 }, Date.now(), systemZone())) if (S.isFocus(it, today())) S.editItem(sc(), it.id, { focus: false });
+};
+const journal = () => ledgerEntries(convPaths(convIdOfKey(OWNER_KEY)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
+const rowOf = (html: string, title: string) => new RegExp(`<li[^>]*>(?:(?!</li>).)*${title}(?:(?!</li>).)*</li>`, "s").exec(html)![0];
+
+test("a pin puts the task in Focus today and an unpin takes it out, with the date untouched and one journal line each", async () => {
+  clearFocus();
+  const later = addNow("Pin next week", { due: addDays(today(), 7) });
+  const late = addNow("Pin overdue", { due: addDays(today(), -3) });
+  const loose = addNow("Pin dateless");
+  await withServer(async (port, token) => {
+    for (const id of [later, late, loose]) {
+      const was = dueOf(id);
+      assert.deepEqual(await focusBody(port, id, token, "1"), { status: 303, location: "/tasks" });
+      assert.equal(S.getItem(OWNER_KEY, id)!.focusOn, today());
+      assert.equal(dueOf(id), was);
+    }
+    const html = await (await fetch(`http://127.0.0.1:${port}/tasks`)).text();
+    const focus = /<details open class="focus">.*?<\/details>/s.exec(html)![0];
+    for (const t of ["Pin next week", "Pin overdue", "Pin dateless"]) {
+      assert.ok(focus.includes(t), t);
+      assert.match(rowOf(html, t), /aria-pressed="true"/);
+    }
+    await focusBody(port, later, token, "1"); // (a stale page tapped twice: nothing more)
+    assert.equal(journal().filter((l) => l.includes("'Pin next week'") && l.includes("pinned on the task page")).length, 1);
+    assert.deepEqual(await focusBody(port, later, token, "0"), { status: 303, location: "/tasks" });
+    assert.equal(S.getItem(OWNER_KEY, later)!.focusOn, undefined);
+    assert.equal(dueOf(later), addDays(today(), 7));
+    const before = journal().length;
+    await focusBody(port, later, token, "0");
+    assert.equal(journal().length, before);
+    assert.ok(journal().some((l) => l.includes("'Pin next week'") && l.includes("unpinned on the task page")));
+    assert.equal((await focusBody(port, later, token, "maybe")).status, 400);
+  });
+});
+
+test("a pin needs the token and the page's origin, and only touches the owner's open tasks", async () => {
+  clearFocus();
+  const id = addNow("Guarded pin");
+  const done = addNow("Finished pin");
+  S.completeItem(sc(), done);
+  const other = add("another-key", "Other pin").item.id;
+  await withServer(async (port, token) => {
+    const url = `/tasks/${id}/focus`;
+    for (const r of [await post(port, url, { token: null, body: "on=1" }), await post(port, url, { body: `token=${"0".repeat(token.length)}&on=1` }), await post(port, url, { origin: "http://evil.example", body: `token=${token}&on=1` }), await post(port, url, { origin: null, body: `token=${token}&on=1` })])
+      assert.deepEqual([r.status, r.body], [403, "forbidden"]);
+    assert.equal(S.getItem(OWNER_KEY, id)!.focusOn, undefined);
+    for (const x of [999_999, done, other]) assert.equal((await focusBody(port, x, token, "1")).status, 404);
+    assert.equal(S.getItem(OWNER_KEY, done)!.focusOn, undefined);
+    assert.equal(S.getItem("another-key", other)!.focusOn, undefined);
+  });
+});
+
+test("when focus is full the pin is disabled on unpinned rows only, and a stale sixth pin changes nothing", async () => {
+  clearFocus();
+  const ids = Array.from({ length: S.FOCUS_MAX }, (_, i) => addNow(`Full pin ${i}`));
+  const extra = addNow("Sixth pin");
+  const one = (html: string, t: string) => /<button name="on"[^>]*>/.exec(rowOf(html, t))![0];
+  assert.ok(!one(tasksPage(OWNER_KEY, Date.now(), systemZone(), "tok"), "Sixth pin").includes("disabled"));
+  for (const id of ids) S.editItem(sc(), id, { focus: true });
+  const full = tasksPage(OWNER_KEY, Date.now(), systemZone(), "tok");
+  assert.match(one(full, "Sixth pin"), /title="Focus today is full \(5\)"[^>]* disabled/);
+  assert.match(one(full, "Full pin 0"), /title="Unpin from focus today"/);
+  assert.ok(!one(full, "Full pin 0").includes("disabled"));
+  assert.match(one(full, "Full pin 0"), /aria-label="Unpin from focus today: Full pin 0" aria-pressed="true"/);
+  assert.match(one(full, "Sixth pin"), /aria-label="Pin to focus today: Sixth pin" aria-pressed="false"/);
+  await withServer(async (port, token) => {
+    assert.deepEqual(await focusBody(port, extra, token, "1"), { status: 303, location: "/tasks" });
+    assert.equal(S.getItem(OWNER_KEY, extra)!.focusOn, undefined);
+    assert.deepEqual(await focusBody(port, ids[0]!, token, "0"), { status: 303, location: "/tasks" }); // (a pinned row can always be unpinned)
+    assert.equal(S.getItem(OWNER_KEY, ids[0]!)!.focusOn, undefined);
+  });
+});
+
+test("no token, no pin button; the script saves the page state before a pin", () => {
+  addNow("Bare pin");
+  assert.ok(!tasksPage(OWNER_KEY, Date.now(), systemZone()).includes("/focus"));
+  const html = tasksPage(OWNER_KEY, Date.now(), systemZone(), "tok", "N");
+  assert.match(html, /class="pin" method="post" action="\/tasks\/\d+\/focus"/);
+  assert.doesNotThrow(() => new Function(/<script nonce="N">(.*)<\/script>/s.exec(html)![1]!));
+});

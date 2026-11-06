@@ -2,11 +2,11 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
-import { completeItem, counts, dueClass, editItem, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
+import { completeItem, counts, dueClass, editItem, effectiveStatus, FOCUS_MAX, getItem, isFocus, listItems, TaskError, type Item } from "./store.ts";
 import { addDays, daysBetween, localOf, parseLocal, showLocal, todayIn, wallToUtc } from "./when.ts";
 import { BUCKETS, FOCUS, groupOpen, subGroups, type Bucket } from "./render.ts";
 
-// The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except two actions on each open row: a tick-off button and a pair of date buttons (earlier, later). It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
+// The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except three actions on each open row: a tick-off button, a pair of date buttons (earlier, later) and a pin button (focus today). It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
 
 export const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -33,33 +33,38 @@ function dateView(it: Item, now: number, zone: string): { due: string; late: boo
   return { due: it.due ? showLocal(it.due, today) : "", late: dueClass(it, now, zone) === "overdue", canEarlier: stepDate(it.due, "earlier", today) !== undefined };
 }
 
-function row(it: Item, now: number, zone: string, token?: string): string {
+function row(it: Item, now: number, zone: string, token?: string, full = false): string {
   const { due, late, canEarlier } = dateView(it, now, zone);
   const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind].filter(Boolean).map((b) => esc(b!));
   const tick = token === undefined ? "" : `<form class="tick" method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
   const step = (dir: Dir, sign: string, off = false): string => `<button name="dir" value="${dir}" title="Move ${dir}" aria-label="Move ${dir}: ${esc(it.title)}"${off ? " disabled" : ""}>${sign}</button>`;
-  const move = token === undefined ? "" : `<form class="step" method="post" action="/tasks/${it.id}/move"><input type="hidden" name="token" value="${esc(token)}">${step("earlier", "&#8249;", !canEarlier)}${step("later", "&#8250;")}</form>`;
+  const pinned = isFocus(it, todayIn(now, zone));
+  const pinTitle = pinned ? "Unpin from focus today" : full ? `Focus today is full (${FOCUS_MAX})` : "Pin to focus today";
+  const pin = `<form class="pin" method="post" action="/tasks/${it.id}/focus"><input type="hidden" name="token" value="${esc(token ?? "")}"><button name="on" value="${pinned ? 0 : 1}" title="${pinTitle}" aria-label="${pinned ? "Unpin from" : "Pin to"} focus today: ${esc(it.title)}" aria-pressed="${pinned}"${full && !pinned ? " disabled" : ""}>&#128204;</button></form>`;
+  const move = token === undefined ? "" : `<div class="steps"><form class="step" method="post" action="/tasks/${it.id}/move"><input type="hidden" name="token" value="${esc(token)}">${step("earlier", "&#8249;", !canEarlier)}${step("later", "&#8250;")}</form>${pin}</div>`;
   return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}">${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br>${move}<span class="m">${bits.join(" · ")}</span></div></li>`;
 }
 
-const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string => {
+const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string, full = false): string => {
   if (!items.length) return "";
-  const rows = (xs: readonly Item[]): string => xs.map((i) => row(i, now, zone, token)).join("");
+  const rows = (xs: readonly Item[]): string => xs.map((i) => row(i, now, zone, token, full)).join("");
   const body = (BUCKETS as readonly string[]).includes(title) ? subGroups(title as Bucket, items, now, zone).map((g) => (g.label ? `<li class="sub">${esc(g.label)}</li>` : "") + rows(g.items)).join("") : rows(items);
   return `<details${open ? " open" : ""}${title === FOCUS ? ' class="focus"' : ""}><summary>${esc(title)} (${items.length})</summary><ul>${body}</ul></details>`;
 };
 
 /**
- * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out; a date button posts in the background and the row's date text and buttons take the server's answer (without script the forms post and the server redirects back),
- * and the page reloads itself every minute (not while a post is in flight or just after a date button, so a reshuffle does not jump) keeping which sections are open and where it was scrolled (sessionStorage; if that is unavailable it simply reloads).
+ * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out; a date button posts in the background and the row's date text and buttons take the server's answer (without script the forms post and the server redirects back); a pin button posts normally (the row changes section, so the page reloads from the redirect) after saving the page state,
+ * and the page reloads itself every minute (not while a post is in flight or just after a date button, so a reshuffle does not jump). Both reloads keep which sections are open and where it was scrolled (sessionStorage; if that is unavailable it simply reloads).
  */
 const SCRIPT = String.raw`(()=>{
 const S=sessionStorage,K="tasks-page",k=(d)=>d.querySelector("summary").textContent.replace(/ \(\d+\)$/,"");
+const save=()=>{try{const o={};document.querySelectorAll("details").forEach((d)=>{o[k(d)]=d.open});S.setItem(K,JSON.stringify({o,y:scrollY}))}catch(e){}};
 try{const v=JSON.parse(S.getItem(K)||"null");S.removeItem(K);if(v){document.querySelectorAll("details").forEach((d)=>{if(k(d) in v.o)d.open=v.o[k(d)]});scrollTo(0,v.y)}}catch(e){}
 let q=0;
-setInterval(()=>{if(document.querySelector("form.busy")||Date.now()-q<20000)return;try{const o={};document.querySelectorAll("details").forEach((d)=>{o[k(d)]=d.open});S.setItem(K,JSON.stringify({o,y:scrollY}))}catch(e){}location.reload()},60000);
+setInterval(()=>{if(document.querySelector("form.busy")||Date.now()-q<20000)return;save();location.reload()},60000);
 document.addEventListener("submit",async(e)=>{
-const f=e.target;if(!f.classList||!(f.classList.contains("tick")||f.classList.contains("step")))return;
+const f=e.target;if(f.classList&&f.classList.contains("pin")){save();return}
+if(!f.classList||!(f.classList.contains("tick")||f.classList.contains("step")))return;
 e.preventDefault();const li=f.closest("li"),bs=[...f.querySelectorAll("button")],was=bs.map((b)=>b.disabled),step=f.classList.contains("step"),p=new URLSearchParams(new FormData(f));
 if(step){p.set("dir",e.submitter.value);q=Date.now()}
 li.querySelectorAll(".err").forEach((x)=>x.remove());f.classList.add("busy");bs.forEach((b)=>b.disabled=true);
@@ -85,6 +90,8 @@ export function tasksPage(key: string, now: number, zone: string, token?: string
   const done = listItems(key, { status: "done", limit: 200 }, now, zone).filter((i) => (i.doneAt ?? 0) >= now - WEEK * DAY);
   const c = counts(key, now, zone);
   const g = groupOpen(open, now, zone);
+  const today = todayIn(now, zone);
+  const full = open.filter((i) => i.status === "open" && isFocus(i, today)).length >= FOCUS_MAX;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><noscript><meta http-equiv="refresh" content="60"></noscript><title>Tasks</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
 ${BASE_CSS}
 .h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
@@ -95,9 +102,9 @@ button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}butt
 details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
 li.sub{display:block;border-left-color:transparent;padding:.5rem 0 .1rem .5rem;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#777}li.sub:not(:first-child){margin-top:.3rem}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
-form.step{float:right;clear:right;display:flex;gap:.3rem;margin:.15rem 0 0 .5rem}.step button{min-width:2.4rem;min-height:2.2rem;border-radius:.6rem;font-size:1.2rem;line-height:1;padding:0;border-color:#8884;color:#777}.step button:disabled{opacity:.3;cursor:default;background:transparent;border-color:#8884}
+.steps{float:right;clear:right;display:flex;gap:.3rem;margin:.15rem 0 0 .5rem}.steps form{display:flex;gap:.3rem}.steps button{min-width:2.4rem;min-height:2.2rem;border-radius:.6rem;font-size:1.2rem;line-height:1;padding:0;border-color:#8884;color:#777}.steps button:disabled{opacity:.3;cursor:default;background:transparent;border-color:#8884}.steps .pin button{font-size:1rem;filter:grayscale(1);opacity:.7}.steps .pin button:disabled{opacity:.3}.steps .pin button[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;filter:none;opacity:1}
 </style></head><body><h1>Tasks</h1>${navLink("/done")}<div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token, full)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}${nonce ? `<script nonce="${nonce}">${SCRIPT}</script>` : ""}</body></html>`;
 }
 
@@ -158,6 +165,21 @@ function moveTask(id: number, dir: Dir): ReturnType<typeof dateView> | undefined
   return dateView(item, now, zone);
 }
 
+/** Pins or unpins one of the owner's open tasks (the date stays). Nothing is written, and nothing journalled, when it is already as wanted; a full focus list (a stale page) changes nothing. False when the id is not one of the owner's open tasks. */
+function focusTask(id: number, on: boolean): boolean {
+  const now = Date.now();
+  const zone = systemZone();
+  const it = getItem(OWNER_KEY, id);
+  if (!it || effectiveStatus(it, now) !== "open") return false;
+  if (isFocus(it, todayIn(now, zone)) === on) return true;
+  try {
+    editItem({ key: OWNER_KEY, zone, by: "owner", origin: "owner", source: "chat", now, why: { text: on ? "pinned on the task page" : "unpinned on the task page" } }, id, { focus: on });
+  } catch (e) {
+    if (!(e instanceof TaskError)) throw e;
+  }
+  return true;
+}
+
 /** The second page, what was done on its own (conversation/donepage.ts): `read` renders it for the CSRF token and nonce; `undo` reverses the journal line made at that time, true when it did. */
 export interface DonePage {
   read: (token: string, nonce: string) => string;
@@ -165,11 +187,11 @@ export interface DonePage {
 }
 
 /**
- * GET /tasks (the page), GET /done (what was done, when `done` is given), GET /healthz, HEAD likewise, and the actions POST /tasks/<id>/done, POST /tasks/<id>/move (dir=earlier|later; a JSON answer when asked for, else a redirect) and POST /done/<at>/undo; any other path is 404, any other method 405.
- * `read` renders the page for this process's CSRF token; `tick` completes one of the owner's open tasks and says whether it did; `move` moves one's date and answers with the date to show (undefined: not an open task of the owner's).
+ * GET /tasks (the page), GET /done (what was done, when `done` is given), GET /healthz, HEAD likewise, and the actions POST /tasks/<id>/done, POST /tasks/<id>/move (dir=earlier|later; a JSON answer when asked for, else a redirect), POST /tasks/<id>/focus (on=1 pins to focus today, on=0 unpins; always a redirect) and POST /done/<at>/undo; any other path is 404, any other method 405.
+ * `read` renders the page for this process's CSRF token; `tick` completes one of the owner's open tasks and says whether it did; `move` moves one's date and answers with the date to show (undefined: not an open task of the owner's); `focus` pins or unpins one (false: not an open task of the owner's).
  * A POST needs the right Host, an Origin equal to the page's own, a form content type, a tiny body and the token; every CSRF failure gets the same 403.
  */
-export function tasksPageServer(read: (token: string, nonce: string) => string = (t, n) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t, n), tick: (id: number) => boolean = tickOff, done?: DonePage, move: (id: number, dir: Dir) => ReturnType<typeof dateView> | undefined = moveTask): Server {
+export function tasksPageServer(read: (token: string, nonce: string) => string = (t, n) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t, n), tick: (id: number) => boolean = tickOff, done?: DonePage, move: (id: number, dir: Dir) => ReturnType<typeof dateView> | undefined = moveTask, focus: (id: number, on: boolean) => boolean = focusTask): Server {
   const token = randomBytes(32).toString("hex"); // per process: a page from before a restart posts nothing
   return createServer((req, res) => {
     const path = (req.url ?? "").split("?")[0]!;
@@ -180,7 +202,7 @@ export function tasksPageServer(read: (token: string, nonce: string) => string =
     const host = req.headers.host;
     if (!hostAllowed(host, req.socket.localPort)) return send(421, "text/plain", "misdirected request"); // (DNS rebinding: a web page may point its own name at 127.0.0.1)
     if (req.method === "POST") {
-      const m = /^\/tasks\/(\d{1,9})\/(done|move)$/.exec(path);
+      const m = /^\/tasks\/(\d{1,9})\/(done|move|focus)$/.exec(path);
       const u = done ? /^\/done\/(\d{1,16})\/undo$/.exec(path) : null;
       if (!m && !u) return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
       const forbidden = (): void => send(403, "text/plain", "forbidden");
@@ -205,6 +227,10 @@ export function tasksPageServer(read: (token: string, nonce: string) => string =
             const v = move(Number(m[1]), dir);
             if (!v) return send(404, "text/plain", "not found");
             if (req.headers.accept?.includes("application/json")) return send(200, "application/json", JSON.stringify(v));
+          } else if (m?.[2] === "focus") {
+            const on = form.get("on");
+            if (on !== "1" && on !== "0") return send(400, "text/plain", "bad request");
+            if (!focus(Number(m[1]), on === "1")) return send(404, "text/plain", "not found");
           } else if (!(m ? tick(Number(m[1])) : await done!.undo(Number(u![1])))) return send(404, "text/plain", "not found");
         } catch (e) {
           console.error(`tasks page: ${(e as Error).message}`);

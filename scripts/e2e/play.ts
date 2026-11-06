@@ -102,7 +102,10 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const scope: Scope = { key: OWNER_KEY, zone: o.zone, by: "owner", origin: "owner", source: "chat", now: nowMs };
   const firstId = Math.max(0, ...listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone).map((x) => x.id)); // (tasks of an earlier case in the same data folder are not this case's)
   for (const x of listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone)) dropItem(scope, x.id); // (a duplicate of a live task of an earlier case would be refused)
-  for (const t of world.tasks ?? []) addItem(scope, t);
+  for (const { focus, ...t } of world.tasks ?? []) {
+    const { item } = addItem(scope, t);
+    if (focus) editItem(scope, item.id, { focus: true }); // (an owner's pin from the task page)
+  }
 
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);

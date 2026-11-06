@@ -1691,4 +1691,47 @@ const e50: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50];
+// ---- e51: the daily brief sets the whole of today's Focus: the owner's five pins that it does not list are taken out, so the limit never stops it ----
+const e51: Case = {
+  id: "e51",
+  title: "the daily brief replaces the owner's pins: five pinned tasks, the brief's own Focus fits, the unlisted pins are taken out and not mentioned",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Budget review", start: t.local(t.today, "11:00"), end: t.local(t.today, "12:00"), zone: t.zone }],
+    tasks: [
+      { title: "Send the venue deposit", due: t.today, focus: true },
+      { title: "Reorganise the bookshelf", focus: true },
+      { title: "Try the new tea shop", focus: true },
+      { title: "Sort old photos", focus: true },
+      { title: "Read the gardening book", focus: true },
+      { title: "Prepare numbers for the budget review", due: t.today },
+    ],
+    notes: { "routine-daily-brief.md": routineBrief(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const marked = o.tasks.filter((x) => x.status === "open" && x.focusOn === o.time.today);
+    const by = (re: RegExp) => o.tasks.find((x) => re.test(x.title));
+    const brief = briefBodies(o).join("\n");
+    return [
+      check("the brief was delivered once", briefBodies(o).length === 1),
+      check("today's Focus is 1 to 5 tasks", marked.length >= 1 && marked.length <= 5, marked.map((x) => x.title).join("; ")),
+      check("the budget numbers are in Focus", !!by(/budget/i)?.focusOn),
+      check("the undated pins the brief does not list are out", ["bookshelf", "tea shop", "old photos", "gardening"].every((w) => !by(new RegExp(w, "i"))?.focusOn), marked.map((x) => x.title).join("; ")),
+      check("the brief does not talk about removed pins", !/unpin|removed (the |your )?(pin|mark)|took .* out of focus/i.test(brief), brief.slice(0, 200)),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is a short chat message (the brief itself went by mail) and asks no question.", "It does not mention pins or focus marks that were taken out."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") });
+    for (const w of ["bookshelf", "tea shop", "old photos", "gardening"]) s.tasks.edit(s.tasks.find(w), { focus: false });
+    s.tasks.edit(s.tasks.find("budget review"), { focus: true });
+    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Focus today\n- Send the venue deposit\n- Budget review at 11:00: numbers prepared" });
+    s.say("Your brief is in your inbox.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51];
