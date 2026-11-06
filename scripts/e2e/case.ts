@@ -20,7 +20,7 @@ export interface Time {
 }
 
 interface World {
-  tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
+  tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number; focus?: boolean }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder)
   calendar?: SeedEvent[];
   mail?: SeedMail[];
   mailAccounts?: string[]; // more accounts in the mail client (account 2, 3...; `account` of a seed mail picks one), by email address
@@ -81,7 +81,7 @@ export interface PerfectScript {
     find(titlePart: string): number; // the id of the open task whose title has this text
     done(id: number): void;
     drop(id: number): void;
-    edit(id: number, patch: { title?: string; due?: string | null; details?: string | null; remindAtMs?: number | null }): void;
+    edit(id: number, patch: { title?: string; due?: string | null; details?: string | null; remindAtMs?: number | null; focus?: boolean }): void;
   };
   ask(tool: string, question: string, answer: string, payment?: boolean): void; // a question the scripted run put to the owner
   note(file: string, text: string): void; // a note file the run saved
