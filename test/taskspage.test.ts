@@ -386,7 +386,8 @@ test("a move shifts the reminder by the same days, drops today's focus mark when
   const zone = systemZone();
   const id = addNow("Ring plumber", { due: addDays(t, 5), remindAt: wallToUtc(zone, addDays(t, 5), "08:15") });
   S.editItem(sc(), id, { focus: true });
-  const overdue = addNow("Late thing", { due: addDays(t, -4), remindAt: wallToUtc(zone, addDays(t, -4), "09:00") });
+  const overdue = addNow("Late thing", { due: addDays(t, -4), remindAt: wallToUtc(zone, addDays(t, 1), "09:00") });
+  const soon = addNow("Soon thing", { due: addDays(t, 2), remindAt: wallToUtc(zone, t, "00:01") });
   const dateless = addNow("Loose end", { remindAt: wallToUtc(zone, addDays(t, 2), "10:00") });
   await withServer(async (port, token) => {
     await moveBody(port, id, token, "later");
@@ -395,7 +396,10 @@ test("a move shifts the reminder by the same days, drops today's focus mark when
     assert.deepEqual(localOf(it.remindAt!, zone), { date: addDays(t, 6), time: "08:15" });
     assert.equal(it.focusOn, undefined); // (the new date is after today)
     await moveBody(port, overdue, token, "earlier"); // (4 days late to today: the reminder moves 4 days with it)
-    assert.deepEqual(localOf(S.getItem(OWNER_KEY, overdue)!.remindAt!, zone), { date: t, time: "09:00" });
+    assert.deepEqual(localOf(S.getItem(OWNER_KEY, overdue)!.remindAt!, zone), { date: addDays(t, 5), time: "09:00" });
+    await moveBody(port, soon, token, "earlier"); // (a day back would put the reminder in the past, where it would fire at once: it stays)
+    assert.equal(dueOf(soon), addDays(t, 1));
+    assert.deepEqual(localOf(S.getItem(OWNER_KEY, soon)!.remindAt!, zone), { date: t, time: "00:01" });
     await moveBody(port, dateless, token, "later");
     assert.equal(dueOf(dateless), t);
     assert.deepEqual(localOf(S.getItem(OWNER_KEY, dateless)!.remindAt!, zone), { date: addDays(t, 2), time: "10:00" }); // (nothing to shift)

@@ -138,7 +138,7 @@ function tickOff(id: number): boolean {
   return true;
 }
 
-/** Moves one of the owner's open tasks by `stepDate`'s rule, through the store function the update_task tool uses. Its time stays, its reminder moves by the same days, and a date after today drops the focus mark. Undefined when the id is not one of the owner's open tasks. */
+/** Moves one of the owner's open tasks by `stepDate`'s rule, through the store function the update_task tool uses. Its time stays, its reminder moves by the same days (not into the past, where it would fire at once), and a date after today drops the focus mark. Undefined when the id is not one of the owner's open tasks. */
 function moveTask(id: number, dir: Dir): ReturnType<typeof dateView> | undefined {
   const now = Date.now();
   const zone = systemZone();
@@ -149,10 +149,11 @@ function moveTask(id: number, dir: Dir): ReturnType<typeof dateView> | undefined
   if (!date) return dateView(it, now, zone);
   const old = it.due ? parseLocal(it.due) : undefined;
   const at = it.remindAt !== undefined && old ? localOf(it.remindAt, zone) : undefined; // (a dateless task's reminder has no due to move with)
+  const remindAt = at && wallToUtc(zone, addDays(at.date, daysBetween(old!.date, date)), at.time);
   const { item } = editItem(
     { key: OWNER_KEY, zone, by: "owner", origin: "owner", source: "chat", now, why: { text: "moved on the task page" } },
     id,
-    { due: old?.time ? `${date}T${old.time}` : date, ...(at ? { remindAt: wallToUtc(zone, addDays(at.date, daysBetween(old!.date, date)), at.time) } : {}), ...(date > today ? { focus: false } : {}) },
+    { due: old?.time ? `${date}T${old.time}` : date, ...(remindAt !== undefined && remindAt > now ? { remindAt } : {}), ...(date > today ? { focus: false } : {}) },
   );
   return dateView(item, now, zone);
 }
