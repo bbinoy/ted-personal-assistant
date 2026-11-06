@@ -44,7 +44,9 @@ export async function transcribe(file: string, model: string, maxSeconds?: numbe
   try {
     const wav = join(dir, "in.wav");
     await run("ffmpeg", ["-v", "error", ...SAFE_INPUT, "-i", file, ...(maxSeconds ? ["-t", String(maxSeconds)] : []), "-ar", "16000", "-ac", "1", "-f", "wav", wav], { timeout: TIMEOUT_MS, env });
-    const { stdout } = await run("whisper-cli", ["-m", model, "-f", wav, "-l", "auto", "-nt", "-np", ...(prompt ? ["--prompt", prompt] : [])], { timeout: TIMEOUT_MS, env, maxBuffer: 4_000_000 });
+    const { stdout } = await run("whisper-cli", ["-m", model, "-f", wav, "-l", "auto", "-nt", "-np", ...(prompt ? ["--prompt", prompt] : [])], { timeout: TIMEOUT_MS, env, maxBuffer: 4_000_000 }).catch((e: NodeJS.ErrnoException & { killed?: boolean }) => {
+      throw prompt ? new Error(`whisper-cli failed (${e.killed ? "timed out" : e.code ?? "unknown"})`) : e; // node's message repeats the arguments, and the prompt is a person's own note: never to a log
+    });
     return cleanTranscript(stdout);
   } finally {
     await rm(dir, { recursive: true, force: true });
