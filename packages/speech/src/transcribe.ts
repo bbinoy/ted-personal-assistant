@@ -34,16 +34,17 @@ export function voiceReady(model: string): { ok: boolean; missing: string[] } {
  * @param file any audio file ffmpeg can read
  * @param model path of a whisper.cpp ggml model file
  * @param maxSeconds transcribe only this much from the start (a long audio file)
+ * @param prompt whisper's initial prompt (a short list of names to spell as given); never logged
  * @throws if ffmpeg or whisper-cli is missing or fails, or after 120 s
  */
-export async function transcribe(file: string, model: string, maxSeconds?: number): Promise<string> {
+export async function transcribe(file: string, model: string, maxSeconds?: number, prompt?: string): Promise<string> {
   if (!existsSync(file)) throw new Error("the recording is not on disk");
   const dir = await mkdtemp(join(tmpdir(), "voice-"));
   const env = toolEnv();
   try {
     const wav = join(dir, "in.wav");
     await run("ffmpeg", ["-v", "error", ...SAFE_INPUT, "-i", file, ...(maxSeconds ? ["-t", String(maxSeconds)] : []), "-ar", "16000", "-ac", "1", "-f", "wav", wav], { timeout: TIMEOUT_MS, env });
-    const { stdout } = await run("whisper-cli", ["-m", model, "-f", wav, "-l", "auto", "-nt", "-np"], { timeout: TIMEOUT_MS, env, maxBuffer: 4_000_000 });
+    const { stdout } = await run("whisper-cli", ["-m", model, "-f", wav, "-l", "auto", "-nt", "-np", ...(prompt ? ["--prompt", prompt] : [])], { timeout: TIMEOUT_MS, env, maxBuffer: 4_000_000 });
     return cleanTranscript(stdout);
   } finally {
     await rm(dir, { recursive: true, force: true });
