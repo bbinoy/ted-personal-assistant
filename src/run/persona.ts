@@ -133,7 +133,7 @@ function systemFor(conv: Pick<Conversation, "kind">, caps: ReadonlySet<Capabilit
       channel: own ? (settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`) : "",
     }),
     rules(s, timed),
-    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, categories: identity(own ? ownerConv : { kind: "group" }).categories.join(", "), hardNames: identity(own ? ownerConv : { kind: "group" }).categories.includes("context"), own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
+    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, categories: identity(own ? ownerConv : { kind: "group" }).categories.join(", "), own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
     timed ? say("routine") : undefined,
     caps.has("tasks") ? say("tasks", { own, group, who, reads: looker.reads, mail: s.mail }) : undefined,
     background(looker, caps),
