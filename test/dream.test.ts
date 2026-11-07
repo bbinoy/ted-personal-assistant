@@ -216,15 +216,26 @@ test("dream: any existing note may be a source (read-only), names are tidied, a 
   const setup = note("setup-calendar.md", "calendar ids");
   seed([a, status, setup]);
   const text = "Mara: Alex's sister, Bern, birthday 3 March.";
-  // a setup note as the only source: accepted read-only, never deleted (even though the write is shorter)
-  const ro = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["setup-calendar.md"] })] }, ctx([a, status, setup]));
+  // a routine note as the only source: accepted read-only, never deleted (even though the write is shorter)
+  const routine = note("routine-brief.md", "Bern trip every month.");
+  const ro = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["routine-brief.md"] })] }, ctx([a, status, setup, routine]));
   assert.deepEqual(ro.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md"]);
+  // setup and voice notes are dropped like a status note; a long name is capped in the reason
+  const voice = note("voice-writing.md", "sign-off Best");
+  for (const src of ["setup-calendar.md", "voice-writing.md"]) {
+    const p = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: [src] })] }, ctx([a, setup, voice]));
+    assert.equal(p.actions.length, 0, src);
+    assert.match(p.rejected[0].why, new RegExp(`source not memory: ${src.replace(".", "\\.")}`));
+  }
+  const long = planOps({ ops: [write({ consolidates: ["x".repeat(500)] })] }, ctx([a]));
+  assert.match(long.rejected[0].why, /source missing: \(invalid name\)/);
+  assert.ok(long.rejected[0].why.length < 200);
   // a status note is no source: dropped, named, and the quote rule applies
   const st = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["status-brief.md"] })] }, ctx([a, status, setup]));
   assert.equal(st.actions.length, 0);
   assert.match(st.rejected[0].why, /source not memory: status-brief\.md/);
   assert.equal(planOps({ ops: [write({ evidence: "Mara is my sister and her birthday is on 3 March", consolidates: ["status-brief.md"] })] }, ctx([a, status])).actions.length, 1);
-  const mixed = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["setup-calendar.md", "people-mara.md"] })] }, ctx([a, status, setup]));
+  const mixed = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["routine-brief.md", "people-mara.md"] })] }, ctx([a, status, setup, routine]));
   assert.deepEqual(mixed.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md", "delete:people-mara.md"]); // only the writable source can go
   // a non-writable note is still never the target
   assert.equal(planOps({ ops: [write({ file: "status-brief.md", text, consolidates: ["people-mara.md"] })] }, ctx([a, status])).actions.length, 0);

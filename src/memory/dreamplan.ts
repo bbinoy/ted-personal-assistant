@@ -15,7 +15,8 @@ const MIN_REASON = 10; // characters of the model's own reason for deleting a no
 
 
 // What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
-// pages) and voice-* notes come from the owner's sent mail: neither is learned from chat.
+// pages) and voice-* notes come from the owner's sent mail: neither is learned from chat, and
+// neither (nor status-*) may be a source of a write. A routine-* note may be one, read-only.
 // Where a dream works and what it may touch. The owner's own notes are one scope; every group has its own
 // (groupstore.ts), so a group's dream can never read or write anything but that group's notes.
 export interface Scope {
@@ -51,6 +52,7 @@ export interface NoteFile {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+const NOT_SOURCE = [STATUS_PREFIX, "setup-", "voice-"]; // may hold text from mail: never a source
 const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -117,10 +119,11 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
     const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
     const selfNamed = named.includes(file);
-    // A status note is a record of runs that read mail, not memory: it is no source (dropped like a missing one).
-    const isStatus = (s: string) => s.startsWith(STATUS_PREFIX);
-    const sources = named.filter((s) => s !== file && existing.get(s) && !isStatus(s));
-    const missing = named.filter((s) => s !== file && (!existing.get(s) || isStatus(s))).map((s) => (isStatus(s) ? `source not memory: ${s}` : `source missing: ${s}`)).join(", ");
+    // Notes that may hold text from mail (status, setup, voice) are no source: dropped like a missing one. Reasons name a file, capped.
+    const notMemory = (s: string) => NOT_SOURCE.some((p) => s.startsWith(p));
+    const shown = (s: string) => (FILE.test(s) ? s : "(invalid name)");
+    const sources = named.filter((s) => s !== file && existing.get(s) && !notMemory(s));
+    const missing = named.filter((s) => s !== file && (!existing.get(s) || notMemory(s))).map((s) => (notMemory(s) ? `source not memory: ${shown(s)}` : `source missing: ${shown(s)}`)).join(", ");
     const bad = (why: string) => { reject(file, missing ? `${why} (${missing})` : why); for (const x of named) lost.add(x); };
     const text = typeof o.text === "string" ? o.text.replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim() : "";
     const description = typeof o.description === "string" ? o.description.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist) : "";
@@ -143,7 +146,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     written.add(file);
     textLen.set(file, text.length);
     if (!existing.has(file)) count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s) && !isStatus(s)) }); // (sources are only deleted by a delete of their own)
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s) && !notMemory(s)) }); // (sources are only deleted by a delete of their own)
   }
 
   // A rejected write takes back every delete and rewrite of its sources (a split loses nothing it did not keep).
