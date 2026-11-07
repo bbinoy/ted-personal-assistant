@@ -67,6 +67,8 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const bare = (u: string) => u.split("#")[0]!;
 const HAND = " Stop with status needs_owner and give handoffUrl.";
+const FRAME_ROLES = /^i?frame$/;
+const FRAME_HINT = " The fields are inside this frame: take browser_snapshot with target set to this ref (or browser_find with the field's label) and use the refs of the fields it shows."; // a long page view is cut, so a frame can show with nothing under it
 const SNAPSHOT_CAP = LIMITS.pageView; // bigger page views are cut with a visible marker
 const MAX_DENIED = 6;
 const AUTOFILL_SENSITIVE = /\b(cc-[a-z-]+|current-password|new-password|one-time-code)\b/i; // autocomplete tokens of card and login fields
@@ -442,7 +444,7 @@ export class BrowseGuard {
     }
     if (u.protocol !== "https:") return stop("A card is only typed on https pages.");
     if (!this.viewUrl || this.viewUrl !== this.url) return fix("The page changed since the last page view. Take a fresh browser_snapshot and use a ref from it.");
-    if (!FIELD_ROLES.test(n.role)) return fix(`${n.ref} is a ${n.role}, not a text field.`);
+    if (!FIELD_ROLES.test(n.role)) return fix(`${n.ref} is a ${n.role}, not a text field.${FRAME_ROLES.test(n.role) ? FRAME_HINT : ""}`);
     if (n.disabled) return fix(`${n.ref} cannot be typed into (disabled or read-only).`);
     if (n.value) return fix("That field is not empty. A card detail is typed only into an empty field.");
     if (kindOfFieldName(n.name) !== kind) return fix(`The field “${clip(n.name || n.ref, LIMITS.control)}” is not the ${WORDS[kind]} field.`);
@@ -864,7 +866,7 @@ export class BrowseGuard {
     }
     out = cleanText(out).text; // refs and names are remembered as the model will read them, hidden characters out
     out = this.redact(out);
-    if (out.length > SNAPSHOT_CAP) out = `${out.slice(0, SNAPSHOT_CAP)}\n[... ${out.length - SNAPSHOT_CAP} characters of the page view cut: use browser_find for what you need, or a narrower page]`;
+    if (out.length > SNAPSHOT_CAP) out = `${out.slice(0, SNAPSHOT_CAP)}\n[... ${out.length - SNAPSHOT_CAP} characters of the page view cut: use browser_find for what you need, or browser_snapshot with target set to the ref of the part you need (a frame that shows nothing under it may be cut)]`;
     if (/\[ref=|### Snapshot|Page URL/.test(out)) this.record("browse_view", "page", "browse", { tool: short(toolName), chars: out.length, cut: out.length > SNAPSHOT_CAP, fromFile: !!link });
     if (short(toolName) === "take_screenshot") this.record("browse_view", "screenshot", "browse", { tool: short(toolName), chars: out.length });
     this.remember(toolName, input, out, seen);
@@ -897,11 +899,12 @@ export class BrowseGuard {
       if (this.pay.approval && !this.pay.attempted && bare(seen) !== this.pay.approval.url) this.voidPay("the page changed");
     }
     this.navNext = false;
-    if (name === "snapshot" && /\[ref=/.test(text)) (this.fullView = text), (this.fullUrl = this.url), this.fullSeq++;
+    const part = name === "find" || (name === "snapshot" && (input.target !== undefined || input.depth !== undefined)); // a view of one part, or of some depth, is not the page
+    if (name === "snapshot" && !part && /\[ref=/.test(text)) (this.fullView = text), (this.fullUrl = this.url), this.fullSeq++;
     if (name === "navigate" || name === "navigate_back") this.typed.clear();
     if (/\[ref=/.test(text)) {
       const fresh = parseSnapshot(text);
-      if (name === "find") for (const [k, v] of fresh) this.nodes.set(k, v);
+      if (part) for (const [k, v] of fresh) this.nodes.set(k, v);
       else (this.nodes = fresh, (this.viewUrl = this.url), (this.view = text));
     }
     if (name === "type" && isRef(input.target) && !this.justFilled.has(String(input.target))) {

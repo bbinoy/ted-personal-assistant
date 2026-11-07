@@ -1,0 +1,11 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Fake Shop payment</title></head>
+<body>
+  <h1>Payment</h1>
+  <p>Ticket Zurich to Bern CHF 40.00</p>
+  <p>Seat reservation CHF 5.00</p>
+  <p>Total CHF 45.00</p>
+  <!--PAD-->
+  <iframe id="card" title="Secure payment" src="https://js.stripe.com:8443/outer" width="400" height="260"></iframe>
+  <button type="button" onclick="document.getElementById('card').contentWindow.postMessage('pay', '*')">Pay CHF 45.00</button>
+</body></html>
