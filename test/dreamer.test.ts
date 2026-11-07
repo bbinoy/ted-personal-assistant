@@ -121,7 +121,7 @@ test("dream state: the owner's and a group's are each in their own conversation'
   await d.run(NOW);
   assert.equal(c.calls.length, 1);
   assert.match(c.calls[0]!, /a new thing after the last dream/);
-  assert.doesNotMatch(c.calls[0]!, /old line before/);
+  assert.match(c.calls[0]!, /earlier_conversation>\n[^]*old line before/); // the older part is there, apart from the new one
   assert.equal(readDream(OWNER_CONV).lastRunAt, NOW.toISOString());
 });
 
