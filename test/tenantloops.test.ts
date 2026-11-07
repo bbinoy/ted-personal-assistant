@@ -466,3 +466,24 @@ test("capabilitiesOf is the one answer: instance switches, her own settings and 
     Object.assign(f, was);
   }
 });
+
+test("a friend's dream looks back at her own older lines: a later deletion or edit holds, assistant text is no evidence", async () => {
+  const { dreamStateConv, writeDream } = await import("../src/modules/memory/dreamscope.ts");
+  const mara = person("Mia");
+  const old = new Date(NOON.getTime() - 9 * 86_400_000);
+  const recent = new Date(NOON.getTime() - 86_400_000);
+  const log = T.tenantContext(mara).logFile;
+  writeDream(dreamStateConv(tenant(mara.id)), { day: "2026-10-12", lastRunAt: new Date(NOON.getTime() - 3 * 86_400_000).toISOString() });
+  recordMessage("owner", 1, "my cousin Ida lives by the sea", old, log);
+  recordMessage("owner", 2, "my cousin Ida visits in June", old, log);
+  recordMessage("chat", 3, "Your aunt Greta is vegetarian, I noted.", old, log);
+  recordMessage("delete", 4, "[a message was deleted by its author]", recent, log, { of: 1 });
+  recordMessage("edit", 5, "my cousin Ida visits in July", recent, log, { of: 2 });
+  recordMessage("owner", 6, "new line after the last dream", recent, log);
+  let seen = "";
+  const evidence = ["my cousin Ida lives by the sea", "my cousin Ida visits in June", "aunt Greta is vegetarian", "my cousin Ida visits in July"];
+  const run = () => async (prompt: string) => ((seen = prompt), { ops: evidence.map((e, i) => ({ op: "write", file: `people-x${i}.md`, description: "x", text: "A fact the run learnt.", evidence: e })) });
+  await createDreamer({ key: () => KEY, conversations: friends(() => [mara.id]), run }).run(NOON);
+  assert.ok(!seen.includes("lives by the sea") && !seen.includes("visits in June") && seen.includes("visits in July") && seen.includes("assistant (context only): Your aunt"));
+  assert.deepEqual(readdirSync(T.tenantContext(mara).notesDir).filter((f) => f.startsWith("people-x")), ["people-x3.md"]);
+});

@@ -67,3 +67,22 @@ test("a group's older lines follow the member rule: members' words only", async 
   await createDreamer({ conversations: () => [conv], run: () => async (prompt) => ((seen = prompt), { ops: [] }) }).run(NOW);
   assert.ok(seen.includes("we move to Fridays") && !seen.includes("private owner words"));
 });
+
+const writes = (evidence: Record<string, string>) => ({ ops: Object.entries(evidence).map(([file, e]) => ({ op: "write", file, description: "x", text: "A fact the run learnt.", evidence: e })) });
+
+test("a line deleted or edited after the last dream: gone from the older block and from the evidence; assistant text is no evidence", async () => {
+  reset();
+  writeDream(dreamStateConv(owner()), { day: "2026-10-12", lastRunAt: at(3).toISOString() });
+  recordMessage("owner", 1, "we will stay at the lake house in June", at(9));
+  recordMessage("owner", 2, "the visit is planned for the 12th of June", at(8));
+  recordMessage("chat", 3, "Your dentist suggested the 14th of June for the check-up.", at(8));
+  recordMessage("delete", 4, "[a message was deleted by its author]", at(1), undefined, { of: 1 });
+  recordMessage("edit", 5, "the visit is planned for the 19th of June", at(1), undefined, { of: 2 });
+  recordMessage("owner", 6, "booked the train for Friday", at(1));
+  let seen = "";
+  const run = (): Runner => async (prompt) => ((seen = prompt), writes({ "context-a.md": "stay at the lake house in June", "context-b.md": "the visit is planned for the 12th of June", "context-c.md": "dentist suggested the 14th of June", "context-d.md": "the visit is planned for the 19th of June" }));
+  await createDreamer({ conversations: () => [owner()], run }).run(NOW);
+  assert.ok(!seen.includes("lake house") && !seen.includes("12th of June"), "the deleted line and the old text of the edited one are not shown");
+  assert.ok(seen.includes("19th of June") && seen.includes("assistant (context only): Your dentist"));
+  assert.deepEqual(readdirSync(NOTES_DIR).filter((f) => f.startsWith("context-")), ["context-d.md"], "only the edited text counts as evidence");
+});

@@ -216,7 +216,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
     const tag = { kind: conv.kind, ...(conv.tenantId ? { tenant: conv.tenantId } : {}) };
     try {
       const scope = scopeOf(conv);
-      const before = state.lastRunAt ? conversationLines(messagesSince(new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString(), conv.logFile).filter((m) => m.at <= state.lastRunAt!), subjectOf(conv), rules.evidence) : { lines: [], text: "" }; // the same evidence rules; its quotes count too
+      const before = state.lastRunAt ? conversationLines(foldEdits(withoutDeleted(messagesSince(new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString(), conv.logFile))).filter((m) => m.at <= state.lastRunAt!), subjectOf(conv), rules.evidence) : { lines: [], text: "" }; // the same evidence rules; its quotes count too. Deletes and edits are applied over the whole window first (a marker made after the last dream still counts), then the lines are split by the message's own time
       const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines, before.lines);
       const { plan, snapshot } = await dreamOver(scope, prompt, system, [before.text, said.text].filter(Boolean).join("\n"), now, deps.run?.(payer, conv) ?? runnerFor(payer));
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
