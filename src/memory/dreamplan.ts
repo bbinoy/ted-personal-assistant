@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { HARD_NAMES_NOTE, MAX_NOTE_CHARS, parseNote, type Category } from "./notes.ts";
+import { HARD_NAMES_NOTE, MAX_NOTE_CHARS, STATUS_PREFIX, parseNote, type Category } from "./notes.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
@@ -15,7 +15,8 @@ const MIN_REASON = 10; // characters of the model's own reason for deleting a no
 
 
 // What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
-// pages) and voice-* notes come from the owner's sent mail: neither is learned from chat.
+// pages) and voice-* notes come from the owner's sent mail: neither is learned from chat, and
+// neither (nor status-*) may be a source of a write. A routine-* note may be one, read-only.
 // Where a dream works and what it may touch. The owner's own notes are one scope; every group has its own
 // (groupstore.ts), so a group's dream can never read or write anything but that group's notes.
 export interface Scope {
@@ -51,6 +52,7 @@ export interface NoteFile {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+const NOT_SOURCE = [STATUS_PREFIX, "setup-", "voice-"]; // may hold text from mail: never a source
 const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -114,8 +116,15 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     }
 
     if (o.op !== "write") { reject(file, "unknown operation"); continue; }
-    const sources = [...new Set(Array.isArray(o.consolidates) ? o.consolidates.filter((s): s is string => typeof s === "string") : [])];
-    const bad = (why: string) => { reject(file, why); for (const x of sources) lost.add(x); };
+    // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
+    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
+    const selfNamed = named.includes(file);
+    // Notes that may hold text from mail (status, setup, voice) are no source: dropped like a missing one. Reasons name a file, capped.
+    const notMemory = (s: string) => NOT_SOURCE.some((p) => s.startsWith(p));
+    const shown = (s: string) => (FILE.test(s) ? s : "(invalid name)");
+    const sources = named.filter((s) => s !== file && existing.get(s) && !notMemory(s));
+    const missing = named.filter((s) => s !== file && (!existing.get(s) || notMemory(s))).map((s) => (notMemory(s) ? `source not memory: ${shown(s)}` : `source missing: ${shown(s)}`)).join(", ");
+    const bad = (why: string) => { reject(file, missing ? `${why} (${missing})` : why); for (const x of named) lost.add(x); };
     const text = typeof o.text === "string" ? o.text.replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim() : "";
     const description = typeof o.description === "string" ? o.description.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist) : "";
     if (!text || text.length > MAX_NOTE_CHARS || !description) { bad("empty, or longer than a note may be"); continue; }
@@ -123,9 +132,8 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     if (writes >= MAX_WRITES) { bad("too many changes in one run"); continue; }
 
     let kind: "add" | "update" | "merge";
-    if (sources.length > 0) {
-      // Written from existing notes (merge, split, reformat, a note for a person they mention): what they hold is already memory, so no quote and no length limit.
-      if (!sources.every((s) => writable(s) && existing.get(s))) { bad("built from a note that does not exist or is not the dream's"); continue; }
+    if (sources.length > 0 || (selfNamed && existing.has(file))) {
+      // Written from existing notes (merge, split, reformat, a note for a person they mention, a note rewritten from itself): what they hold is already memory, so no quote and no length limit.
       if (addsDetails(text, known)) { bad("adds details no note or quote holds"); continue; }
       kind = "merge";
     } else {
@@ -138,7 +146,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     written.add(file);
     textLen.set(file, text.length);
     if (!existing.has(file)) count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: sources }); // (sources are only deleted by a delete of their own)
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s) && !notMemory(s)) }); // (sources are only deleted by a delete of their own)
   }
 
   // A rejected write takes back every delete and rewrite of its sources (a split loses nothing it did not keep).
@@ -154,7 +162,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
   for (const w of live) {
     const total = w.merged.reduce((n, x) => n + (existing.get(x)?.text.length ?? 0), 0);
     for (const x of w.merged) {
-      if (x === w.file || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
+      if (x === w.file || !writable(x) || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
       if (x.split("-")[0] !== w.file.split("-")[0] || gonePlan.size >= MAX_DELETES) continue;
       gonePlan.add(x);
       plan.actions.push({ kind: "delete", file: x, why: `merged into ${w.file}` });

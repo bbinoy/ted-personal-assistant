@@ -306,7 +306,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 **The dream** (`src/conversation/dream.ts`, `createDreamer`). Once a day, on the first tick at or after the preset's `rhythm.dream.hour` (4), for every conversation whose set has `dream` and whose person said enough since the last dream (preset `rhythm.dream`), a tool-less model sees the notes and what the person said and answers with JSON. Code decides (`planOps`, `src/memory/dreamplan.ts`):
 
 - a new or changed note needs a verbatim quote of the person's own words; a merge may only be shorter; a delete needs an expired date or their words;
-- `setup-`, `voice-` and `status-` notes are refused; at most 8 writes and 12 deletes;
+- `setup-`, `voice-` and `status-` notes are refused as targets and are no source of a write (they may hold mail text; a dropped source is named in the log); any other existing note, `routine-` included, may be a source, read-only (only the dream's own notes are ever deleted); source names are tidied (directory dropped, `.md` added, the target itself ignored); at most 8 writes and 12 deletes;
 - notes are snapshotted first (7 kept) and `undo_dream` restores them; a note changed while the model ran is skipped.
 
 **What the notes learned on their own** is not handed to any run. A look's note writes are journal lines like any action, and the dream's run is a journal line with its change count (its snapshot is what `undo_dream` restores); "what did you learn" is answered from the `journal` tool.
