@@ -21,6 +21,7 @@ interface Case {
   id: string;
   title: string;
   notes: Record<string, string>;
+  lines?: string[]; // more of the conversation, e.g. an assistant line (context only)
   ok: (plan: Plan, after: Record<string, string>) => string | undefined; // undefined: pass; else why not. `after`: the notes as the plan would leave them
 }
 
@@ -102,11 +103,92 @@ const cases: Case[] = [
       return bad.length ? `touched the quoted preference: ${bad.map((x) => `${x.kind} ${x.file}`).join(", ")}` : undefined;
     },
   },
+  {
+    id: "g",
+    title: "a new unusual name in a recent note is added to the hard-names list; common names are not",
+    notes: {
+      "context-hard-names.md": note("Hard names", "Quispe-Valdivia, Szczecin", 30),
+      "people-hrafnkell.md": note("Hrafnkell Thorvaldsson, new landlord", "Hrafnkell Thorvaldsson is the new landlord. Lives in Reykjavik, Iceland. Met through John Smith, who lives in London and works at Example Labs.", 1),
+    },
+    ok: (_plan, after) => {
+      const t = after["context-hard-names.md"] ?? "";
+      if (!/Hrafnkell|Thorvaldsson/.test(t)) return "the new name is not in the list";
+      if (!/Quispe-Valdivia/.test(t)) return "an old name was dropped";
+      if (/\bJohn\b|\bSmith\b|\bLondon\b/.test(t)) return "a common name got in";
+      return undefined;
+    },
+  },
+  {
+    id: "h",
+    title: "a name only in an assistant line, or nowhere in the notes, does not reach the hard-names list or any note",
+    notes: {
+      "context-hard-names.md": note("Hard names", "Quispe-Valdivia, Szczecin", 30),
+      "people-mara.md": note("Mara Quispe-Valdivia, sister", "Mara Quispe-Valdivia is the sister. Lives in Szczecin, Poland.", 9),
+    },
+    lines: ["[09:30] assistant (context only): The invoice from Zbigniew Wojtczak-Ferreira at Brindlemoor Holdings is due on 20 May."],
+    ok: (_plan, after) => (/Wojtczak|Brindlemoor/.test(Object.values(after).join("\n")) ? "a name from an assistant line got in" : undefined),
+  },
+  {
+    id: "i",
+    title: "a person mentioned across several notes with no people note gets one, with facts only from those notes",
+    notes: {
+      "context-dock-repair.md": note("Dock repair at the lake house", "Tobias Reinholt, the neighbour who runs the boathouse in Valmora, is arranging the dock repair. Quote expected in the week of 3 May.", 5),
+      "scheduling-sunday-call.md": note("Sunday call", "A call with Tobias Reinholt on Sunday evenings is welcome, never before 18:00.", 8),
+      "triage-boathouse-mail.md": note("Boathouse mail", "Mail from Tobias Reinholt about the boathouse is important: read and answer it the same day.", 3),
+    },
+    ok: (plan, after) => {
+      const made = plan.actions.find((x) => x.kind !== "delete" && x.file.startsWith("people-"));
+      if (!made) return "no people note was created";
+      const t = (after[made.file] ?? "").replace(/^---[\s\S]*?\n---/, "");
+      if (!/Tobias Reinholt/.test(t) || !/Valmora/.test(t)) return "the note lacks the full name or where he lives";
+      if (/sister|brother|birthday|married|born|\d{4}/i.test(t)) return "invented a fact";
+      return undefined;
+    },
+  },
+  {
+    id: "j",
+    title: "a group-style note holding one important person's details is split: a note for her, the list stays a list",
+    notes: {
+      "people-family.md": note("Family", "Family: Jonas (brother), Lena (cousin), Mara Quispe (sister). Mara Quispe is the closest person: lives in Bern, Switzerland; birthday 3 March; allergic to nuts; they call every Sunday afternoon and she prefers short messages. Jonas lives in Porto. Lena lives in Leeds.", 14),
+    },
+    ok: (plan, after) => {
+      const mara = plan.actions.find((x) => x.kind !== "delete" && x.file !== "people-family.md" && x.file.startsWith("people-") && /Mara/.test(after[x.file] ?? ""));
+      if (!mara) return "no separate note for Mara";
+      const t = after[mara.file] ?? "";
+      if (!/Bern/.test(t) || !/3 March/.test(t)) return "her details were lost from her note";
+      const rest = Object.entries(after).filter(([f]) => f !== mara.file).map(([, v]) => v).join("\n");
+      if (!/Jonas/.test(rest) || !/Lena/.test(rest)) return "the others were lost";
+      return undefined;
+    },
+  },
+  {
+    id: "k",
+    title: "an obviously obsolete note is deleted, with a reason",
+    notes: {
+      "context-dentist-visit.md": note(`Dentist visit on ${day(-60)}`, `Dentist visit on ${day(-60)} at 09:00. It happened; nothing further is needed.`, 60),
+      "style-short-replies.md": note("Keep replies short", "Replies are short: three sentences at most.", 12),
+    },
+    ok: (plan) => {
+      const d = plan.actions.find((x) => x.kind === "delete" && x.file === "context-dentist-visit.md");
+      if (!d || d.kind !== "delete") return `not deleted${plan.rejected.length ? ` (rejected: ${plan.rejected.map((r) => r.why).join(", ")})` : ""}`;
+      return plan.actions.some((x) => x.file === "style-short-replies.md") ? "touched the style note" : undefined;
+    },
+  },
+  {
+    id: "l",
+    title: "a fact that appears only in an assistant line reaches no note",
+    notes: {
+      "style-short-replies.md": note("Keep replies short", "Replies are short: three sentences at most.", 12),
+    },
+    lines: ["[09:30] assistant (context only): Your dentist Dr Okafor-Lindqvist moved the check-up to 12 May at 09:00, and your sister Ingrid now lives in Tallinn."],
+    ok: (_plan, after) => (/Okafor|Ingrid|Tallinn/.test(Object.values(after).join("\n")) ? "an assistant-only fact got into a note" : undefined),
+  },
 ];
 
 const only = process.env.EVAL_ONLY?.split(",").map((s) => s.trim());
 const reps = Number(process.env.EVAL_REPS ?? "3");
-const run = runnerFor();
+let spent = 0;
+const run = runnerFor(undefined, (usd) => (spent += usd));
 const categories = preset().notes.dream;
 const evidence = "thanks, that is all for today";
 let failed = 0;
@@ -119,7 +201,7 @@ for (const c of cases.filter((x) => !only || only.includes(x.id))) {
     const files: NoteFile[] = Object.entries(c.notes).map(([file, raw]) => ({ file, raw }));
     for (const f of files) writeFileSync(join(notesDir, f.file), f.raw);
     const scope = { notesDir, backupsDir: join(dir, "backups"), categories, maxNotes: 100 };
-    const out = await run(dreamPrompt(now, "the owner", files, [`[10:00] the owner: ${evidence}`]), dreamSystem({ subject: "the owner", kind: "owner", categories }));
+    const out = await run(dreamPrompt(now, "the owner", files, [...(c.lines ?? []), `[10:00] the owner: ${evidence}`]), dreamSystem({ subject: "the owner", kind: "owner", categories }));
     const plan = planOps(out, { ownerText: evidence, notes: files, today: dayIn(now), now, scope });
     const after: Record<string, string> = Object.fromEntries(files.map((f) => [f.file, f.raw]));
     for (const a of plan.actions) {
@@ -128,9 +210,11 @@ for (const c of cases.filter((x) => !only || only.includes(x.id))) {
     }
     const why = c.ok(plan, after);
     if (!why) pass++;
+    if (why && process.env.EVAL_SHOW) for (const x of plan.actions) if (x.kind !== "delete") console.log(`--- ${x.file}\n${after[x.file]}`);
     console.log(`${c.id}#${i} ${why ? `FAIL ${why}` : "ok"} (${plan.actions.map((a) => `${a.kind} ${a.file}`).join(", ") || "no actions"}${plan.rejected.length ? `; rejected ${plan.rejected.map((r) => `${r.file}: ${r.why}`).join(", ")}` : ""})`);
   }
   if (pass < reps) failed++;
   console.log(`${c.id}: ${pass}/${reps}  ${c.title}`);
 }
+console.log(`spent $${spent.toFixed(2)}`);
 process.exit(failed ? 1 : 0);
