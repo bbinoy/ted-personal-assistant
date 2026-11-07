@@ -615,7 +615,17 @@ export class BrowseGuard {
     return out;
   }
 
+  // Every file the browser server writes lands in the run's own folder. The server resolves a file name the model passes (snapshot, find, ...) against its working directory,
+  // which is the repository: the name is cut to its last part and made an absolute path inside outDir, whatever the tool.
   async decide(toolName: string, input: Record<string, unknown>): Promise<Decision> {
+    const d = await this.decideCall(toolName, input);
+    if (d.kind === "deny" || input.filename === undefined) return d;
+    const { filename, ...rest } = { ...input, ...d.input };
+    const base = String(filename).split(/[\\/]/).pop()!.replace(/^\.+$/, "");
+    return { ...d, input: base ? { ...rest, filename: join(this.outDir, base) } : rest };
+  }
+
+  private async decideCall(toolName: string, input: Record<string, unknown>): Promise<Decision> {
     this.steps++;
     if (this.denied >= MAX_DENIED) return this.deny(toolName, input, "Too many refused calls in this run. Stop now and report what you have.");
     if (toolName === "WebSearch") return { kind: "defer" };
