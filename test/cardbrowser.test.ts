@@ -31,6 +31,7 @@ const CVC = "0731";
 const EXPIRY = "12/99";
 const B = "mcp__browser__browser_";
 const PORT = 8443;
+const PAD_LINES = 282; // filler on the nested-frame shop page: its page view is cut right after the payment frame's line (browseguard.ts SNAPSHOT_CAP)
 const FIXTURES = join(import.meta.dirname, "fixtures", "checkout");
 const publicDns = async () => ["93.184.216.34"];
 
@@ -66,12 +67,15 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
     return void t.skip("no openssl");
   }
   const received: string[] = [];
-  const page = (file: string) => readFileSync(join(FIXTURES, file), "utf8").replace("<!--ADS-->", o.ads ? '<iframe src="https://ads.test:8443/pixel" style="display:none"></iframe>' : "");
+  const page = (file: string) => readFileSync(join(FIXTURES, file), "utf8").replace("<!--PAD-->", Array.from({ length: PAD_LINES }, (_, i) => `<p>Venue notice ${String(i).padStart(4, "0")}: opening times and house rules apply.</p>`).join("")).replace("<!--ADS-->", o.ads ? '<iframe src="https://ads.test:8443/pixel" style="display:none"></iframe>' : "");
   const routes: Record<string, string> = {
     "shop.test/checkout": "shop.html",
     "shop.test/framed": "framed.html",
     "checkout.stripe.com/pay": "hosted.html",
     "js.stripe.com/card": "card-frame.html",
+    "shop.test/nested": "nested.html",
+    "js.stripe.com/outer": "card-outer.html",
+    "m.stripe.com/card": "card-frame.html",
     "ads.test/pixel": "pixel.html",
   };
   const server: Server = createServer({ key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) }, (req, res) => {
@@ -101,7 +105,7 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
   const configFile = stdio.args[stdio.args.indexOf("--config") + 1]!;
   const config = JSON.parse(readFileSync(configFile, "utf8"));
   assert.ok(config.browser.launchOptions.args.includes(`--remote-debugging-port=${cdpPort}`), "a card run starts the browser with its debugging port");
-  config.browser.launchOptions.args.push("--host-resolver-rules=MAP shop.test 127.0.0.1, MAP checkout.stripe.com 127.0.0.1, MAP js.stripe.com 127.0.0.1, MAP ads.test 127.0.0.1", "--ignore-certificate-errors");
+  config.browser.launchOptions.args.push("--host-resolver-rules=MAP shop.test 127.0.0.1, MAP checkout.stripe.com 127.0.0.1, MAP js.stripe.com 127.0.0.1, MAP m.stripe.com 127.0.0.1, MAP ads.test 127.0.0.1", "--ignore-certificate-errors");
   writeFileSync(configFile, JSON.stringify(config));
   const client = new Client({ name: "cardbrowser-test", version: "1.0.0" });
   await client.connect(new StdioClientTransport({ command: stdio.command, args: [...stdio.args, "--ignore-https-errors"], env: stdio.env }));
@@ -204,6 +208,45 @@ test("browser: a card in a cross-origin payment iframe is typed only because the
     await go("click", { target: e.ref("Pay CHF 45.00") });
     await new Promise((r) => setTimeout(r, 400));
     assert.equal(e.received.length, 1, "the payment frame received what code typed");
+    const q = new URLSearchParams(e.received[0]!);
+    assert.deepEqual([q.get("number"), q.get("exp"), q.get("cvc")], [PAN, EXPIRY, CVC]);
+  } finally {
+    await e.close();
+  }
+});
+
+test("browser: card fields in a frame inside a payment frame (hosted fields) are refs in the page view and take the card", async (t) => {
+  const e = await start(t);
+  if (!e) return;
+  try {
+    const go = async (name: string, input: Record<string, unknown>) => {
+      const r = await e.call(name, input);
+      assert.equal(r.behavior, "allow", `${name}: ${r.message}`);
+      return r;
+    };
+    await go("navigate", { url: `https://shop.test:${PORT}/nested` });
+    const snap = await go("snapshot", {});
+    assert.match(snap.text, /characters of the page view cut/, "the page view is cut inside the payment frame");
+    assert.doesNotMatch(snap.text, /textbox "Card number"/, "the card fields are past the cut");
+    const frame = [...e.g.nodes.values()].filter((n) => n.role === "iframe").pop()!;
+    // the worker took the frame for the field: still refused, and told where the field is
+    const refused = await e.call("type", { target: frame.ref, text: "{{card:number}}" });
+    assert.equal(refused.behavior, "deny");
+    assert.match(refused.message!, /not a text field/);
+    assert.match(refused.message!, /browser_snapshot with target/);
+    assert.equal(e.asked.length, 0, "no question for a frame");
+    const part = await go("snapshot", { target: frame.ref });
+    assert.match(part.text, /textbox "Card number"/, "a snapshot of the frame shows the fields of the frame inside it");
+    await go("type", { target: e.ref("Card number", true), text: "{{card:number}}" });
+    assert.equal(e.asked.length, 1);
+    assert.match(e.asked[0]!, /Card typed on: stripe\.com/);
+    await go("type", { target: e.ref("Expiration date", true), text: "{{card:expiry}}" });
+    await go("type", { target: e.ref("Security code", true), text: "{{card:cvc}}" });
+    await go("snapshot", {});
+    await go("find", { text: "Pay CHF" }); // the pay button is past the cut too
+    await go("click", { target: e.ref("Pay CHF 45.00") });
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(e.received.length, 1, "the inner frame received what code typed");
     const q = new URLSearchParams(e.received[0]!);
     assert.deepEqual([q.get("number"), q.get("exp"), q.get("cvc")], [PAN, EXPIRY, CVC]);
   } finally {

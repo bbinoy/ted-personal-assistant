@@ -1,0 +1,9 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Fake payment frame</title></head>
+<body>
+  <p>Secure card entry</p>
+  <iframe id="fields" title="Secure card fields" src="https://m.stripe.com:8443/card" width="380" height="200"></iframe>
+  <script>
+    addEventListener("message", (e) => document.getElementById("fields").contentWindow.postMessage(e.data, "*"));
+  </script>
+</body></html>

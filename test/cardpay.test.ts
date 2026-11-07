@@ -523,6 +523,25 @@ test("nothing leaks: no result, question, approval call, audit row, ledger row o
 
 // ---- frames ----
 
+test("frames: a frame cut off the page view is refused as a field, and a snapshot of just that frame brings its fields without replacing the page view", async () => {
+  const view = (body: string) => `### Page\n- Page URL: ${SHOP}\n### Snapshot\n\`\`\`yaml\n${body}\n\`\`\``;
+  const page = view('- generic [ref=e1]:\n  - text: Total CHF 45.00\n  - iframe [ref=f12e413]:\n[... 900 characters of the page view cut: use browser_find]');
+  const part = view('- iframe [ref=f12e413]:\n  - generic [ref=f13e1]:\n    - iframe [ref=f13e3]:\n      - textbox "Card number" [ref=f14e4]\n      - textbox "Expiration date MM / YY" [ref=f14e5]\n      - textbox "Security code" [ref=f14e6]');
+  const r = await rig({ frames: async () => [{ url: SHOP }, { url: "https://js.stripe.com/a" }, { url: "https://m.stripe.com/b" }] });
+  await r.g.decide(`${B}navigate`, { url: SHOP });
+  r.g.shape(`${B}navigate`, { url: SHOP }, page);
+  r.g.shape(`${B}snapshot`, {}, page);
+  const refused = await step(r, "type", { target: "f12e413", text: "{{card:number}}" });
+  assert.match((refused.res as Denied).message, /not a text field/);
+  assert.match((refused.res as Denied).message, /browser_snapshot with target/);
+  r.g.shape(`${B}snapshot`, { target: "f12e413" }, part);
+  assert.ok(r.g.nodes.has("e1") && r.g.nodes.get("f14e4")?.inFrame, "the part is added to the page view, not put in its place");
+  const typed = await step(r, "type", { target: "f14e4", text: "{{card:number}}" }, () => part);
+  assert.equal(typed.res.behavior, "allow", "the field of the inner frame takes the card");
+  assert.equal(typed.ran?.text, PAN);
+  assert.equal(r.asked.length, 1);
+});
+
 test("frames: a card goes into a payment frame only when the browser's frame list shows the shop, known payment providers and blank frames; else refused with a hand-over", async () => {
   const frames = (urls: string[], pageUrl = SHOP): FrameProbe => async () => [{ url: pageUrl }, ...urls.map((url) => ({ url }))];
   const framed = (ref: string) => `### Page\n- Page URL: ${SHOP}\n### Snapshot\n\`\`\`yaml\n- generic [ref=e1]:\n  - text: Total CHF 45.00\n  - iframe [ref=e2]:\n    - textbox "Card number" [ref=${ref}]\n    - textbox "Expiration date MM / YY" [ref=f1e5]\n    - textbox "Security code" [ref=f1e6]\n  - button "Pay CHF 45.00" [ref=e8]\n\`\`\``;
