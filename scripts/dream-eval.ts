@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { dreamPrompt, runnerFor } from "../src/conversation/dream.ts";
 import { planOps, type NoteFile, type Plan } from "../src/memory/dreamplan.ts";
 import { dreamSystem } from "../src/run/persona.ts";
-import { dayIn } from "../src/core/timezone.ts";
+import { dayIn, localTime } from "../src/core/timezone.ts";
 import { preset } from "../src/core/preset.ts";
 
 const now = new Date();
@@ -22,6 +22,7 @@ interface Case {
   title: string;
   notes: Record<string, string>;
   lines?: string[]; // more of the conversation, e.g. an assistant line (context only)
+  earlier?: { daysAgo: number; text: string }[]; // the person's own lines from before the last dream (the look back)
   ok: (plan: Plan, after: Record<string, string>) => string | undefined; // undefined: pass; else why not. `after`: the notes as the plan would leave them
 }
 
@@ -183,6 +184,39 @@ const cases: Case[] = [
     lines: ["[09:30] assistant (context only): Your dentist Dr Okafor-Lindqvist moved the check-up to 12 May at 09:00, and your sister Ingrid now lives in Tallinn."],
     ok: (_plan, after) => (/Okafor|Ingrid|Tallinn/.test(Object.values(after).join("\n")) ? "an assistant-only fact got into a note" : undefined),
   },
+  {
+    id: "m",
+    title: "a plan note's start date is contradicted by a line from 9 days ago: corrected, with a quote",
+    notes: {
+      "context-harbor-stay.md": note(`Stay in Valmora from ${day(20)} to ${day(30)}`, `Staying in Valmora from ${day(20)} to ${day(30)}, working from the shared office.`, 15),
+      "style-short-replies.md": note("Keep replies short", "Replies are short: three sentences at most.", 40),
+    },
+    earlier: [{ daysAgo: 9, text: `change of plan, I now arrive in Valmora on ${day(23)} and still leave on ${day(30)}` }],
+    ok: (plan, after) => {
+      const t = after["context-harbor-stay.md"] ?? "";
+      if (!plan.actions.some((a) => a.file === "context-harbor-stay.md")) return `not corrected${plan.rejected.length ? ` (rejected: ${plan.rejected.map((r) => r.why).join(", ")})` : ""}`;
+      if (t.includes(`from ${day(20)}`)) return "the old start is still stated"; // (mentioning that it moved from the old date is fine)
+      return t.includes(day(23)) ? undefined : "the new start is missing";
+    },
+  },
+  {
+    id: "n",
+    title: "an older line only mentions the place, no conflict: the note is untouched",
+    notes: {
+      "context-harbor-stay.md": note(`Stay in Valmora from ${day(20)} to ${day(30)}`, `Staying in Valmora from ${day(20)} to ${day(30)}, working from the shared office.`, 15),
+    },
+    earlier: [{ daysAgo: 9, text: "Valmora has great bakeries, I should find a good one there" }],
+    ok: (plan) => (plan.actions.length === 0 ? undefined : `changed: ${plan.actions.map((a) => `${a.kind} ${a.file}`).join(", ")}`),
+  },
+  {
+    id: "o",
+    title: "an old stable preference note stays untouched, even with a long chat",
+    notes: {
+      "style-warm-tone.md": note("Warm tone", "Emails to friends are warm and informal, with first names.", 90),
+    },
+    earlier: Array.from({ length: 12 }, (_, i) => ({ daysAgo: 13 - i, text: ["please move the dentist call to Thursday", "what is on my calendar next week", "remind me to water the plants on Sunday", "the printer is out of ink again"][i % 4]! })),
+    ok: (plan) => (plan.actions.length === 0 ? undefined : `changed: ${plan.actions.map((a) => `${a.kind} ${a.file}`).join(", ")}`),
+  },
 ];
 
 const only = process.env.EVAL_ONLY?.split(",").map((s) => s.trim());
@@ -195,14 +229,15 @@ let failed = 0;
 for (const c of cases.filter((x) => !only || only.includes(x.id))) {
   let pass = 0;
   for (let i = 0; i < reps; i++) {
+    if (spent > Number(process.env.EVAL_LIMIT_USD ?? "1")) { console.log("spend limit reached"); process.exit(2); }
     const dir = mkdtempSync(join(tmpdir(), "dream-eval-"));
     mkdirSync(join(dir, "notes"));
     const notesDir = join(dir, "notes");
     const files: NoteFile[] = Object.entries(c.notes).map(([file, raw]) => ({ file, raw }));
     for (const f of files) writeFileSync(join(notesDir, f.file), f.raw);
     const scope = { notesDir, backupsDir: join(dir, "backups"), categories, maxNotes: 100 };
-    const out = await run(dreamPrompt(now, "the owner", files, [...(c.lines ?? []), `[10:00] the owner: ${evidence}`]), dreamSystem({ subject: "the owner", kind: "owner", categories }));
-    const plan = planOps(out, { ownerText: evidence, notes: files, today: dayIn(now), now, scope });
+    const out = await run(dreamPrompt(now, "the owner", files, [...(c.lines ?? []), `[10:00] the owner: ${evidence}`], (c.earlier ?? []).map((e) => `[${localTime(new Date(now.getTime() - e.daysAgo * 86_400_000))}] the owner: ${e.text}`)), dreamSystem({ subject: "the owner", kind: "owner", categories }));
+    const plan = planOps(out, { ownerText: [...(c.earlier ?? []).map((e) => e.text), evidence].join("\n"), notes: files, today: dayIn(now), now, scope });
     const after: Record<string, string> = Object.fromEntries(files.map((f) => [f.file, f.raw]));
     for (const a of plan.actions) {
       if (a.kind === "delete") delete after[a.file];
