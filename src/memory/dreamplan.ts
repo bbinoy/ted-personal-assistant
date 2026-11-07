@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { HARD_NAMES_NOTE, MAX_NOTE_CHARS, parseNote, type Category } from "./notes.ts";
+import { HARD_NAMES_NOTE, MAX_NOTE_CHARS, STATUS_PREFIX, parseNote, type Category } from "./notes.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
@@ -117,8 +117,10 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
     const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
     const selfNamed = named.includes(file);
-    const sources = named.filter((s) => s !== file && existing.get(s));
-    const missing = named.filter((s) => s !== file && !existing.get(s)).map((s) => `source missing: ${s}`).join(", ");
+    // A status note is a record of runs that read mail, not memory: it is no source (dropped like a missing one).
+    const isStatus = (s: string) => s.startsWith(STATUS_PREFIX);
+    const sources = named.filter((s) => s !== file && existing.get(s) && !isStatus(s));
+    const missing = named.filter((s) => s !== file && (!existing.get(s) || isStatus(s))).map((s) => (isStatus(s) ? `source not memory: ${s}` : `source missing: ${s}`)).join(", ");
     const bad = (why: string) => { reject(file, missing ? `${why} (${missing})` : why); for (const x of named) lost.add(x); };
     const text = typeof o.text === "string" ? o.text.replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim() : "";
     const description = typeof o.description === "string" ? o.description.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist) : "";
@@ -141,7 +143,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     written.add(file);
     textLen.set(file, text.length);
     if (!existing.has(file)) count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s)) }); // (sources are only deleted by a delete of their own)
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s) && !isStatus(s)) }); // (sources are only deleted by a delete of their own)
   }
 
   // A rejected write takes back every delete and rewrite of its sources (a split loses nothing it did not keep).

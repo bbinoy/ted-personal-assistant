@@ -216,12 +216,15 @@ test("dream: any existing note may be a source (read-only), names are tidied, a 
   const setup = note("setup-calendar.md", "calendar ids");
   seed([a, status, setup]);
   const text = "Mara: Alex's sister, Bern, birthday 3 March.";
-  // a status or setup note as the only source: accepted, never deleted (even though the write is shorter)
-  for (const src of ["status-brief.md", "setup-calendar.md"]) {
-    const p = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: [src] })] }, ctx([a, status, setup]));
-    assert.deepEqual(p.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md"], src);
-  }
-  const mixed = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["status-brief.md", "people-mara.md"] })] }, ctx([a, status, setup]));
+  // a setup note as the only source: accepted read-only, never deleted (even though the write is shorter)
+  const ro = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["setup-calendar.md"] })] }, ctx([a, status, setup]));
+  assert.deepEqual(ro.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md"]);
+  // a status note is no source: dropped, named, and the quote rule applies
+  const st = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["status-brief.md"] })] }, ctx([a, status, setup]));
+  assert.equal(st.actions.length, 0);
+  assert.match(st.rejected[0].why, /source not memory: status-brief\.md/);
+  assert.equal(planOps({ ops: [write({ evidence: "Mara is my sister and her birthday is on 3 March", consolidates: ["status-brief.md"] })] }, ctx([a, status])).actions.length, 1);
+  const mixed = planOps({ ops: [write({ file: "people-lena.md", text: "Lena: Bern.", consolidates: ["setup-calendar.md", "people-mara.md"] })] }, ctx([a, status, setup]));
   assert.deepEqual(mixed.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-lena.md", "delete:people-mara.md"]); // only the writable source can go
   // a non-writable note is still never the target
   assert.equal(planOps({ ops: [write({ file: "status-brief.md", text, consolidates: ["people-mara.md"] })] }, ctx([a, status])).actions.length, 0);
