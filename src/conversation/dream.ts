@@ -38,6 +38,7 @@ import { LIMITS, oneLine } from "../core/sanitize.ts";
 
 const MAX_PROMPT_NOTES_CHARS = 240_000; // only stops a runaway: normal memory never meets it; over it, whole notes are left out, never cut
 const MAX_PROMPT_CONVERSATION_CHARS = 40_000;
+const LOOK_BACK_DAYS = 14; // older lines shown next to the new ones, so a note can be checked against what was said after the last dream
 
 // ---- what the model sees ----
 
@@ -59,10 +60,14 @@ export function conversationLines(messages: readonly Sent[], who: string = OWNER
   return { lines, text: said.join("\n"), count: said.length };
 }
 
-// The prompt, for any conversation: its notes as they are, and what was said since the last dream. `subject`: whose notes they are.
-export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile[], lines: readonly string[]): string {
+// The prompt, for any conversation: its notes as they are, what was said since the last dream and, apart, what was said in the days before (`earlier`). `subject`: whose notes they are.
+// Over the bound the most recent lines stay: the new part first, the older part gets what is left.
+export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile[], lines: readonly string[], earlier: readonly string[] = []): string {
   const conv = lines.join("\n");
   const cut = conv.length > MAX_PROMPT_CONVERSATION_CHARS ? conv.slice(-MAX_PROMPT_CONVERSATION_CHARS) : conv;
+  const older = earlier.join("\n");
+  const room = MAX_PROMPT_CONVERSATION_CHARS - cut.length;
+  const olderCut = room <= 0 ? "" : older.length > room ? older.slice(-room) : older;
   const blocks = notes.map((n) => `### ${n.file}\n${n.raw.trim()}`);
   let used = 0;
   const kept = blocks.filter((b) => (used += b.length + 2) <= MAX_PROMPT_NOTES_CHARS);
@@ -72,6 +77,7 @@ export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile
     clockLine(now),
     `The notes you keep about ${subject} right now (one file per fact; MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)", MAX_PROMPT_NOTES_CHARS)}`,
     `What ${subject} said and did since the last dream, oldest first:\n${fence("conversation", cut || "(nothing)")}`,
+    ...(olderCut ? [`What ${subject} said and did in the days before the last dream (already seen; to check the notes against, oldest first):\n${fence("earlier_conversation", olderCut)}`] : []),
     `Propose the changes to the notes, if any.`,
   ].join("\n\n");
 }
@@ -174,7 +180,7 @@ const subjectOf = (conv: Conversation): string => RULES[conv.kind].subject(conv)
 export interface DreamerDeps {
   conversations?: () => Conversation[]; // default: dreamConversations()
   scopeOf?: (conv: Conversation) => Scope; // where its notes, snapshots and categories are (default dreamscope.ts)
-  promptOf?: (conv: Conversation, now: Date, notes: readonly NoteFile[], lines: readonly string[]) => { prompt: string; system: string }; // default: the preset's one dream prompt
+  promptOf?: (conv: Conversation, now: Date, notes: readonly NoteFile[], lines: readonly string[], earlier: readonly string[]) => { prompt: string; system: string }; // default: the preset's one dream prompt
   payer?: (conv: Conversation, now: Date) => Payer | Refusal; // who pays and may it run (default payer.ts mayRun)
   key?: () => string | undefined; // where a friend's instance key comes from (default settings.tenantApiKey; tests)
   busy?: (conv: Conversation) => boolean; // a turn of it is settling, queued or running (pipeline.busy): the conversation is skipped for now (its day stays open, the hourly retry comes back)
@@ -186,8 +192,8 @@ export function createDreamer(deps: DreamerDeps = {}) {
   const scopeOf = deps.scopeOf ?? dreamScope;
   const promptOf =
     deps.promptOf ??
-    ((conv, now, notes, lines) => ({
-      prompt: dreamPrompt(now, subjectOf(conv), notes, lines),
+    ((conv, now, notes, lines, earlier) => ({
+      prompt: dreamPrompt(now, subjectOf(conv), notes, lines, earlier),
       system: dreamSystem({ subject: subjectOf(conv), kind: conv.kind, categories: scopeOf(conv).categories }),
     }));
   const payerOf = deps.payer ?? ((conv, now) => mayRun(conv, "dream", { key: deps.key, paused: () => isPaused(now) })); // paused, a usage limit, the day's budget, her cooldown or no key: no attempt, the day stays open
@@ -209,8 +215,9 @@ export function createDreamer(deps: DreamerDeps = {}) {
     const tag = { kind: conv.kind, ...(conv.tenantId ? { tenant: conv.tenantId } : {}) };
     try {
       const scope = scopeOf(conv);
-      const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines);
-      const { plan, snapshot } = await dreamOver(scope, prompt, system, said.text, now, deps.run?.(payer, conv) ?? runnerFor(payer));
+      const before = state.lastRunAt ? conversationLines(messagesSince(new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString(), conv.logFile).filter((m) => m.at <= state.lastRunAt!), subjectOf(conv), rules.evidence) : { lines: [], text: "" }; // the same evidence rules; its quotes count too
+      const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines, before.lines);
+      const { plan, snapshot } = await dreamOver(scope, prompt, system, [before.text, said.text].filter(Boolean).join("\n"), now, deps.run?.(payer, conv) ?? runnerFor(payer));
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
       const label = `${conv.kind} dream (${conv.tenantId ?? (conv.sponsor ? conv.convId : subjectOf(conv))})`; // (a friend's group is named by its folder: its title is hers)
       if (rules.logWords && !conv.sponsor) for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
