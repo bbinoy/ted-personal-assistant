@@ -114,8 +114,12 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     }
 
     if (o.op !== "write") { reject(file, "unknown operation"); continue; }
-    const sources = [...new Set(Array.isArray(o.consolidates) ? o.consolidates.filter((s): s is string => typeof s === "string") : [])];
-    const bad = (why: string) => { reject(file, why); for (const x of sources) lost.add(x); };
+    // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
+    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
+    const selfNamed = named.includes(file);
+    const sources = named.filter((s) => s !== file && existing.get(s));
+    const missing = named.filter((s) => s !== file && !existing.get(s)).map((s) => `source missing: ${s}`).join(", ");
+    const bad = (why: string) => { reject(file, missing ? `${why} (${missing})` : why); for (const x of named) lost.add(x); };
     const text = typeof o.text === "string" ? o.text.replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim() : "";
     const description = typeof o.description === "string" ? o.description.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist) : "";
     if (!text || text.length > MAX_NOTE_CHARS || !description) { bad("empty, or longer than a note may be"); continue; }
@@ -123,9 +127,8 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     if (writes >= MAX_WRITES) { bad("too many changes in one run"); continue; }
 
     let kind: "add" | "update" | "merge";
-    if (sources.length > 0) {
-      // Written from existing notes (merge, split, reformat, a note for a person they mention): what they hold is already memory, so no quote and no length limit.
-      if (!sources.every((s) => writable(s) && existing.get(s))) { bad("built from a note that does not exist or is not the dream's"); continue; }
+    if (sources.length > 0 || (selfNamed && existing.has(file))) {
+      // Written from existing notes (merge, split, reformat, a note for a person they mention, a note rewritten from itself): what they hold is already memory, so no quote and no length limit.
       if (addsDetails(text, known)) { bad("adds details no note or quote holds"); continue; }
       kind = "merge";
     } else {
@@ -138,7 +141,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     written.add(file);
     textLen.set(file, text.length);
     if (!existing.has(file)) count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: sources }); // (sources are only deleted by a delete of their own)
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s)) }); // (sources are only deleted by a delete of their own)
   }
 
   // A rejected write takes back every delete and rewrite of its sources (a split loses nothing it did not keep).
@@ -154,7 +157,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
   for (const w of live) {
     const total = w.merged.reduce((n, x) => n + (existing.get(x)?.text.length ?? 0), 0);
     for (const x of w.merged) {
-      if (x === w.file || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
+      if (x === w.file || !writable(x) || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
       if (x.split("-")[0] !== w.file.split("-")[0] || gonePlan.size >= MAX_DELETES) continue;
       gonePlan.add(x);
       plan.actions.push({ kind: "delete", file: x, why: `merged into ${w.file}` });
