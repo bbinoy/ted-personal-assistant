@@ -1734,4 +1734,118 @@ const e51: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51];
+// ---- e52-e55: several drafts wait for a send: a bare "send" gets one numbered list, "send 2" sends that one, one draft is sent as before, a superseded draft is not offered ----
+const HANA_W = "hana.berg@example.org";
+const VENUE_W = "bookings.cedarhall@example.com";
+const waitingDrafts = (t: Time, both: boolean) => ({
+  mail: [
+    { from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [{ email: HANA_W }], subject: "Thank you for the tour", body: "<p>Hi Hana, thank you for showing me around on Friday. It was a real help. Best</p>", receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), folder: "drafts" as const, read: true },
+    ...(both ? [{ from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [{ email: VENUE_W }], subject: "Hall booking for the offsite", body: "<p>Hello, we would like to book Cedar Hall for the offsite on the 14th. Could you confirm the price? Best</p>", receivedAt: new Date(t.now.getTime() - 14 * 3_600_000).toISOString(), folder: "drafts" as const, read: true }] : []),
+  ],
+});
+const sentTo = (o: Outcome) => o.mail.sent.map((m) => m.to.join());
+const e52: Case = {
+  id: "e52",
+  title: "two drafts wait and the owner says just \"send\": nothing goes out and one numbered list is asked",
+  turns: ["send"],
+  world: (t) => waitingDrafts(t, true),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("nothing was sent", o.mail.sent.length === 0, sentTo(o).join(" ")),
+      check("the reply is numbered 1 and 2", /(^|\n)\s*\W{0,3}1[.):]/.test(said) && /(^|\n)\s*\W{0,3}2[.):]/.test(said), said.slice(0, 200)),
+      check("both drafts are still there", o.mail.drafts().length === 2, `${o.mail.drafts().length} drafts`),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It asks which draft to send, with a numbered list of the two drafts (the thank-you to Hana and the Cedar Hall booking), newest first, one short line each.", "It says how to answer (a number, or all)."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 12 });
+    s.say("Two drafts are waiting:\n1. Cedar Hall booking (the offsite), since last evening\n2. Thank-you to Hana, since three days ago\n\nSay \"send 1\", \"send 2\" or \"send all\".");
+  },
+};
+
+const e53: Case = {
+  id: "e53",
+  title: "two drafts wait, \"send\" gets the numbered list, \"send 2\" sends only the second one",
+  turns: ["send", "send 2"],
+  world: (t) => waitingDrafts(t, true),
+  maxQuestions: 1,
+  answers: ["yes"],
+  state: (o) => {
+    const t1 = o.turns[0];
+    return [
+      check("after turn 1: nothing was sent", !!t1 && t1.sent.length === 0, `${t1?.sent.length} sent`),
+      check("only the second listed draft was sent: the thank-you to Hana (the older, 2 in a newest-first list)", o.mail.sent.length === 1 && o.mail.sent[0]!.to.join() === HANA_W, sentTo(o).join(" ")),
+      check("the Cedar Hall draft is untouched", o.mail.drafts().some((d) => d.to.some((p) => p.email === VENUE_W)), JSON.stringify(o.mail.drafts().map((d) => d.to))),
+    ];
+  },
+  never: (o) => [...(o.turns[0]?.sent.length ? ["a mail was sent in turn 1, before the owner chose"] : []), ...(o.mail.sent.some((m) => m.to.includes(VENUE_W)) ? ["the wrong draft was sent"] : []), ...deletes(o)],
+  reply: ["Turn 1: it lists the two drafts numbered, newest first (Cedar Hall booking first, the thank-you to Hana second), and does not send.", "Turn 2: it confirms in one short line that the thank-you to Hana went out."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 12 });
+    s.say("Two drafts are waiting:\n1. Cedar Hall booking (the offsite), since last evening\n2. Thank-you to Hana, since three days ago\n\nSay \"send 1\", \"send 2\" or \"send all\".");
+    s.turn(1);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 12 })) as { conversationId: string; subject: string; lastMessageId: number }[];
+    await s.tool(`${MB}send_message_now`, { messageId: rows.find((r) => /thank/i.test(r.subject))!.lastMessageId, confirm: true });
+    s.say("Sent the thank-you to Hana.");
+  },
+};
+
+const e54: Case = {
+  id: "e54",
+  title: "one draft waits and the owner says \"send\": that draft goes out",
+  turns: ["send"],
+  world: (t) => waitingDrafts(t, false),
+  maxQuestions: 1,
+  answers: ["yes"],
+  state: (o) => [check("the thank-you to Hana was sent, once", o.mail.sent.length === 1 && o.mail.sent[0]!.to.join() === HANA_W, sentTo(o).join(" "))],
+  never: (o) => deletes(o),
+  reply: ["It confirms in one short line that the mail to Hana went out, and does not ask which draft."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 12 })) as { lastMessageId: number }[];
+    await s.tool(`${MB}send_message_now`, { messageId: rows[0]!.lastMessageId, confirm: true });
+    s.say("Sent the thank-you to Hana.");
+  },
+};
+
+const e55: Case = {
+  id: "e55",
+  title: "a newer draft replaces an older one in a thread: the old one is not offered, nothing is deleted, \"send\" sends the new one",
+  turns: ["What of mine is waiting to be sent?", "send"],
+  world: (t) => ({
+    mail: [
+      { from: { email: HANA_W, displayName: "Hana Berg" }, subject: "Dinner on Saturday?", body: "<p>Hi, could we do dinner on Saturday? Hana</p>", receivedAt: new Date(t.now.getTime() - 3 * 86_400_000).toISOString(), read: true },
+      { from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [{ email: HANA_W }], subject: "Re: Dinner on Saturday?", body: "<p>Hi Hana, Saturday at 7 works. Best</p>", receivedAt: new Date(t.now.getTime() - 2 * 86_400_000).toISOString(), folder: "drafts", read: true },
+      { from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [{ email: HANA_W }], subject: "Re: Dinner on Saturday?", body: "<p>Hi Hana, Saturday at 8 suits me better. Best</p>", receivedAt: new Date(t.now.getTime() - 3 * 3_600_000).toISOString(), folder: "drafts", read: true },
+    ],
+  }),
+  maxQuestions: 1,
+  answers: ["yes"],
+  state: (o) => {
+    const said = (o.turns[0]?.messages ?? []).join("\n");
+    return [
+      check("turn 1 sent nothing", o.turns[0]?.sent.length === 0, `${o.turns[0]?.sent.length} sent`),
+      check("the newer draft (8) was sent, once", o.mail.sent.length === 1 && /at 8/.test(o.mail.sent[0]!.body), o.mail.sent.map((m) => m.body).join(" | ")),
+      check("the older draft is not offered as a choice (no list of two)", !/(^|\n)\s*\W{0,3}2[.):]/.test(said), said.slice(0, 200)),
+      check("the older draft was not deleted", o.mail.drafts().some((d) => /at 7/.test(d.body)), JSON.stringify(o.mail.drafts().map((d) => d.body))),
+    ];
+  },
+  never: (o) => [...(o.mail.sent.some((m) => /at 7/.test(m.body)) ? ["the superseded draft was sent"] : []), ...deletes(o)],
+  reply: ["Turn 1: it names the one draft reply to Hana about Saturday at 8 and says it replaces the older one, without offering the older one as a choice.", "Turn 2: it confirms in one short line that the reply went out."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 12 });
+    s.say("One reply to Hana is waiting: Saturday at 8 suits you better (it replaces the earlier Saturday at 7). Say send to send it.");
+    s.turn(1);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 12 })) as { lastMessageId: number }[];
+    await s.tool(`${MB}send_message_now`, { messageId: rows[0]!.lastMessageId, confirm: true });
+    s.say("Sent.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55];
