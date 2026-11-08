@@ -22,6 +22,7 @@ import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { CUT_FACT, takeCutShort, watchTurn } from "./interrupt.ts";
+import { keepLargePdfs } from "../modules/files/filetool.ts";
 
 // The entry points of a run. ONE function does a run of any conversation, whatever started it (runTurn): the conversation's own session for the trigger, options from the one builder
 // (runoptions.ts runFor), the context code hands every run (what is set up, the facts of heartbeat/facts.ts, a look's notes), each told only when it differs from what that session was last told,
@@ -80,7 +81,8 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   if (untrusted) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark();
   // The previous turn of this conversation was cut short by a newer message (interrupt.ts): this is the turn that message makes, and the run is told so.
   const cut = t.attended && takeCutShort(conv.key);
-  const input = userInput([...shown.map((s) => s.text), clock, ...(cut ? [CUT_FACT] : []), prompt].join("\n\n"), pictures, documents);
+  const large = documents?.length ? await keepLargePdfs(conv.key, documents) : ""; // a PDF over a window of pages is a file of this turn (open_file), not part of the prompt
+  const input = userInput([...shown.map((s) => s.text), clock, ...(cut ? [CUT_FACT] : []), prompt, ...(large ? [large] : [])].join("\n\n"), pictures, documents);
   let reply: AgentReply;
   const watch = t.attended ? watchTurn(conv.key, !cut) : undefined; // a chat turn only: a newer message may ask it to stop at its next tool call (not one that began because of a cut; a look has its own preempt logic, queue.ts)
   if (watch) o.watch = watch;

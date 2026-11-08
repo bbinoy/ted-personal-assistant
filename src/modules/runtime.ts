@@ -3,6 +3,7 @@ import { createBrowseServer } from "./browse/browse.ts";
 import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { connected, readConnectors } from "./connectors.ts";
 import { createFilesServer, type AttachmentSource } from "./files/filetool.ts";
+import { ATTACHMENT_TOOL } from "./files/module.ts";
 import { attachmentOf } from "./mailbird/attachments.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
@@ -65,7 +66,7 @@ const mailbirdAttachments: AttachmentSource = async (a) => {
 
 export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   send: { server: (ctx) => createSendServer(ctx.key!, ctx.offers("mcp__send__check_again")) },
-  files: { server: (ctx) => createFilesServer(ctx.key!, mailbirdAttachments) },
+  files: { server: (ctx) => createFilesServer(ctx.key!, ctx.offers(ATTACHMENT_TOOL) ? mailbirdAttachments : undefined) }, // (mail attachments only where the conversation has Mailbird)
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },

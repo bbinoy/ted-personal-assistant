@@ -21,7 +21,7 @@ holds what is particular to Mailbird.
 - **Attachments.** `list_attachments` (ids as the message gives them; inline images such as
   a boarding pass's barcode show with `isInline`), then `open_file` with the `messageId`
   and `attachmentId` it returned: you see the picture, PDF or text file itself (anything
-  else is refused) and an id like `file1`. To send it to the
+  else is refused) and an id like `file1`. A long PDF comes back as an outline: search it with `query`, read just the `pages` you need. To send it to the
   owner, `send` with `file: "file1"` (a picture goes out as a picture; add a short caption). Only when the task needs
   the content, not for routine triage.
 - **Archive** is `archive_conversation` (reversible: `npm run restore <id>`). Never

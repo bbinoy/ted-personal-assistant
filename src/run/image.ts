@@ -78,7 +78,7 @@ export async function preparePicture(file: string, maxPixels: number = MAX_PIXEL
 // The prompt as the SDK takes it: plain text, or (with pictures or PDFs) one user message of image blocks, then document blocks,
 // followed by the text. A text file is already inside the text (document.ts), so it needs no block.
 export function userInput(prompt: string, pictures: readonly Picture[] = [], documents: readonly Document[] = []): string | AsyncIterable<SDKUserMessage> {
-  const pdfs = documents.filter((d) => d.kind === "pdf");
+  const pdfs = documents.filter((d): d is Extract<Document, { kind: "pdf" }> => d.kind === "pdf" && !d.large); // (a long one is a file of the turn, not part of the prompt)
   if (!pictures.length && !pdfs.length) return prompt;
   const message: SDKUserMessage = {
     type: "user",

@@ -1,7 +1,7 @@
 [
 {"tool":"mcp__send__send","provider":"send","action":"send","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__send__check_again","provider":"send","action":"wake","cap":"wake","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
-{"tool":"mcp__files__open_file","provider":"files","action":"read","cap":"login","attended":null,"who":null,"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__files__open_file","provider":"files","action":"read","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__weather__search_places","provider":"weather","action":"read","cap":"weather","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__weather__get_forecast","provider":"weather","action":"read","cap":"weather","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__weather__get_marine_forecast","provider":"weather","action":"read","cap":"weather","attended":null,"who":null,"view":null,"free":true,"untrusted":false},

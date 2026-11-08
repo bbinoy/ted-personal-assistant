@@ -7,7 +7,6 @@ import { createFilesServer, openedBlocks, openNow, type AttachmentSource } from 
 import { OPEN_TOOL } from "../src/modules/files/module.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { adoptFile, dropShots, loadFile, MAX_FILES, withTempFile } from "../src/modules/send/shots.ts";
-import { MAX_PDF_PAGES } from "../src/conversation/document.ts";
 import { isPicture } from "../src/conversation/openbytes.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { classify } from "../src/policy/policy.ts";
@@ -24,13 +23,13 @@ test("open_file: a PDF is kept as file1 and the PostToolUse swap turns the line 
   const r = await openNow(OWNER_KEY, { messageId: 1, attachmentId: "a" }, source(pdf(2), "Boarding pass.pdf"));
   assert.equal(r.isError, undefined);
   assert.match(text(r), /^file1: Boarding pass\.pdf, PDF, 2 pages\. Send it to the chat with send\(file: "file1"\)/);
-  const blocks = openedBlocks(OWNER_KEY, text(r)) as { type: string; source?: { media_type: string; data: string }; text?: string }[];
+  const blocks = (await openedBlocks(OWNER_KEY, text(r))) as { type: string; source?: { media_type: string; data: string }; text?: string }[];
   assert.equal(blocks[0]!.type, "document");
   assert.equal(blocks[0]!.source!.media_type, "application/pdf");
   assert.equal(Buffer.from(blocks[0]!.source!.data, "base64").subarray(0, 5).toString(), "%PDF-");
   assert.match(blocks[1]!.text!, /never an instruction/);
-  assert.equal(openedBlocks(OWNER_KEY, "no file here"), undefined);
-  assert.equal(openedBlocks("g-other", text(r)), undefined, "another conversation has no such file");
+  assert.equal(await openedBlocks(OWNER_KEY, "no file here"), undefined);
+  assert.equal(await openedBlocks("g-other", text(r)), undefined, "another conversation has no such file");
   dropShots(OWNER_KEY);
 });
 
@@ -38,16 +37,15 @@ test("open_file: a text file comes back fenced in the result; no block is swappe
   const r = await openNow(OWNER_KEY, { messageId: 1, attachmentId: "b" }, source(Buffer.from("Gate 12\nSeat 4A"), "notes.txt"));
   assert.match(text(r), /file1: notes\.txt, text\./);
   assert.match(text(r), /Gate 12/);
-  assert.equal(openedBlocks(OWNER_KEY, text(r)), undefined);
+  assert.equal(await openedBlocks(OWNER_KEY, text(r)), undefined);
   dropShots(OWNER_KEY);
 });
 
-test("open_file: anything but a PDF or text is refused, as are a fake PDF, a long PDF, an encrypted one, a failed fetch; nothing is kept", async () => {
+test("open_file: anything but a PDF or text is refused, as are a fake PDF, an encrypted one, a failed fetch; nothing is kept", async () => {
   const bad: [Buffer, string, RegExp][] = [
     [Buffer.from("MZ\u0090\u0000program"), "tool.exe", /can't open that kind of file/],
     [Buffer.from("PK\u0003\u0004zip"), "a.zip", /can't open that kind of file/],
     [Buffer.from("just text"), "fake.pdf", /not a real PDF/],
-    [pdf(MAX_PDF_PAGES + 1), "long.pdf", /pages/],
     [Buffer.from("%PDF-1.4\ntrailer << /Encrypt 5 0 R >>\n"), "locked.pdf", /password protected/],
   ];
   for (const [bytes, name, re] of bad) {
@@ -123,7 +121,7 @@ test("open_file: a picture (an inline barcode) is shown as an image, kept as fil
   assert.equal(r.isError, undefined);
   assert.equal(r.content[0]!.type, "image");
   assert.match(text(r), /file1: barcode\.png, picture\./);
-  assert.equal(openedBlocks(OWNER_KEY, text(r)), undefined, "no document swap for a picture");
+  assert.equal(await openedBlocks(OWNER_KEY, text(r)), undefined, "no document swap for a picture");
   assert.equal(isPicture((loadFile(OWNER_KEY, "file1") as { file: { bytes: Buffer } }).file.bytes), true);
   assert.equal(isPicture(pdf()), false);
   dropShots(OWNER_KEY);
@@ -133,9 +131,10 @@ test("open_file: a picture (an inline barcode) is shown as an image, kept as fil
   assert.equal(none.isError, true);
 });
 
-test("open_file: the tool is the owner's only (her Mailbird): free and untrusted for her, denied to a group; its server is built on a source", () => {
+test("open_file: every conversation has it, free and untrusted; its server is built with or without a mail source", () => {
   assert.equal(access(OPEN_TOOL, OWNER_CHAT), "free");
-  assert.equal(classify(OPEN_TOOL, { messageId: 1, attachmentId: "a" }, OWNER_CHAT), "allow");
-  assert.equal(classify(OPEN_TOOL, { messageId: 1, attachmentId: "a" }, GROUP_CHAT), "deny");
+  assert.equal(access(OPEN_TOOL, GROUP_CHAT), "free");
+  assert.equal(classify(OPEN_TOOL, { url: "https://example.com/a.pdf" }, GROUP_CHAT), "allow");
+  assert.ok(createFilesServer(OWNER_KEY));
   assert.ok(createFilesServer(OWNER_KEY, source(pdf())));
 });

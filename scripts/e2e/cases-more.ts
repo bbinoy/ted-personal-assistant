@@ -1734,4 +1734,49 @@ const e51: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51];
+// ---- e52: one fact on one page of a long PDF attachment: search it and read that page, never the whole document ----
+const e52: Case = {
+  id: "e52",
+  title: "a date that sits on one page of a 90-page PDF report is found without reading the report",
+  turns: ["My landlord mailed the building maintenance report. When is the boiler service visit? Put it in my calendar."],
+  world: (t) => ({
+    mail: [
+      {
+        from: { email: "office.harbourview@example.com", displayName: "Harbourview Lettings" },
+        subject: "Building maintenance report",
+        body: "<p>Hello, the full maintenance report for the building is attached. Regards, Harbourview Lettings</p>",
+        receivedAt: new Date(t.now.getTime() - 3_600_000).toISOString(),
+        attachments: [
+          {
+            name: "maintenance-report.pdf",
+            text: "",
+            pages: Array.from({ length: 90 }, (_, i) => (i === 61 ? `Boiler service visit: ${longDate(t.day(15))} at 10:30, flat 4 and flat 5.` : `Section ${i + 1}: general building notes, nothing scheduled on this page.`)),
+          },
+        ],
+      },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const t = o.time;
+    const ev = created(o)[0];
+    return [
+      check("exactly one event was created", created(o).length === 1, `${created(o).length} created`),
+      check("on the date printed on page 62", !!ev && t.dateOf(ev.startMs) === t.day(15), ev && t.dateOf(ev.startMs)),
+      check("at 10:30", !!ev && t.hhmm(ev.startMs) === "10:30", ev && t.hhmm(ev.startMs)),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says when the boiler service visit is, with the date and time.", "It does not ask the owner to find the date in the report or to send a part of it.", "It is short: three lines at most."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { lastMessageId: number }[];
+    await s.tool(`${MB}list_attachments`, { messageId: rows[0]!.lastMessageId });
+    const d = s.time.day(15);
+    await s.tool(`${CAL}create_event`, { summary: "Boiler service visit", startTime: s.time.local(d, "10:30"), endTime: s.time.local(d, "11:30"), timeZone: s.time.zone, description: "From the building maintenance report, page 62." });
+    s.say(`The boiler service visit is on ${longDate(d)} at 10:30, and it is on your calendar.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52];

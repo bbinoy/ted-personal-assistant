@@ -348,6 +348,7 @@
         "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -401,6 +402,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
@@ -479,6 +481,7 @@
         "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -531,6 +534,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
@@ -928,6 +932,7 @@
         "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -984,6 +989,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
@@ -1063,6 +1069,7 @@
         "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__files__open_file",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -1118,6 +1125,7 @@
     },
     "mcpServers": [
       "send",
+      "files",
       "weather",
       "draw",
       "tasks",
