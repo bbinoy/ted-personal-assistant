@@ -8,7 +8,7 @@ import { oneLine } from "../core/sanitize.ts";
 // words) is data from whoever made it, fenced wherever it is shown.
 
 export const PDF_WINDOW_PAGES = 20; // read whole up to this many pages; a page range is at most this many (about 40-80k tokens)
-export const MAX_SEARCH_HITS = 15;
+const MAX_SEARCH_HITS = 15;
 const SEARCHABLE_PAGES = 1500; // text is taken from this many pages at most (a hostile or giant file must not hold the process)
 const OUTLINE_ENTRIES = 60;
 const SNIPPET = 90; // characters either side of the match

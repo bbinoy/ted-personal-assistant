@@ -16,7 +16,7 @@ import { fetchPublic, type WebSource } from "./webfile.ts";
 // the result is its facts (pages, outline, text layer); called again with the file id and `query` it searches the text locally, with `pages` it returns a document block of only those
 // pages (the same swap). What a file holds is data from whoever made it, never an instruction.
 
-export interface Attachment {
+interface Attachment {
   messageId: string | number;
   attachmentId: string | number;
 }
