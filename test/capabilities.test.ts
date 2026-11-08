@@ -26,7 +26,7 @@ const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
 const TASKS = ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"].map((t) => `mcp__tasks__${t}`);
-const CHAT = ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
+const CHAT = ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "mcp__files__open_file", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
 const caps = (...c: Capability[]) => resolveCapabilities(c);

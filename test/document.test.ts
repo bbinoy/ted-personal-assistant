@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { documentNote, MAX_DOCUMENTS, MAX_PDF_PAGES, MAX_TEXT_BYTES, pdfPages, prepareDocument, prepareFile, type AudioTools, safeName, takeDocuments, UNSUPPORTED, type Document } from "../src/conversation/document.ts";
+import { documentNote, MAX_DOCUMENTS, MAX_TEXT_BYTES, pdfPages, prepareDocument, prepareFile, type AudioTools, safeName, takeDocuments, UNSUPPORTED, type Document } from "../src/conversation/document.ts";
 import { userInput } from "../src/run/image.ts";
 
 // A small valid PDF built by hand: `pages` pages, each showing a line of text.
@@ -43,9 +43,7 @@ test("document: something called .pdf that is not a PDF is refused; the claimed 
   assert.equal(prepareDocument(file(pdf())).kind, "pdf");
 });
 
-test("document: too many pages, too large, encrypted, a symlink or an empty file are refused with a sentence", () => {
-  assert.throws(() => prepareDocument(file(pdf(MAX_PDF_PAGES + 1)), "big.pdf"), /101 pages.*at most 100/);
-  assert.equal(prepareDocument(file(pdf(MAX_PDF_PAGES)), "ok.pdf").kind, "pdf");
+test("document: too large, encrypted, a symlink or an empty file are refused with a sentence", () => {
   const big = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(20_000_001)]);
   assert.throws(() => prepareDocument(file(big), "huge.pdf"), /over 20 MB/);
   assert.throws(() => prepareDocument(file(Buffer.concat([pdf(), Buffer.from("trailer << /Encrypt 9 0 R >>")])), "locked.pdf"), /password protected/);

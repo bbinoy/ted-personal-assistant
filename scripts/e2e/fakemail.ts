@@ -24,7 +24,7 @@ export interface SeedMail {
   folder?: Folder; // default inbox
   read?: boolean; // default false in the inbox
   account?: number; // 1 = the owner's own mailbox (default), 2 = the second account (FakeMail `extra`)
-  attachments?: { name: string; text: string }[]; // text files on the mail; open_file reads them (play.ts)
+  attachments?: { name: string; text: string; pages?: string[] }[]; // files on the mail; open_file reads them (play.ts). `pages`: a PDF with one line of text per page (text is then unused)
 }
 
 export interface Message {
@@ -36,7 +36,7 @@ export interface Message {
   subject: string;
   body: string;
   receivedAtUtc: string;
-  attachments: { id: number; fileName: string; mimeType: string; size: number; isInline: boolean; text: string }[];
+  attachments: { id: number; fileName: string; mimeType: string; size: number; isInline: boolean; text: string; bytes?: Buffer }[];
 }
 export interface Conversation {
   conversationId: string;
@@ -61,6 +61,24 @@ const person = (p: Person | string): Person => (typeof p === "string" ? { email:
 const recipient = z.union([z.string(), z.object({ email: z.string(), name: z.string().optional(), displayName: z.string().optional() }).passthrough()]);
 const personOf = (r: z.infer<typeof recipient>): Person => (typeof r === "string" ? { email: r.toLowerCase() } : { email: r.email.toLowerCase(), displayName: r.name ?? r.displayName });
 
+// A small valid PDF, one line of text on each page (uncompressed, so a text extractor reads it).
+function pdfOf(pages: string[]): Buffer {
+  const objs = ["<< /Type /Catalog /Pages 2 0 R >>", `<< /Type /Pages /Kids [${pages.map((_, i) => `${4 + i * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  pages.forEach((line, i) => {
+    const stream = `BT /F1 12 Tf 72 700 Td (${line.replace(/[()\\]/g, "")}) Tj ET`;
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${5 + i * 2} 0 R /Resources << /Font << /F1 3 0 R >> >> >>`, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+  let out = "%PDF-1.4\n";
+  const offsets = objs.map((o, i) => {
+    const at = out.length;
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    return at;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+}
+
 export class FakeMail {
   conversations: Conversation[] = [];
   sent: SentMail[] = [];
@@ -79,7 +97,10 @@ export class FakeMail {
     for (const s of seed) {
       const account = s.account ?? 1;
       const m = this.message(person(s.from), (s.to ?? [this.accounts[account - 1]!]).map(person), s.subject, s.body, s.receivedAt);
-      m.attachments = (s.attachments ?? []).map((a, i) => ({ id: m.id * 10 + i, fileName: a.name, mimeType: "text/plain", size: a.text.length, isInline: false, text: a.text }));
+      m.attachments = (s.attachments ?? []).map((a, i) => {
+        const bytes = a.pages ? pdfOf(a.pages) : undefined;
+        return { id: m.id * 10 + i, fileName: a.name, mimeType: bytes ? "application/pdf" : "text/plain", size: bytes?.length ?? a.text.length, isInline: false, text: a.text, ...(bytes ? { bytes } : {}) };
+      });
       this.conversations.push({ conversationId: this.newConv(), folder: s.folder ?? "inbox", account, subject: s.subject, read: s.read ?? (s.folder ?? "inbox") !== "inbox", messages: [m] });
     }
     const row = (c: Conversation) => {
@@ -243,7 +264,7 @@ export class FakeMail {
   attachmentContent = (messageId: number, attachmentId: number): unknown[] => {
     const a = this.conversations.flatMap((c) => c.messages).find((m) => m.id === Number(messageId))?.attachments.find((x) => x.id === Number(attachmentId));
     if (!a) throw new Error("Attachment not found");
-    return [{ type: "text", text: JSON.stringify({ attachmentId: a.id, fileName: a.fileName, mimeType: a.mimeType, size: a.size }) }, { type: "resource", resource: { uri: `attachment://${a.id}`, mimeType: a.mimeType, blob: Buffer.from(a.text).toString("base64") } }];
+    return [{ type: "text", text: JSON.stringify({ attachmentId: a.id, fileName: a.fileName, mimeType: a.mimeType, size: a.size }) }, { type: "resource", resource: { uri: `attachment://${a.id}`, mimeType: a.mimeType, blob: (a.bytes ?? Buffer.from(a.text)).toString("base64") } }];
   };
 
   // For the state checks.

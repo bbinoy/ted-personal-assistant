@@ -232,6 +232,7 @@ The assistant only works while the Mac is awake: a sleeping Mac stops the heartb
 ## Daily use
 
 - **Chat**: message yourself. Replies are formatted with Signal's native styles (bold, italic, strikethrough, monospace).
+- **PDFs**: send one in the chat, give a link, or point at a mail attachment. Up to 20 pages it is read whole; a longer one (up to Signal's 20 MB) is searched for free on this Mac and only the pages that matter are read, so a 300-page report costs a few pages. A scanned PDF has no text to search, so the assistant reads page ranges. Nothing is written to disk; the file lives in memory for the one turn. Needs no setup (the PDF libraries are npm dependencies).
 - **Send a drafted reply**: when the assistant has drafted a reply for you (it tells you in chat), say "send" and approve the question that shows the draft exactly as the mail client holds it, or say what to change.
 - **Approve**: reply `yes` / `no`, a sentence, or react 👍 / 👎 on the question.
 - `npm run doctor`: health check (tooling, permissions, Signal, Mailbird, login, launchd, skills, heartbeat liveness, spend, recent errors).

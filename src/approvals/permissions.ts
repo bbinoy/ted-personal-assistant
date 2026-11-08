@@ -21,6 +21,7 @@ import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
 import { isAsked, renderHash, takeGrant } from "./pendingstore.ts";
+import { OPEN_TOOL } from "../modules/files/module.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -56,7 +57,7 @@ export function idsOf(input: Record<string, unknown>): Record<string, unknown> |
 
 // The inputs of the calls that only look things up in public data (the weather tools, a web search, a page fetch), for the audit log:
 // "which coordinates did it use?", "what did it search?". Anything else logs no content (mail, calendar, notes, the browser).
-const PUBLIC_LOOKUPS = /^(mcp__weather__|WebSearch$|WebFetch$)/;
+const PUBLIC_LOOKUPS = /^(mcp__weather__|WebSearch$|WebFetch$|mcp__files__open_file$)/; // (open_file: its url, when it fetches an address)
 export function publicArgs(tool: string, input: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!PUBLIC_LOOKUPS.test(tool)) return undefined;
   const args = Object.fromEntries(Object.entries(input).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v)).map(([k, v]) => [k, typeof v === "string" ? v.slice(0, 300) : v]));
@@ -101,7 +102,7 @@ export const editedNote = (conversation: string, tool: string, input: Record<str
 // Only for actions that change something: opening a page again is harmless, and refusing it would just get in the way.
 export const doneCount = () => done.size; // tests
 export const failureCount = () => failures.size; // tests
-const once = (tool: string) => tool !== "WebFetch" && !isReadTool(tool);
+const once = (tool: string) => tool !== "WebFetch" && tool !== OPEN_TOOL && !isReadTool(tool);
 
 // A run that needs rules a flag cannot say per call (the browse run: which element a click is, which address is fine) passes a guard.
 // It sees every call first: deny it, allow it, turn it into a question with code-built text (`ask`), or leave it to the manifest
@@ -344,7 +345,8 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       if (judged.decision === "ask") skipWhy = declinedMs !== undefined ? "redeclined" : skipWhy === "fix" ? "fix" : "judge";
       if (mayAutoApprove(settings.autoApprove, judged)) {
         setup.triage?.judged(archivedBy(tool, input) ?? [], "allowed", judged.reason);
-        log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool, input) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
+        log(tool, "auto-approved", source, { reason: judged.reason, ...publicArgs(tool, input) }, // (a page fetch: its address is in the audit)
+           !journalable(tool, input) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool, undefined, conversation)) markUntrusted();

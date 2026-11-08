@@ -179,6 +179,8 @@ A new difference is a new row (with the owner's approval), never an `if` in a st
 
 **Messages in and out.** `src/conversation/intake.ts` handles pictures, documents (PDF, text, audio via whisper), long texts, edits, deletes and quotes, as above.
 
+**PDFs.** One mechanism for every source (a web link, a mail attachment, a file sent in the chat), in every conversation (the `chat` capability). A PDF of at most `PDF_WINDOW_PAGES` (20) pages is read whole, as a document block (the PostToolUse swap in `agentrun.ts`). A longer one is never handed over whole (the API takes ~100 pages at thousands of tokens each): the run gets its facts (name, pages, size, outline with page numbers, how many pages have text) and calls `open_file` again with the file id and either `query` (a free, local, case-insensitive search of the text extracted once per file per turn: up to 15 pages with snippets, fenced as data) or `pages` ("12-18", at most 20 pages), which returns a document of only those pages so charts and tables are seen. A scanned PDF says it has no text layer. A long PDF sent in the chat becomes `file1` with that summary appended to the message (`keepLargePdfs`). Web addresses are https only, with the browse worker's public-address rules (`addressProblem`, `publicAddresses`) at every redirect, the connection pinned to the checked addresses, and the Signal 20 MB cap while streaming. Files live in memory for the turn only.
+
 - A settling pause folds a burst into one turn (`queue.ts`, 2 seconds).
 - A message that will be answered (it passed the intake: for a group, the gate said yes; not a continuation or a reaction) while the same conversation's chat turn is still running asks that turn to stop at the next tool call the model asks for (`src/run/interrupt.ts`, `intake.ts` settle, `cuttable` in `agentrun.ts`): the call is denied, never run, with the SDK's `interrupt` flag, and the turn ends. It is cut only when no other call is in flight (so no approval question, payment or browse step is open), never in the middle of a final answer (a turn that asks for no more tools simply finishes), at most once per turn, and not a turn that began because of a cut. In a group only the person the running turn is answering cuts it. The session keeps what was done; the message is the next turn on it (burst-merged with others) and, when that turn has a real message, the run is told by one code fact that the turn before was cut short (dropped if the message was deleted or replaced). The SDK's interrupt marker after our denial is what marks the cut; any other error stays an error. The message never enters the running turn, so it is neither lost nor answered twice. Looks are not cut (they give way, `queue.ts` lease).
 - Delivery is one function in `conversation.ts` (`[[silent]]`, `[[voice]]`, `[[react: 👍]]`, retry in `outbound.ts`); the `send` tool uses it mid-turn.
@@ -519,7 +521,9 @@ src/modules/browse/paymentrules.ts  pure rules of a card payment
 src/modules/browse/payments.ts  the payment ledger
 src/modules/browse/profile.ts  the owner's saved details in OpenBao
 src/modules/browse/profilecli.ts  `npm run profile`
-src/modules/files/filetool.ts  the open_file tool: a mail attachment opened and kept for send
+src/modules/files/filetool.ts  the open_file tool: a PDF, text file or picture from a web address or a mail attachment, kept for the turn (and for send); a long PDF is searched and read by page range
+src/modules/files/webfile.ts  the https fetch for open_file: the browse worker's address rules, every redirect re-checked, 20 MB
+src/conversation/pdfdoc.ts  a PDF's facts, outline, local text search and page cut-out (pdfjs-dist, pdf-lib)
 src/modules/files/module.ts  files
 src/modules/draw/drawtool.ts  the draw tool: SVG in, PNG out
 src/modules/draw/module.ts  draw

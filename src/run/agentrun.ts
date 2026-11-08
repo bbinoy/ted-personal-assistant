@@ -173,7 +173,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
               if (shot) response = withText(response, `${resultText(response)}\n(This is ${shot}. If it shows what the task is about, list it in the result's shots with a one-line caption.)`);
             }
             // open_file opened a PDF: the model is shown the document itself in place of the line that names it (modules/files/filetool.ts).
-            if (input.tool_name === OPEN_TOOL) response = openedBlocks(conversation, resultText(response)) ?? response;
+            if (input.tool_name === OPEN_TOOL) response = (await openedBlocks(conversation, resultText(response))) ?? response;
             // Clean at the door: the model reads the cleaned result, not the original (counts only in the log).
             const cleaned = cleanToolOutput(input.tool_name, response, undefined, opts.memory?.zone);
             if (!cleaned) return response === input.tool_response && !additionalContext ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse" as const, ...(response === input.tool_response ? {} : { updatedToolOutput: response }), ...(additionalContext ? { additionalContext } : {}) } };

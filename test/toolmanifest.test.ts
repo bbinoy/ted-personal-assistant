@@ -40,7 +40,7 @@ test("manifest: every entry classifies the same way for every run: not there (de
       // Read/Write/Edit also need a path inside the notes: with none the file rule denies first
       if (e.provider === "builtin" && e.action === "note-file") continue;
       const held = run.who !== "browse" || browseTools().has(e.tool); // (the browse worker holds its browser and web search, nothing else)
-      assert.equal(classify(e.tool, {}, run), !there || !held || NEVER_ACTIONS.has(e.action) ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${name(run)})`); // (a never-allowed action is denied wherever the tool exists)
+      assert.equal(classify(e.tool, e.provider === "files" ? { url: "https://example.org/a.pdf" } : {}, run), !there || !held || NEVER_ACTIONS.has(e.action) ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${name(run)})`); // (open_file is probed with a url: without one the call is free; a never-allowed action is denied wherever the tool exists)
     }
   }
 });
@@ -67,6 +67,7 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
     [`${N}notion-create-comment`]: "judged",
     WebSearch: "free",
     WebFetch: "judged",
+    "mcp__files__open_file": "judged", // (a call without a url is free: freeWhen)
     Skill: "free",
     "mcp__browse__browse": "judged",
     "mcp__send__send": "free",
