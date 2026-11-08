@@ -8,10 +8,14 @@ import { OPEN_TOOL } from "../src/modules/files/module.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { adoptFile, dropShots, loadFile, MAX_FILES, withTempFile } from "../src/modules/send/shots.ts";
 import { isPicture } from "../src/conversation/openbytes.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
+import { readAudit } from "../src/core/audit.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { classify } from "../src/policy/policy.ts";
 import { OWNER_CHAT, GROUP_CHAT } from "./runkinds.ts";
-import { access } from "./util.ts";
+import { access, CHAT } from "./util.ts";
 
 // open_file: a mail attachment (fake bytes, a fake Mailbird source) is opened through the document rules of the chat, kept for the turn as file1..., and sent with `send`.
 
@@ -131,10 +135,32 @@ test("open_file: a picture (an inline barcode) is shown as an image, kept as fil
   assert.equal(none.isError, true);
 });
 
-test("open_file: every conversation has it, free and untrusted; its server is built with or without a mail source", () => {
-  assert.equal(access(OPEN_TOOL, OWNER_CHAT), "free");
-  assert.equal(access(OPEN_TOOL, GROUP_CHAT), "free");
-  assert.equal(classify(OPEN_TOOL, { url: "https://example.com/a.pdf" }, GROUP_CHAT), "allow");
+test("open_file: every conversation has it; a url call is judged and a held-file call is free; its server is built with or without a mail source", () => {
+  assert.equal(access(OPEN_TOOL, OWNER_CHAT), "judged", "the tool as a whole is a fetch; a call without a url is free (below)");
+  assert.equal(access(OPEN_TOOL, GROUP_CHAT), "judged");
+  assert.equal(classify(OPEN_TOOL, { url: "https://example.com/a.pdf" }, GROUP_CHAT), "ask");
+  assert.equal(classify(OPEN_TOOL, { file: "file1", pages: "1-3" }, GROUP_CHAT), "allow");
   assert.ok(createFilesServer(OWNER_KEY));
   assert.ok(createFilesServer(OWNER_KEY, source(pdf())));
+});
+
+// open_file with a url is a page fetch like WebFetch (an address can carry data out): judged, vetoed unless plain, audited with its url. A held file or a mail attachment is free.
+test("open_file: a url is judged like WebFetch (clean run and untrusted run), a held file is not, and the audit carries the url", async () => {
+  const opts = { signal: new AbortController().signal } as never;
+  scopeOf("owner").say("what does the council report say about bins");
+  for (const untrusted of [false, true]) {
+    const seen: unknown[] = [];
+    let asked = 0;
+    const judge = async (i: never): Promise<Verdict> => (seen.push(i), { decision: "auto", reason: "test" });
+    const can = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, { ...CHAT, untrusted });
+    const plain = `https://example.org/${untrusted ? "u" : "c"}/report.pdf`;
+    assert.equal((await can(OPEN_TOOL, { url: plain }, opts))!.behavior, "allow");
+    assert.deepEqual([seen.length, asked, (seen[0] as { untrustedInput: boolean }).untrustedInput], [1, 0, untrusted], "a plain address is judged");
+    for (const bad of ["http://example.org/a.pdf", "https://example.org/a.pdf?d=" + "x".repeat(130), "https://192.168.1.4/a.pdf"]) assert.equal((await can(OPEN_TOOL, { url: bad }, opts))!.behavior, "allow", "asked, and the owner said yes");
+    assert.deepEqual([seen.length, asked], [1, 3], "a non-plain address is never judged: the owner is asked");
+    assert.equal((await can(OPEN_TOOL, { file: "file1", query: "bins" }, opts))!.behavior, "allow");
+    assert.equal((await can(OPEN_TOOL, { messageId: 1, attachmentId: "a" }, opts))!.behavior, "allow");
+    assert.deepEqual([seen.length, asked], [1, 3], "a held file or an attachment is neither judged nor asked");
+    assert.equal(readAudit((e) => e.tool === OPEN_TOOL && (e.meta?.args as { url?: string } | undefined)?.url === plain).length > 0, true, "the url is in the audit");
+  }
 });
