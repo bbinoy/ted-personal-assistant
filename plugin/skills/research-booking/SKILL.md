@@ -24,7 +24,7 @@ go on ("assuming 2 adults, Friday to Sunday").
   the whole task: site, dates, people, filters, what to read out). Don't stop at a landing page.
 - Trains: get the connections first from the free timetable API, with `WebFetch` on
   `https://transport.opendata.ch/v1/connections?from=Zurich&to=Paris&date=<YYYY-MM-DD>&time=08:00&limit=6`
-  (works for Swiss and cross-border routes: departure and arrival, duration, changes, train numbers; no prices).
+  (works for Swiss and cross-border routes: departure and arrival, duration, changes, train numbers, today's delay; no prices).
   Then prices from an operator or aggregator page via `browse`. What works: the Omio route
   page `https://www.omio.com/trains/zurich/london` (trains and fares per day) and the Trainline timetable page
   `https://www.thetrainline.com/en/train-times/zurich-to-london` (a "from" price per route). Omio's Cloudflare
