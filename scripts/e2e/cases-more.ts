@@ -1779,4 +1779,39 @@ const e52: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52];
+// ---- e53: a look with one real piece of news in an otherwise quiet inbox: the message says the news and no filler about nothing else ----
+const FILLER = /\bnothing\b|\bquiet\b|\bclear\b|no (other|new) (mail|messages)|since (the|my) last (look|check)|went through the (whole )?inbox/i;
+const e53: Case = {
+  id: "e53",
+  title: "a look with one real piece of news (a request with a deadline) and a quiet inbox: the message says the news and no 'nothing new / quiet inbox' filler",
+  turns: [],
+  look: true,
+  world: (t) => {
+    const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
+    return {
+      mail: [
+        { from: { email: "rosa.klein@example.org", displayName: "Rosa Klein" }, subject: "Agenda for the Thursday review", body: `<p>Hi, please send me your agenda items for the Thursday review by ${t.day(2)}, otherwise they cannot go on the list. Thanks, Rosa</p>`, receivedAt: ago(1), read: false },
+        { from: { email: "news.weeklyloop@example.com", displayName: "The Weekly Loop" }, subject: "The Weekly Loop #214", body: "<p>This week in climate tech. Unsubscribe at the bottom.</p>", receivedAt: ago(5), read: true },
+      ],
+    };
+  },
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m)).join("\n");
+    return [
+      check("the owner got the agenda news", /agenda|review|Rosa/i.test(said), said.slice(0, 200)),
+      check("no filler that nothing else is new", !FILLER.test(said), said.slice(0, 300)),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It tells the owner that Rosa needs agenda items for the Thursday review by the second day from today, and that a task for it was added.", "It says nothing about the rest of the inbox: no 'nothing else new', 'the inbox is quiet', 'nothing else needs you' or that a check happened.", "It is short: a few lines at most and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_conversations`, { folderId: 10 });
+    s.tasks.add({ title: "Send Rosa agenda items for the Thursday review", due: s.time.day(2) });
+    s.say(`Rosa needs your agenda items for the Thursday review by ${s.time.day(2)}; I added a task for it.`);
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53];
