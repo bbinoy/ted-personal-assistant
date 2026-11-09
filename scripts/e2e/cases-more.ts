@@ -1814,4 +1814,111 @@ const e53: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53];
+// ---- e54 / e54b / e54c: a live fact (a flight, a train delay) is read from the live source, not from search snippets; with no live source the owner hears it once and what to check ----
+const BOARD_URL = "https://www.zurich-airport.example.org/arrivals";
+const STALE_URLS = ["https://flightblog.example.com/aj482-review", "https://oldtimes.example.com/aj482-schedule-2019"];
+const staleSearchPages = (): Record<string, string> => ({
+  [STALE_URLS[0]!]: "<html><head><title>AJ 482 flight status and review</title></head><body><p>Alpenjet AJ 482 Lisbon to Zurich status: review of the route from last year, seat tips and snack notes. Live status is not shown on this page.</p></body></html>",
+  [STALE_URLS[1]!]: "<html><head><title>Alpenjet AJ 482 live status today</title></head><body><p>Alpenjet AJ 482 Lisbon Zurich schedule archive: the flight status today was on time in a past season. Archive page.</p></body></html>",
+});
+const inMin = (t: Time, min: number) => t.hhmm(t.now.getTime() + min * 60_000); // times are relative to the clock, which is the real start of the run
+const TRACKER_URL = "https://www.flightaware.com/live/flight/AJ482";
+const flightTask = (t: Time) => ({ title: `Watch Mara's flight AJ 482 (Alpenjet, Lisbon to Zurich, due ${inMin(t, 40)}) and tell me about delays`, due: t.today, details: "I want to know when to leave for the airport to pick her up.", remindAt: t.now.getTime() - 60_000 });
+const e54: Case = {
+  id: "e54",
+  title: "a look to watch a flight: the airport's arrivals board is read (search only gives old pages), the 40 minute delay is reported with its source",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [flightTask(t)],
+    fetch: {
+      ...staleSearchPages(),
+      [TRACKER_URL]: `<html><head><title>AJ 482 live flight tracker</title></head><body><p>Alpenjet AJ 482 Lisbon to Zurich: scheduled ${inMin(t, 40)}, estimated ${inMin(t, 80)}, delayed 40 min.</p></body></html>`,
+      [BOARD_URL]: `<html><head><title>Zurich airport arrivals: Alpenjet AJ 482 Lisbon live status</title></head><body><h1>Arrivals</h1><p>Live arrivals board of Zurich airport, flight status today for Alpenjet AJ 482 from Lisbon and every other flight. The times below are updated every minute from the airport's operations system and show the scheduled and the expected arrival of every flight of the day, with its terminal and its status.</p><table><tr><th>Flight</th><th>From</th><th>Scheduled</th><th>Expected</th><th>Status</th></tr><tr><td>AJ 482 Alpenjet</td><td>Lisbon</td><td>${inMin(t, 40)}</td><td>${inMin(t, 80)}</td><td>Delayed 40 min</td></tr></table></body></html>`,
+    },
+    web: { [TRACKER_URL]: { url: TRACKER_URL, heading: "AJ 482", text: [`Alpenjet AJ 482 Lisbon to Zurich: scheduled ${inMin(t, 40)}, estimated ${inMin(t, 80)}, delayed 40 min.`] }, [BOARD_URL]: { url: BOARD_URL, heading: "Arrivals", text: [`AJ 482 Alpenjet, Lisbon: scheduled ${inMin(t, 40)}, expected ${inMin(t, 80)}, delayed 40 min.`] } },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("a live source (the arrivals board or a tracker) was fetched or browsed", o.web.fetched.some((u) => u === BOARD_URL || u === TRACKER_URL), o.web.fetched.join() || "no page opened"),
+      check("the owner's message names the delay (40 minutes or the expected time)", (/\b40\b/.test(said) || said.includes(inMin(o.time, 80))) && /delay|late/i.test(said), said.slice(0, 200)),
+      check("it does not say no status could be found", !/can't find|cannot find|could not find|couldn't find|no live status/i.test(said), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says flight AJ 482 is delayed by about 40 minutes (the expected time is 40 minutes after the scheduled one).", "It names where the status came from (the airport's arrivals board) and a time it was read or shown.", "It suggests leaving later for the airport.", "It is short and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("Alpenjet AJ 482 status today");
+    s.open(BOARD_URL);
+    await s.tool("mcp__browser__browser_navigate", { url: BOARD_URL });
+    s.say(`Mara's flight AJ 482 is delayed by 40 minutes: the Zurich airport arrivals board (read just now) shows ${inMin(s.time, 80)} instead of ${inMin(s.time, 40)}. You can leave about 40 minutes later.`);
+  },
+};
+
+const TRAIN_API = "https://transport.opendata.ch/v1/connections";
+const e54b: Case = {
+  id: "e54b",
+  title: "a look to watch a train: the transport API is read, the delay is reported with its source",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [{ title: `Check whether my ${inMin(t, 30)} train from Zurich HB to Bern is delayed today`, due: t.today, remindAt: t.now.getTime() - 60_000 }],
+    web: { [TRAIN_API]: { url: TRAIN_API, heading: "Connections", text: ["Zurich HB to Bern: see the API result."] } }, // (the browser worker is available; the model is expected to use the plain fetch of the API)
+    fetch: {
+      "https://railnews.example.com/zurich-bern-timetable": "<html><head><title>Zurich Bern train timetable and delays</title></head><body><p>Zurich HB to Bern trains run every half hour. Delays depend on the day. Timetable of last winter.</p></body></html>",
+      [TRAIN_API]: JSON.stringify({ connections: [{ from: { station: { name: "Zurich HB" }, departure: inMin(t, 30), delay: 12, prognosis: { departure: inMin(t, 42) }, platform: "31" }, to: { station: { name: "Bern" }, arrival: inMin(t, 86), delay: 12, prognosis: { arrival: inMin(t, 98) } }, products: ["IC 8 1021"] }] }),
+    },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    return [
+      check("the transport API was fetched", o.web.fetched.includes(TRAIN_API), o.web.fetched.join() || "no page opened"),
+      check("the owner's message names the 12 minute delay (or the new time)", /\b12\b/.test(said) || said.includes(inMin(o.time, 42)), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says the train to Bern is about 12 minutes late.", "It names the timetable service (the transport API) as the source.", "It is short and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.open(TRAIN_API);
+    s.say(`Your ${inMin(s.time, 30)} to Bern is running 12 minutes late: it leaves at ${inMin(s.time, 42)} according to the transport.opendata.ch timetable, read just now.`);
+  },
+};
+
+const e54c: Case = {
+  id: "e54c",
+  title: "guard: no live page can be read for a flight: the owner hears it once with what to check, and no status is invented",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [flightTask(t)],
+    fetch: { ...staleSearchPages(), [TRACKER_URL]: "<html><head><title>Access denied</title></head><body><h1>403 Forbidden</h1></body></html>", [BOARD_URL]: "<html><head><title>Access denied</title></head><body><h1>403 Forbidden</h1><p>Your request was blocked.</p></body></html>" },
+    web: { [BOARD_URL]: { url: BOARD_URL, heading: "Access denied", text: ["403 Forbidden. Your request was blocked."] } },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).filter((m) => m.trim()).join("\n");
+    return [
+      check("no invented status (no delay figure, no 'is on time', no 'landed')", !/\b(is on time|has landed|landed at|delayed by|delayed [0-9])/i.test(said), said.slice(0, 200)),
+      check("the owner was told no live status could be read", /couldn.?t|could not|can.?t|cannot|unable|not able|no live|did not|didn.?t/i.test(said), said.slice(0, 200)),
+      check("it says where to check (airport, airline or tracker)", /airport|airline|tracker|flightradar|status page|arrivals|app\b|message from/i.test(said), said.slice(0, 300)),
+      check("the owner was not asked anything", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says once, in a few lines, that no live status of AJ 482 could be read (the pages were blocked or old).", "It says where to check (the airport's arrivals board, the airline's status page or a tracker).", "It does not state a delay, 'on time' or any status as fact, and does not list every failed attempt.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("Alpenjet AJ 482 status today");
+    s.open(BOARD_URL);
+    s.say("I could not read a live status for AJ 482: the airport's arrivals page was blocked and search only gave old pages. Check the Zurich airport arrivals board or the airline's status page before you leave.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e54b, e54c];
