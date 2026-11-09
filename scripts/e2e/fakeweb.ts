@@ -56,7 +56,8 @@ export async function startFakeWeb(pages: Record<string, string>): Promise<FakeW
     search: (query) => (searches.push(query), searchPages(pages, query)),
     open: (url) => (pages[url] === undefined ? undefined : (hits.push(url), pages[url])),
     rewrite: (url) => {
-      const i = urls.indexOf(url.split("#")[0]!);
+      const bare = url.split("#")[0]!;
+      const i = urls.indexOf(bare) >= 0 ? urls.indexOf(bare) : urls.indexOf(bare.split("?")[0]!); // a page keyed without a query answers any query (an API the model builds the address of)
       return i < 0 ? undefined : `https://127.0.0.1:${port}/p${i}`;
     },
     close: () => new Promise<void>((resolve) => (server.close(() => (rmSync(dir, { recursive: true, force: true }), resolve())), server.closeAllConnections())),
