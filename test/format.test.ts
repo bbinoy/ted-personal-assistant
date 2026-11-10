@@ -36,6 +36,10 @@ test("approval text: a calendar change that moves only the end or only the start
   assert.match(describeCall(tool, { eventId: "abc123", startTime: "2026-11-11T11:00:00" }), /🕒 Wed 11 Nov, 11:00/);
   assert.match(describeCall(tool, { eventId: "abc123", start: { dateTime: "2026-11-11T11:00:00" } }), /🕒 Wed 11 Nov, 11:00/);
   assert.match(describeCall(tool, { eventId: "abc123", startTime: "2026-11-11T11:00:00", endTime: "2026-11-11T12:30:00" }), /🕒 Wed 11 Nov, 11:00–12:30/);
+  const odd = describeCall(tool, { eventId: "abc123", startTime: "next tuesday", endTime: "2026-11-11T12:30:00" });
+  assert.match(odd, /🕒 ends Wed 11 Nov, 12:30/);
+  assert.match(odd, /startTime: next tuesday/, "a time the 🕒 line cannot read is shown, not hidden");
+  assert.doesNotMatch(describeCall(tool, { eventId: "abc123" }), /🕒/);
 });
 
 test("approval text: text-direction controls are stripped, so what shows is what runs", () => {

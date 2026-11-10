@@ -74,6 +74,7 @@ const LABELS: Record<string, string> = {
 // Fields shown specially or not worth showing.
 const SKIP = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "timeZone", "timezone", "summary", "title"]);
 const SKIP_VALUES = new Set(["primary"]);
+const TIME_KEYS = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time"]);
 
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
 
@@ -131,7 +132,8 @@ export function describeCall(tool: string, input: Record<string, unknown>, draft
   if (time) lines.push(`🕒 ${time}`);
 
   for (const [key, value] of Object.entries(input)) {
-    if (SKIP.has(key) || value === undefined || value === null || value === "") continue;
+    if (value === undefined || value === null || value === "") continue;
+    if (SKIP.has(key) && !(TIME_KEYS.has(key) && !stamp(dateTimeOf(value)))) continue; // (a time the 🕒 line could not read is shown as it is, never hidden)
     if (typeof value === "string" && SKIP_VALUES.has(value)) continue;
     if (Array.isArray(value) && value.length === 0) continue;
     lines.push(`${meta?.labels?.[key] ?? LABELS[key] ?? key}: ${show(key, value)}`);
