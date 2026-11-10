@@ -14,6 +14,7 @@ import { agoText } from "../core/timezone.ts";
 // wake-up of that conversation never reads an old one as its provenance.
 
 const KEEP = 3;
+const cut = (t: string): string => (t.length > LIMITS.quote ? `${t.slice(0, LIMITS.quote)}…` : t); // a cut message says so: the judge must not approve a draft it cannot see in full
 
 export class TurnScope {
   readonly key: string;
@@ -37,7 +38,7 @@ export class TurnScope {
     this.#derived = undefined;
     this.#carried = undefined;
     this.#recent = [...this.#recent, { text, at: arrivedAt ?? Date.now(), ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
-    if (assistantSaid !== undefined) this.#said = assistantSaid.slice(0, LIMITS.quote);
+    if (assistantSaid !== undefined) this.#said = cut(assistantSaid);
     this.#repliedTo = this.#said;
   }
 
@@ -53,7 +54,7 @@ export class TurnScope {
 
   // What the assistant last told the owner in chat (a draft it showed, a plan it announced).
   assistantSaid(text: string): void {
-    this.#said = text.slice(0, LIMITS.quote);
+    this.#said = cut(text);
   }
 
   // A turn nobody wrote (the continuation of an approved call): the judge is told what led to the asking turn, never the code text that starts this one or the arguments in it.
