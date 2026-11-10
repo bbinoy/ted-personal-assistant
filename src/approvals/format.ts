@@ -29,16 +29,16 @@ function stamp(value: unknown): Stamp | undefined {
 
 function when(start: unknown, end: unknown, zone: unknown): string | undefined {
   const s = stamp(start);
-  if (!s) return undefined;
   const e = stamp(end);
   const tz = typeof zone === "string" && zone ? ` (${zone})` : "";
+  if (!s) return e ? `ends ${e.day}${e.time ? `, ${e.time}${tz}` : ""}` : undefined; // a change that moves only the end
   if (!s.time) return e && e.day !== s.day ? `${s.day} to ${e.day}, all day` : `${s.day}, all day`;
   if (!e) return `${s.day}, ${s.time}${tz}`;
   if (e.day === s.day) return `${s.day}, ${s.time}–${e.time}${tz}`;
   return `${s.day} ${s.time} → ${e.day} ${e.time}${tz}`;
 }
 
-// When an event is, from a call's own arguments (strings or {dateTime}), as in an approval text; undefined when the call names no start.
+// When an event is, from a call's own arguments (strings or {dateTime}), as in an approval text; undefined when the call names no time.
 const dateTimeOf = (v: unknown): unknown => (v && typeof v === "object" ? ((v as { dateTime?: unknown; date?: unknown }).dateTime ?? (v as { date?: unknown }).date) : v);
 export function whenOf(input: Record<string, unknown>): string | undefined {
   return when(dateTimeOf(input.startTime ?? input.start ?? input.start_time), dateTimeOf(input.endTime ?? input.end ?? input.end_time), input.timeZone ?? input.timezone);
@@ -74,6 +74,7 @@ const LABELS: Record<string, string> = {
 // Fields shown specially or not worth showing.
 const SKIP = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "timeZone", "timezone", "summary", "title"]);
 const SKIP_VALUES = new Set(["primary"]);
+const TIME_KEYS = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time"]);
 
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
 
@@ -127,11 +128,12 @@ export function describeCall(tool: string, input: Record<string, unknown>, draft
   const title = input.summary ?? input.title;
   if (typeof title === "string" && title) lines.push(`“${clip(title, 120)}”`);
 
-  const time = when(input.startTime ?? input.start ?? input.start_time, input.endTime ?? input.end ?? input.end_time, input.timeZone ?? input.timezone);
+  const time = whenOf(input);
   if (time) lines.push(`🕒 ${time}`);
 
   for (const [key, value] of Object.entries(input)) {
-    if (SKIP.has(key) || value === undefined || value === null || value === "") continue;
+    if (value === undefined || value === null || value === "") continue;
+    if (SKIP.has(key) && !(TIME_KEYS.has(key) && !stamp(dateTimeOf(value)))) continue; // (a time the 🕒 line could not read is shown as it is, never hidden)
     if (typeof value === "string" && SKIP_VALUES.has(value)) continue;
     if (Array.isArray(value) && value.length === 0) continue;
     lines.push(`${meta?.labels?.[key] ?? LABELS[key] ?? key}: ${show(key, value)}`);
