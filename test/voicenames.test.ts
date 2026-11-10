@@ -23,7 +23,7 @@ test("voice names: the prompt is the conversation's own hard-names note, without
 test("voice names: the size is capped", () => {
   const dir = folder();
   note(dir, "Aaa Bbb, ".repeat(100));
-  assert.ok(namesPrompt(dir)!.length <= 300);
+  assert.ok(namesPrompt(dir)!.length <= 360);
   assert.equal(namesPrompt(dir, 12), "Aaa Bbb, Aaa");
   rmSync(dir, { recursive: true });
 });

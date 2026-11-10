@@ -80,7 +80,7 @@ test("a line deleted or edited after the last dream: gone from the older block a
   recordMessage("edit", 5, "the visit is planned for the 19th of June", at(1), undefined, { of: 2 });
   recordMessage("owner", 6, "booked the train for Friday", at(1));
   let seen = "";
-  const run = (): Runner => async (prompt) => ((seen = prompt), writes({ "context-a.md": "stay at the lake house in June", "context-b.md": "the visit is planned for the 12th of June", "context-c.md": "dentist suggested the 14th of June", "context-d.md": "the visit is planned for the 19th of June" }));
+  const run = (): Runner => async (prompt) => ((seen = prompt), writes({ "context-a.md": "stay at the lake house in June", "context-b.md": "the visit is planned for the 12th of June", "style-c.md": "dentist suggested the 14th of June", "context-d.md": "the visit is planned for the 19th of June" }));
   await createDreamer({ conversations: () => [owner()], run }).run(NOW);
   assert.ok(!seen.includes("lake house") && !seen.includes("12th of June"), "the deleted line and the old text of the edited one are not shown");
   assert.ok(seen.includes("19th of June") && seen.includes("assistant (context only): Your dentist"));
