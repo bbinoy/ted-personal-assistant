@@ -146,6 +146,19 @@ test("dream: a file is not both written and deleted in one plan", () => {
   assert.deepEqual(acts(planOps({ ops: [d, w] }, ctx([a]))), []); // the refused write takes its source's delete with it
 });
 
+test("dream: a rule note is not built from a fact note, and the hard-names note is never auto-deleted", () => {
+  const a = note("context-dentist.md", "Check-up with the dentist on 12 May.");
+  const h = note("context-hard-names.md", "Okafor-Lindqvist, Szczecin");
+  seed([a, h]);
+  const into = (file: string, text: string, sources: string[]) => planOps({ ops: [write({ file, text, consolidates: sources })] }, ctx([a, h]));
+  const bad = into("triage-dentist.md", "Check-up with the dentist on 12 May.", ["context-dentist.md"]);
+  assert.equal(bad.actions.length, 0);
+  assert.match(bad.rejected[0]!.why, /rule note/);
+  assert.equal(into("context-trips.md", "Okafor-Lindqvist, Szczecin", ["context-hard-names.md"]).actions.filter((x) => x.kind === "delete").length, 0);
+  assert.match(planOps({ ops: [write({ file: "style-x.md", evidence: "nothing said" })] }, ctx()).rejected[0]!.why, /rule note/);
+  assert.match(planOps({ ops: [write({ evidence: "nothing said" })] }, ctx()).rejected[0]!.why, /fact note/);
+});
+
 test("dream: the hard-names list is built from notes like any other write", () => {
   const a = note("people-mara.md", "Mara Quispe-Valdivia is Alex's sister.");
   seed([a]);

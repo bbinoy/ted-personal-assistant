@@ -140,10 +140,11 @@ export function planOps(raw: unknown, ctx: { ownerText: string; assistantText?: 
     let kind: "add" | "update" | "merge";
     if (sources.length > 0 || (selfNamed && existing.has(file))) {
       // Written from existing notes (merge, split, reformat, a note for a person they mention, a note rewritten from itself): what they hold is already memory, so no quote and no length limit.
+      if (!factual(file) && sources.some(factual)) { bad("a rule note is not built from fact notes (it needs the person's own words)"); continue; }
       if (addsDetails(text, knownFor(file))) { bad("adds details no note or quote holds"); continue; }
       kind = "merge";
     } else {
-      if (!quoted(o.evidence, file)) { bad("no verbatim quote from the owner's own words"); continue; }
+      if (!quoted(o.evidence, file)) { bad(factual(file) ? "needs a verbatim quote from the conversation (fact note)" : "needs a verbatim quote from the person's own words (rule note)"); continue; }
       kind = existing.has(file) ? "update" : "add";
     }
     if (!existing.has(file) && count >= (ctx.maxNotes ?? scope.maxNotes)) { bad("memory is full"); continue; }
@@ -168,7 +169,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; assistantText?: 
   for (const w of live) {
     const total = w.merged.reduce((n, x) => n + (existing.get(x)?.text.length ?? 0), 0);
     for (const x of w.merged) {
-      if (x === w.file || !writable(x) || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
+      if (x === w.file || !writable(x) || x === HARD_NAMES_NOTE || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
       if (x.split("-")[0] !== w.file.split("-")[0] || gonePlan.size >= MAX_DELETES) continue;
       gonePlan.add(x);
       plan.actions.push({ kind: "delete", file: x, why: `merged into ${w.file}` });
