@@ -255,7 +255,7 @@ const cases: Case[] = [
     ok: (plan, after) => {
       const t = after["context-harbor-stay.md"] ?? "";
       if (!plan.actions.some((a) => a.file === "context-harbor-stay.md")) return `not corrected${plan.rejected.length ? ` (rejected: ${plan.rejected.map((r) => r.why).join(", ")})` : ""}`;
-      if (t.includes(`from ${day(20)}`)) return "the old start is still stated"; // (mentioning that it moved from the old date is fine)
+      if (t.replace(/\b(moved|changed|shifted|pushed)( back| forward)? from /gi, "").includes(`from ${day(20)}`)) return "the old start is still stated"; // (saying it moved from the old date is fine)
       return t.includes(day(23)) ? undefined : "the new start is missing";
     },
   },
