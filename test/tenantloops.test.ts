@@ -467,7 +467,7 @@ test("capabilitiesOf is the one answer: instance switches, her own settings and 
   }
 });
 
-test("a friend's dream looks back at her own older lines: a later deletion or edit holds, assistant text is no evidence", async () => {
+test("a friend's dream looks back at her own older lines: a later deletion or edit holds, an assistant line grounds a fact", async () => {
   const { dreamStateConv, writeDream } = await import("../src/modules/memory/dreamscope.ts");
   const mara = person("Mia");
   const old = new Date(NOON.getTime() - 9 * 86_400_000);
@@ -485,5 +485,5 @@ test("a friend's dream looks back at her own older lines: a later deletion or ed
   const run = () => async (prompt: string) => ((seen = prompt), { ops: evidence.map((e, i) => ({ op: "write", file: `people-x${i}.md`, description: "x", text: "A fact the run learnt.", evidence: e })) });
   await createDreamer({ key: () => KEY, conversations: friends(() => [mara.id]), run }).run(NOON);
   assert.ok(!seen.includes("lives by the sea") && !seen.includes("visits in June") && seen.includes("visits in July") && seen.includes("assistant (context only): Your aunt"));
-  assert.deepEqual(readdirSync(T.tenantContext(mara).notesDir).filter((f) => f.startsWith("people-x")), ["people-x3.md"]);
+  assert.deepEqual(readdirSync(T.tenantContext(mara).notesDir).filter((f) => f.startsWith("people-x")), ["people-x2.md", "people-x3.md"]);
 });
