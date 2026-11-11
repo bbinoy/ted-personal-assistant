@@ -1,7 +1,7 @@
 // More end-to-end cases (see cases.ts): tasks, the inbox, a booking, a look under injection, and the payment guard. Fictional people, places and addresses (example.com / example.org); every date is relative to the case's clock.
 import { CAL, MB, OWNER_EMAIL, check, created, deletes, plain, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
-import type { Case, Outcome, PerfectScript, Time } from "./case.ts";
+import type { Case, Check, Outcome, PerfectScript, Time } from "./case.ts";
 
 // ---- e3: bulk task triage ----
 const e3: Case = {
@@ -1112,6 +1112,8 @@ const MIA_E = "mia.okoye@example.org";
 const whereaboutsNote = (desc: string, body: string): string => `---\nname: whereabouts\ndescription: ${desc}\n---\n${body}\n`;
 const routineBrief = (t: Time): string => `---\nname: daily-brief\ndescription: The daily brief\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n`; // (its slot came 30 minutes ago, whatever time the case runs at)
 const routineStay = (t: Time): string => `---\nname: stay-prep\ndescription: Stay prep\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nBring context-whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts.\n`; // (the same wording setup saves; its slot came 30 minutes ago)
+// What the daily brief said: the bodies of its self-briefing mails (the one message a brief delivers).
+const briefBodies = (o: Outcome): string[] => o.calls.filter((c) => /send_self_briefing/.test(c.tool)).map((c) => String(c.args.markdownBody ?? ""));
 const spoken = (o: Outcome): string[] => o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
 const samNote = `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`;
 const miaNote = `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`;

@@ -100,8 +100,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   seedNotes(o.zone, world.notes);
   const web = world.fetch ? await startFakeWeb(world.fetch) : undefined;
   const scope: Scope = { key: OWNER_KEY, zone: o.zone, by: "owner", origin: "owner", source: "chat", now: nowMs };
-  const firstId = Math.max(0, ...listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone).map((x) => x.id)); // (tasks of an earlier case in the same data folder are not this case's)
-  for (const x of listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone)) dropItem(scope, x.id); // (a duplicate of a live task of an earlier case would be refused)
+  const firstId = Math.max(0, ...listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).map((x) => x.id)); // (tasks of an earlier case in the same data folder are not this case's)
+  for (const x of listItems(ckey, { status: ["open", "snoozed"], limit: 200 }, nowMs, o.zone)) dropItem(scope, x.id); // (a duplicate of a live task of an earlier case would be refused)
   for (const { focus, ...t } of world.tasks ?? []) {
     const { item } = addItem(scope, t);
     if (focus) editItem(scope, item.id, { focus: true }); // (an owner's pin from the task page)
@@ -197,7 +197,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       },
       tasks: {
         add: (t) => void addItem(scope, { title: t.title, due: t.due, remindAt: t.remindAtMs }),
-        find: (part) => listItems(ckey, { status: ["open", "snoozed"] }, nowMs, o.zone).find((x) => x.id > firstId && x.title.toLowerCase().includes(part.toLowerCase()))!.id,
+        find: (part) => listItems(ckey, { status: ["open", "snoozed"], limit: 200 }, nowMs, o.zone).find((x) => x.id > firstId && x.title.toLowerCase().includes(part.toLowerCase()))!.id,
         done: (id) => void completeItem(scope, id),
         drop: (id) => void dropItem(scope, id),
         edit: (id, patch) => void editItem(scope, id, { ...patch, remindAt: patch.remindAtMs }),
@@ -351,7 +351,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"] }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
   if (!error && guard.inits === 0 && !o.perfect && !c.group) guard.violations.push("no start-up message was checked"); // (a group the gate leaves unanswered starts no run at all)
   await web?.close();
   return {
