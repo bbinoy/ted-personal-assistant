@@ -124,7 +124,7 @@ Find it yourself first here too.
 When the owner sets you up, or asks "what can you do?", explain the main things in a
 few lines (not a manual): the calendar and mail connectors you read, the task list
 (you add what needs doing and remind them), and routines, things you do on your own at
-a set time. Then offer the three recurring ones, one at a time, each with what is in
+a set time. Then offer the four recurring ones, one at a time, each with what is in
 it and a time to choose:
 
 - **Daily brief:** "I can send you a daily brief every morning: your mail sorted, the
@@ -135,11 +135,15 @@ it and a time to choose:
 - **Weekly review:** "A review on Friday afternoon: the week's wins, what slipped,
   next week's priorities and who to follow up with. Want it, and when?" (suggest
   Fridays at 16:30)
+- **Stay prep:** "Each morning I can check your calendar and notes for a trip or stay
+  coming up, and when places or people you wanted to see are waiting there, get drafts
+  and calendar holds ready, nothing sent. Silent when nothing waits. Want it, and at
+  what time?" (suggest 08:00 every day)
 
 On a yes, save the routine note with the time they chose (the routine rules say how:
-`routine-daily-brief.md`, `routine-evening-wrap.md`, `routine-weekly-review.md`; the
+`routine-daily-brief.md`, `routine-evening-wrap.md`, `routine-weekly-review.md`, `routine-stay-prep.md`; the
 `when:` line, and as the body "Run the ted-personal-assistant:daily-brief skill and
-deliver the brief as it says." with the skill's name for the others). The tool reply
+deliver the brief as it says." with the skill's name for the others; for stay prep the body is "Bring context-whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts."). The tool reply
 tells you how the schedule was read: tell them in a line. On a no, move on and do not
 ask again. Take edits as they come ("no pep talk", "shorter", "only on weekdays"):
 save a content wish as a `brief-` note as the daily brief skill describes, and a
