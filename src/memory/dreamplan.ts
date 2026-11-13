@@ -5,8 +5,8 @@ import { LIMITS } from "../core/sanitize.ts";
 
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
 // shape or content; a scope says where a dream works and what it may touch.
-// Evidence splits by what a note does: a FACTUAL note (people, context, scheduling) may take a detail from anything the dream was shown, including the assistant's own lines
-// (what Ted reported from mail), so the floor there only stops invention; a note that steers behaviour (triage, style, brief, any other) needs the person's own words.
+// Trust splits by what a note does: a FACTUAL note (people, context, scheduling) is the model's judgement, from anything it was shown (the snapshot and "undo the dream" are the
+// safety); a note that steers behaviour (triage, style, brief, any other) needs the person's own words for a new or changed rule (CLAUDE.md §1).
 
 const FACTUAL = ["people-", "context-", "scheduling-"]; // notes that record facts; every other category steers behaviour
 const MAX_OPS = 30;
@@ -65,7 +65,7 @@ export function noteContent(file: string, description: string, text: string, exp
   return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
 }
 
-// The floor for a write built from existing notes: no number, capitalised word (but a sentence's first), email or link in it that no note or word of the person holds. Reworded instructions
+// The floor for a rule note built from existing notes: no number, capitalised word (but a sentence's first), email or link in it that no note or word of the person holds. Reworded instructions
 // are not caught here (the prompt and the assistant-lines rule hold those); new names, numbers, addresses and links are.
 const NEW_DETAIL = /\d+(?:[.,:]\d+)*|\S+@\S+|(?:https?:\/\/|www\.)\S+|(?<![.!?\n:*#>-]\s*)(?<!^)\p{Lu}[\p{L}'-]*/gu;
 function addsDetails(text: string, known: string): boolean {
@@ -77,7 +77,7 @@ function addsDetails(text: string, known: string): boolean {
 }
 
 // Pure: which of the model's proposals may be applied. Never trusts shape or content.
-export function planOps(raw: unknown, ctx: { ownerText: string; assistantText?: string; notes: readonly NoteFile[]; today: string; now: Date; maxNotes?: number; scope: Scope }): Plan {
+export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly NoteFile[]; today: string; now: Date; maxNotes?: number; scope: Scope }): Plan {
   const { scope } = ctx;
   const plan: Plan = { actions: [], rejected: [] };
   const list = (raw as { ops?: unknown } | null | undefined)?.ops;
@@ -89,15 +89,13 @@ export function planOps(raw: unknown, ctx: { ownerText: string; assistantText?: 
   const written = new Set<string>(); // files an accepted write in this plan targets
   const reasonOnly = new Set<string>(); // deletes that rest on the model's reason alone
   const lost = new Set<string>(); // sources of a rejected write: nothing about them changes
-  const reported = norm(ctx.assistantText ?? "");
   const factual = (file: string) => FACTUAL.some((p) => file.startsWith(p));
   const known = [...existing.values()].map((n) => n?.text ?? "").join("\n") + "\n" + ctx.ownerText;
-  const knownFor = (file: string) => (factual(file) ? `${known}\n${ctx.assistantText ?? ""}` : known);
   const textLen = new Map<string, number>();
   let writes = 0;
   let count = existing.size;
   const reject = (file: string, why: string) => plan.rejected.push({ file, why });
-  const quoted = (e: unknown, file?: string) => typeof e === "string" && norm(e).length >= MIN_EVIDENCE && (owner.includes(norm(e)) || (!!file && factual(file) && reported.includes(norm(e))));
+  const quoted = (e: unknown) => typeof e === "string" && norm(e).length >= MIN_EVIDENCE && owner.includes(norm(e));
   const writable = (file: string) => scope.categories.some((c) => file.startsWith(`${c}-`));
 
   if (list.length > MAX_OPS) console.log(`dream: ${list.length - MAX_OPS} of ${list.length} proposals left out (too many)`);
@@ -138,13 +136,15 @@ export function planOps(raw: unknown, ctx: { ownerText: string; assistantText?: 
     if (writes >= MAX_WRITES) { bad("too many changes in one run"); continue; }
 
     let kind: "add" | "update" | "merge";
-    if (sources.length > 0 || (selfNamed && existing.has(file))) {
-      // Written from existing notes (merge, split, reformat, a note for a person they mention, a note rewritten from itself): what they hold is already memory, so no quote and no length limit.
-      if (!factual(file) && sources.some(factual)) { bad("a rule note is not built from fact notes (it needs the person's own words)"); continue; }
-      if (addsDetails(text, knownFor(file))) { bad("adds details no note or quote holds"); continue; }
+    const built = sources.length > 0 || (selfNamed && existing.has(file));
+    if (factual(file)) kind = built ? "merge" : existing.has(file) ? "update" : "add"; // a fact is the model's judgement: no quote, no floor
+    else if (built) {
+      // A rule note built from existing notes (merge, split, reformat, rewritten from itself): what they hold is already memory, so no quote and no length limit.
+      if (sources.some(factual)) { bad("a rule note is not built from fact notes (it needs the person's own words)"); continue; }
+      if (addsDetails(text, known)) { bad("adds details no note or quote holds"); continue; }
       kind = "merge";
     } else {
-      if (!quoted(o.evidence, file)) { bad(factual(file) ? "needs a verbatim quote from the conversation (fact note)" : "needs a verbatim quote from the person's own words (rule note)"); continue; }
+      if (!quoted(o.evidence)) { bad("needs a verbatim quote from the person's own words (rule note)"); continue; }
       kind = existing.has(file) ? "update" : "add";
     }
     if (!existing.has(file) && count >= (ctx.maxNotes ?? scope.maxNotes)) { bad("memory is full"); continue; }

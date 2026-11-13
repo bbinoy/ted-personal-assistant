@@ -284,6 +284,7 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
 
 const friends = (ids: () => string[]) => () => ids().map((id) => tenant(id)); // (dreamConversations(["tenant"]) for chosen friends)
 const ownerNotesBefore = () => (existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR).sort().join(",") : "");
+const RULE = (evidence: string) => ({ ops: [{ op: "write", file: "style-sister.md", description: "her sister", text: "Her sister Eve is vegetarian.", evidence }] });
 const WRITE = (evidence: string) => ({ ops: [{ op: "write", file: "people-sister.md", description: "her sister", text: "Her sister Eve is vegetarian.", evidence }] });
 
 test("the nightly dream tidies a tenant's notes from her words only, on her key; owner's and others' notes are untouched", async () => {
@@ -297,7 +298,7 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   const d = createDreamer({
     key: () => KEY,
     conversations: friends(() => created),
-    run: (payer) => async (prompt, system) => (prompts.push({ prompt, system, key: (payer as { apiKey: string }).apiKey }), WRITE("my sister Eve is vegetarian")),
+    run: (payer) => async (prompt, system) => (prompts.push({ prompt, system, key: (payer as { apiKey: string }).apiKey }), /Ned/.test(prompt) ? RULE("my sister Eve is vegetarian") : WRITE("my sister Eve is vegetarian")),
   });
   await d.run(NOON);
   assert.equal(prompts.length, 2, "Mia and Ned; not Oz (suspended)");
@@ -320,8 +321,8 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   assert.ok(!existsSync(join(hers.notesDir, "people-sister.md")), "her notes are back as before the dream");
   assert.equal(readdirSync(hers.backupDir).length, 0, "the snapshot is used up");
   writeFileSync(join(hers.notesDir, "people-sister.md"), "---\nname: sister\n---\n\nHer sister Eve is vegetarian.\n"); // (as the dream had left it, for the rest of this test)
-  // Ned's evidence (her words) is not in his log: refused, so nothing of the quote lands in his notes
-  assert.ok(!existsSync(join(T.tenantContext(bob).notesDir, "people-sister.md")));
+  // Ned's rule note quotes her words, which are not in his log: refused, so nothing of the quote lands in his notes
+  assert.ok(!existsSync(join(T.tenantContext(bob).notesDir, "style-sister.md")));
   assert.ok(!existsSync(join(T.tenantContext(noDream).notesDir, "people-sister.md")));
   assert.equal(ownerNotesBefore(), before, "the owner's notes are untouched");
   // once a day
@@ -467,7 +468,7 @@ test("capabilitiesOf is the one answer: instance switches, her own settings and 
   }
 });
 
-test("a friend's dream looks back at her own older lines: a later deletion or edit holds, an assistant line grounds a fact", async () => {
+test("a friend's dream looks back at her own older lines: a later deletion or edit holds, an assistant line never grounds a rule", async () => {
   const { dreamStateConv, writeDream } = await import("../src/modules/memory/dreamscope.ts");
   const mara = person("Mia");
   const old = new Date(NOON.getTime() - 9 * 86_400_000);
@@ -482,8 +483,8 @@ test("a friend's dream looks back at her own older lines: a later deletion or ed
   recordMessage("owner", 6, "new line after the last dream", recent, log);
   let seen = "";
   const evidence = ["my cousin Ida lives by the sea", "my cousin Ida visits in June", "aunt Greta is vegetarian", "my cousin Ida visits in July"];
-  const run = () => async (prompt: string) => ((seen = prompt), { ops: evidence.map((e, i) => ({ op: "write", file: `people-x${i}.md`, description: "x", text: "A fact the run learnt.", evidence: e })) });
+  const run = () => async (prompt: string) => ((seen = prompt), { ops: evidence.map((e, i) => ({ op: "write", file: `style-x${i}.md`, description: "x", text: "A fact the run learnt.", evidence: e })) });
   await createDreamer({ key: () => KEY, conversations: friends(() => [mara.id]), run }).run(NOON);
   assert.ok(!seen.includes("lives by the sea") && !seen.includes("visits in June") && seen.includes("visits in July") && seen.includes("assistant (context only): Your aunt"));
-  assert.deepEqual(readdirSync(T.tenantContext(mara).notesDir).filter((f) => f.startsWith("people-x")), ["people-x2.md", "people-x3.md"]);
+  assert.deepEqual(readdirSync(T.tenantContext(mara).notesDir).filter((f) => f.startsWith("style-x")), ["style-x3.md"]);
 });
