@@ -236,13 +236,12 @@ const cases: Case[] = [
   },
   {
     id: "s",
-    title: "a detail found nowhere (not in notes or any line) is rejected, whatever the model proposes",
+    title: "a fact from the conversation (a new room and day, told by the assistant) is saved in the existing note",
     notes: {
       "context-dentist-checkup.md": note("Dentist check-up on 5 May at 09:00", "Check-up with Dr Okafor-Lindqvist on 5 May at 09:00.", 10),
     },
-    lines: ["[09:30] assistant (context only): Your check-up is on 5 May."],
-    fixed: { ops: [{ op: "write", file: "context-dentist-checkup.md", description: "Check-up", text: "Check-up with Dr Okafor-Lindqvist on 5 May at 09:00, room 4B, bring the referral from Dr Zorn.", consolidates: ["context-dentist-checkup.md"] }] },
-    ok: (plan) => (plan.actions.length === 0 && plan.rejected.length === 1 ? undefined : "the invented detail was accepted"),
+    lines: ["[09:30] assistant (context only): The dentist's office wrote that your check-up moved to 12 May at 10:30, room 4B."],
+    ok: (_plan, after) => (/4B/.test(after["context-dentist-checkup.md"] ?? "") && /12 May/.test(after["context-dentist-checkup.md"] ?? "") ? undefined : "the new fact was not saved"),
   },
   {
     id: "m",
@@ -297,7 +296,7 @@ for (const c of cases.filter((x) => !only || only.includes(x.id))) {
     for (const f of files) writeFileSync(join(notesDir, f.file), f.raw);
     const scope = { notesDir, backupsDir: join(dir, "backups"), categories, maxNotes: 100 };
     const out = c.fixed ?? await run(dreamPrompt(now, "the owner", files, [...(c.lines ?? []), `[10:00] the owner: ${evidence}`], (c.earlier ?? []).map((e) => `[${localTime(new Date(now.getTime() - e.daysAgo * 86_400_000))}] the owner: ${e.text}`)), dreamSystem({ subject: "the owner", kind: "owner", categories }));
-    const plan = planOps(out, { assistantText: (c.lines ?? []).map((l) => l.replace(/^\[[^\]]*\] assistant \(context only\): /, "")).join("\n"), ownerText: [...(c.earlier ?? []).map((e) => e.text), evidence].join("\n"), notes: files, today: dayIn(now), now, scope });
+    const plan = planOps(out, { ownerText: [...(c.earlier ?? []).map((e) => e.text), evidence].join("\n"), notes: files, today: dayIn(now), now, scope });
     const after: Record<string, string> = Object.fromEntries(files.map((f) => [f.file, f.raw]));
     for (const a of plan.actions) {
       if (a.kind === "delete") delete after[a.file];

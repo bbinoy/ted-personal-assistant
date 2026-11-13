@@ -137,9 +137,9 @@ test("the dream: a change to a note from the person's own words needs their quot
   const base = { notes, today: "2026-10-21", now, scope: dreamScope(owner()) };
   const merge = planOps({ ops: [{ op: "write", file: "people-mara-rui.md", description: "Mara and Rui", text: "Mara and Rui, Lisbon.", consolidates: ["people-mara.md", "people-rui.md"] }] }, { ...base, ownerText: "" });
   assert.ok(merge.actions.some((a) => a.kind === "merge"), "a merge needs no quote");
-  const refused = planOps({ ops: [{ op: "write", file: "people-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "we talked about the weather" });
+  const refused = planOps({ ops: [{ op: "write", file: "style-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "we talked about the weather" });
   assert.deepEqual([refused.actions.length, refused.rejected.length], [0, 1], "no quote of the person's own words: refused");
-  const accepted = planOps({ ops: [{ op: "write", file: "people-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "yes Mara lives in Porto now, my friend" });
+  const accepted = planOps({ ops: [{ op: "write", file: "style-mara.md", description: "Mara", text: "Mara lives in Porto.", evidence: "Mara lives in Porto now" }] }, { ...base, ownerText: "yes Mara lives in Porto now, my friend" });
   assert.equal(accepted.actions.length, 1);
   assert.doesNotMatch(noteContent("people-x.md", "d", "t", undefined, now), /origin/);
 });

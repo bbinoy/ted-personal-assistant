@@ -25,8 +25,7 @@ import { LIMITS, oneLine } from "../core/sanitize.ts";
 // The dream: once a day, on the first tick at or after the preset's dream hour (dreamTrigger, a plain tick job: nothing else starts it), a model with NO tools reads what a conversation's person said since the last dream (their messages and
 // reactions) next to that conversation's notes, and proposes changes to the notes as JSON: things worth remembering, and a tidy-up (merge duplicates,
 // drop what has expired). It cannot touch anything itself. Code decides what is applied:
-//   - a new fact needs a verbatim quote from the person's own words that day (checked here); for people, context and scheduling notes a quote of what the assistant reported
-//     (mail it relayed) counts too, while a rule that steers behaviour (triage, style, brief) still needs the person's own words;
+//   - a fact (people, context, scheduling note) is the model's judgement; a new or changed rule (triage, style, brief) needs a verbatim quote of the person's own words (checked here);
 //   - a merge may only shorten what it merges; an expired note is checked against its date;
 //   - setup and voice notes are not the dream's to change;
 //   - a cap on changes per run, and a snapshot first so "undo the dream" puts everything back.
@@ -50,16 +49,15 @@ const LOOK_BACK_DAYS = 14; // older lines shown next to the new ones, so a note 
 // that": neither is evidence. So a 👍 or 👎 never creates a note by itself. What a 👎 can lead to is a note the turn saved at once (the learn rule), so it is a note by the time
 // the dream reads, not a line of evidence. A message she deleted is not evidence at all, and an edited one counts once, as edited. `count`: how many lines of evidence
 // there are (the dream's threshold).
-export function conversationLines(messages: readonly Sent[], who: string = OWNER, evidence: "owner" | "member" = "owner"): { lines: string[]; text: string; reported: string; count: number } {
+export function conversationLines(messages: readonly Sent[], who: string = OWNER, evidence: "owner" | "member" = "owner"): { lines: string[]; text: string; count: number } {
   const lines: string[] = [];
   const said: string[] = [];
-  const told: string[] = [];
   for (const m of foldEdits(withoutDeleted(messages))) {
     if (m.kind === evidence) { lines.push(`[${localTime(m.at)}] ${evidence === "owner" ? `${who}: ` : ""}${m.text.replace(/\n+/g, " / ")}`); said.push(m.text); }
     else if (m.kind === "reaction" && evidence === "owner") lines.push(`[${localTime(m.at)}] ${who} reacted ${m.text.replace(/\n+/g, " / ")}`); // shows what was reacted to, which may quote mail: never evidence
-    else if (m.kind === "chat") { const t = m.text.slice(0, LIMITS.line).replace(/\n+/g, " / "); lines.push(`[${localTime(m.at)}] assistant (context only): ${t}`); told.push(t); }
+    else if (m.kind === "chat") { const t = m.text.slice(0, LIMITS.line).replace(/\n+/g, " / "); lines.push(`[${localTime(m.at)}] assistant (context only): ${t}`); }
   }
-  return { lines, text: said.join("\n"), reported: told.join("\n"), count: said.length };
+  return { lines, text: said.join("\n"), count: said.length };
 }
 
 // The prompt, for any conversation: its notes as they are, what was said since the last dream and, apart, what was said in the days before (`earlier`). `subject`: whose notes they are.
@@ -135,10 +133,10 @@ export const readNoteFiles = (dir: string): NoteFile[] => {
 // ---- the run itself, the same for every conversation ----
 
 // Asks the model for changes, lets code decide which to keep, snapshots and applies them.
-export async function dreamOver(scope: Scope, prompt: string, system: string, evidenceText: string, now: Date, run: Runner, assistantText = ""): Promise<{ plan: Plan; snapshot?: string }> {
+export async function dreamOver(scope: Scope, prompt: string, system: string, evidenceText: string, now: Date, run: Runner): Promise<{ plan: Plan; snapshot?: string }> {
   const notes = readNoteFiles(scope.notesDir);
   const raw = await run(prompt, system);
-  const plan = planOps(raw, { ownerText: evidenceText, assistantText, notes, today: dayIn(now), now, scope });
+  const plan = planOps(raw, { ownerText: evidenceText, notes, today: dayIn(now), now, scope });
   return { plan, snapshot: applyPlan(plan, now, scope, baseOf(notes)) }; // `notes`: as read before the model ran; a note edited meanwhile is not overwritten
 }
 
@@ -218,9 +216,9 @@ export function createDreamer(deps: DreamerDeps = {}) {
     const tag = { kind: conv.kind, ...(conv.tenantId ? { tenant: conv.tenantId } : {}) };
     try {
       const scope = scopeOf(conv);
-      const before = state.lastRunAt ? conversationLines(foldEdits(withoutDeleted(messagesSince(new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString(), conv.logFile))).filter((m) => m.at <= state.lastRunAt!), subjectOf(conv), rules.evidence) : { lines: [], text: "", reported: "" }; // the same evidence rules; its quotes count too. Deletes and edits are applied over the whole window first (a marker made after the last dream still counts), then the lines are split by the message's own time
+      const before = state.lastRunAt ? conversationLines(foldEdits(withoutDeleted(messagesSince(new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString(), conv.logFile))).filter((m) => m.at <= state.lastRunAt!), subjectOf(conv), rules.evidence) : { lines: [], text: "" }; // the same evidence rules; its quotes count too. Deletes and edits are applied over the whole window first (a marker made after the last dream still counts), then the lines are split by the message's own time
       const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines, before.lines);
-      const { plan, snapshot } = await dreamOver(scope, prompt, system, [before.text, said.text].filter(Boolean).join("\n"), now, deps.run?.(payer, conv) ?? runnerFor(payer), [before.reported, said.reported].filter(Boolean).join("\n"));
+      const { plan, snapshot } = await dreamOver(scope, prompt, system, [before.text, said.text].filter(Boolean).join("\n"), now, deps.run?.(payer, conv) ?? runnerFor(payer));
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
       const label = `${conv.kind} dream (${conv.tenantId ?? (conv.sponsor ? conv.convId : subjectOf(conv))})`; // (a friend's group is named by its folder: its title is hers)
       if (rules.logWords && !conv.sponsor) for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
