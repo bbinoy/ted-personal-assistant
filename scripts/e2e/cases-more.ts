@@ -1974,35 +1974,35 @@ const e60: Case = {
   },
 };
 
-// ---- e61: tags: a new work task reuses the tag the list already uses ("work"), not a near copy ("job", "office") ----
+// ---- e61: tags: a new task reuses the tags the list already uses (here odd short names a model would not guess), not a spelled-out copy ----
 const e61: Case = {
   id: "e61",
-  title: "tags in use are work and private: a new task about work is added with the existing work tag and no near-duplicate tag",
-  turns: ["Please add a task for me: send the Q4 budget draft to finance by Thursday."],
+  title: "tags in use are zrh, ldn, work and private: a task about the Zurich flat is added with zrh, not zurich",
+  turns: ["Remind me to book the plumber for the Zurich flat next week."],
   world: (t) => ({
     tasks: [
+      { title: "Renew the Zurich parking permit", due: t.day(4), tags: ["zrh", "private"] },
+      { title: "Collect the keys from the Zurich agent", tags: ["zrh"] },
+      { title: "Meet the London landlord", due: t.day(6), tags: ["ldn", "private"] },
       { title: "Prepare the quarterly numbers for the board", due: t.day(3), tags: ["work"] },
-      { title: "Review the vendor contract", tags: ["work"] },
-      { title: "Book the dentist", tags: ["private"] },
-      { title: "Buy a birthday present for Rosa", due: t.day(5), tags: ["private"] },
     ],
   }),
   maxQuestions: 0,
   state: (o) => {
-    const task = taskOf(o, /budget draft/i);
+    const task = taskOf(o, /plumber/i);
     const tags = task?.tags ?? [];
     return [
       check("the task was added", !!task),
-      check("it carries the tag work", tags.includes("work"), tags.join(", ")),
-      check("no near copy of work, and not private", !tags.some((x) => /^(job|jobs|works|working|office|business|professional|career|private)$/.test(x)), tags.join(", ")),
+      check("it carries the tag zrh", tags.includes("zrh"), tags.join(", ")),
+      check("no spelled-out copy of it", !tags.some((x) => /^(zurich|zürich|zuerich|zur|zrh-flat)$/.test(x)), tags.join(", ")),
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It confirms the task was added, in a line or two, and asks no question."],
+  reply: ["It confirms the reminder was added, in a line or two, and asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    s.tasks.add({ title: "Send the Q4 budget draft to finance", due: s.time.nextWeekday(4), tags: ["work"] });
-    s.say("Added: send the Q4 budget draft to finance, due Thursday.");
+    s.tasks.add({ title: "Book the plumber for the Zurich flat", due: s.time.nextWeekday(1), tags: ["zrh", "private"] });
+    s.say("Added: book the plumber for the Zurich flat, next Monday.");
   },
 };
 
