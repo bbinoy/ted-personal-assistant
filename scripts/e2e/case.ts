@@ -20,7 +20,7 @@ export interface Time {
 }
 
 interface World {
-  tasks?: { title: string; due?: string; details?: string; person?: string; remindAt?: number; focus?: boolean; moves?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder; `moves`: the due date was moved that many times in the days before, a history of edited rows)
+  tasks?: { title: string; due?: string; details?: string; person?: string; tags?: string[]; remindAt?: number; focus?: boolean; moves?: number }[]; // open tasks of the owner's list (Ted's own tasks store, in the temp data folder; `moves`: the due date was moved that many times in the days before, a history of edited rows)
   calendar?: SeedEvent[];
   mail?: SeedMail[];
   mailAccounts?: string[]; // more accounts in the mail client (account 2, 3...; `account` of a seed mail picks one), by email address
@@ -77,7 +77,7 @@ export interface PerfectScript {
   turn(n: number): void;
   tool(full: string, args: Record<string, unknown>): Promise<string>;
   tasks: {
-    add(t: { title: string; due?: string; remindAtMs?: number }): void;
+    add(t: { title: string; due?: string; remindAtMs?: number; tags?: string[] }): void;
     find(titlePart: string): number; // the id of the open task whose title has this text
     done(id: number): void;
     drop(id: number): void;

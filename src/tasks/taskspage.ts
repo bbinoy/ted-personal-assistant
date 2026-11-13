@@ -33,16 +33,46 @@ function dateView(it: Item, now: number, zone: string): { due: string; late: boo
   return { due: it.due ? showLocal(it.due, today) : "", late: dueClass(it, now, zone) === "overdue", canEarlier: stepDate(it.due, "earlier", today) !== undefined };
 }
 
+/** A filter pill: `id` is what a row's data-pills holds and the script matches on, `label` what the button says. */
+interface Pill {
+  id: string;
+  label: string;
+}
+
+/** What a task can be filtered by: its free tags, and the typed fields the row also shows (kind, person, from mail or meeting, reminder, repeats, urgent). */
+function pillsOf(it: Item): Pill[] {
+  return [
+    ...(it.tags ?? []).map((t) => ({ id: `t:${t}`, label: `#${t}` })),
+    ...(it.kind !== "task" ? [{ id: `k:${it.kind}`, label: KIND[it.kind] }] : []),
+    ...(it.person ? [{ id: `p:${it.person}`, label: it.person }] : []),
+    ...(it.sourceKind === "mail" || it.sourceKind === "meeting" ? [{ id: `s:${it.sourceKind}`, label: `from ${it.sourceKind}` }] : []),
+    ...(it.remindAt !== undefined ? [{ id: "r:reminder", label: "reminder" }] : []),
+    ...(it.repeat ? [{ id: "r:repeats", label: "repeats" }] : []),
+    ...(it.urgent ? [{ id: "r:urgent", label: "urgent" }] : []),
+  ];
+}
+
+/** The pill bar: "all" first (pressed when nothing is selected), then every pill the shown tasks have with its count, free tags first and the most used first within each kind of pill. Without script it does nothing, so the caller leaves it out. */
+function pillBar(items: readonly Item[]): string {
+  const n = new Map<string, { pill: Pill; count: number }>();
+  for (const it of items) for (const p of pillsOf(it)) n.set(p.id, { pill: p, count: (n.get(p.id)?.count ?? 0) + 1 });
+  if (!n.size) return "";
+  const order = (id: string): number => "tkpsr".indexOf(id[0]!);
+  const pills = [...n.values()].sort((a, b) => order(a.pill.id) - order(b.pill.id) || b.count - a.count || a.pill.label.localeCompare(b.pill.label));
+  return `<div class="pills" role="group" aria-label="Filter tasks"><button type="button" class="pill all" aria-pressed="true">all</button>${pills.map((x) => `<button type="button" class="pill" data-p="${esc(x.pill.id)}" aria-pressed="false">${esc(x.pill.label)} <span class="n">${x.count}</span></button>`).join("")}</div>`;
+}
+
 function row(it: Item, now: number, zone: string, token?: string, full = false): string {
   const { due, late, canEarlier } = dateView(it, now, zone);
-  const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind].filter(Boolean).map((b) => esc(b!));
+  const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind, ...(it.tags ?? []).map((t) => `#${t}`)].filter(Boolean).map((b) => esc(b!));
+  const pills = pillsOf(it).map((p) => p.id);
   const tick = token === undefined ? "" : `<form class="tick" method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
   const step = (dir: Dir, sign: string, off = false): string => `<button name="dir" value="${dir}" title="Move ${dir}" aria-label="Move ${dir}: ${esc(it.title)}"${off ? " disabled" : ""}>${sign}</button>`;
   const pinned = isFocus(it, todayIn(now, zone));
   const pinTitle = pinned ? "Unpin from focus today" : full ? `Focus today is full (${FOCUS_MAX})` : "Pin to focus today";
   const pin = `<form class="pin" method="post" action="/tasks/${it.id}/focus"><input type="hidden" name="token" value="${esc(token ?? "")}"><button name="on" value="${pinned ? 0 : 1}" title="${pinTitle}" aria-label="${pinned ? "Unpin from" : "Pin to"} focus today: ${esc(it.title)}" aria-pressed="${pinned}"${full && !pinned ? " disabled" : ""}>&#128204;</button></form>`;
   const move = token === undefined ? "" : `<div class="steps"><form class="step" method="post" action="/tasks/${it.id}/move"><input type="hidden" name="token" value="${esc(token)}">${step("earlier", "&#8249;", !canEarlier)}${step("later", "&#8250;")}</form>${pin}</div>`;
-  return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}">${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br>${move}<span class="m">${bits.join(" · ")}</span></div></li>`;
+  return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}"${pills.length ? ` data-pills="${esc(JSON.stringify(pills))}"` : ""}>${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br>${move}<span class="m">${bits.join(" · ")}</span></div></li>`;
 }
 
 const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string, full = false): string => {
@@ -53,13 +83,24 @@ const block = (title: string, items: readonly Item[], now: number, zone: string,
 };
 
 /**
- * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out; a date button posts in the background and the row's date text and buttons take the server's answer (without script the forms post and the server redirects back); a pin button posts normally (the row changes section, so the page reloads from the redirect) after saving the page state,
+ * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out; a date button posts in the background and the row's date text and buttons take the server's answer (without script the forms post and the server redirects back); a pill buttons filter the rows client-side (a row shows when it has every selected pill; the selection is kept in localStorage); a pin button posts normally (the row changes section, so the page reloads from the redirect) after saving the page state,
  * and the page reloads itself every minute (not while a post is in flight or just after a date button, so a reshuffle does not jump). Both reloads keep which sections are open and where it was scrolled (sessionStorage; if that is unavailable it simply reloads).
  */
 const SCRIPT = String.raw`(()=>{
 const S=sessionStorage,K="tasks-page",k=(d)=>d.querySelector("summary").textContent.replace(/ \(\d+\)$/,"");
 const save=()=>{try{const o={};document.querySelectorAll("details").forEach((d)=>{o[k(d)]=d.open});S.setItem(K,JSON.stringify({o,y:scrollY}))}catch(e){}};
 try{const v=JSON.parse(S.getItem(K)||"null");S.removeItem(K);if(v){document.querySelectorAll("details").forEach((d)=>{if(k(d) in v.o)d.open=v.o[k(d)]});scrollTo(0,v.y)}}catch(e){}
+const P=[...document.querySelectorAll("button.pill[data-p]")],A=document.querySelector("button.pill.all"),W="tasks-pills",sel=new Set;
+try{const ok=new Set(P.map((b)=>b.dataset.p));JSON.parse(localStorage.getItem(W)||"[]").forEach((x)=>{if(ok.has(x))sel.add(x)})}catch(e){}
+const apply=()=>{
+document.querySelectorAll("li:not(.sub)").forEach((li)=>{const h=JSON.parse(li.dataset.pills||"[]");li.hidden=![...sel].every((x)=>h.includes(x))});
+document.querySelectorAll("details").forEach((d)=>{const n=[...d.querySelectorAll("li:not(.sub)")].filter((li)=>!li.hidden).length,s=d.querySelector("summary");d.hidden=!n;s.textContent=s.textContent.replace(/\(\d+\)$/,"("+n+")");let on=false;[...d.querySelectorAll("li")].reverse().forEach((li)=>{if(li.classList.contains("sub")){li.hidden=!on;on=false}else if(!li.hidden)on=true})});
+P.forEach((b)=>b.setAttribute("aria-pressed",sel.has(b.dataset.p)));if(A)A.setAttribute("aria-pressed",!sel.size);
+};
+if(A){apply();document.addEventListener("click",(e)=>{const b=e.target.closest&&e.target.closest("button.pill");if(!b)return;
+if(b===A)sel.clear();else if(sel.has(b.dataset.p))sel.delete(b.dataset.p);else sel.add(b.dataset.p);
+try{localStorage.setItem(W,JSON.stringify([...sel]))}catch(x){}
+apply();if(sel.size)document.querySelectorAll("details:not([hidden])").forEach((d)=>{d.open=true})})}
 let q=0;
 setInterval(()=>{if(document.querySelector("form.busy")||Date.now()-q<20000)return;save();location.reload()},60000);
 document.addEventListener("submit",async(e)=>{
@@ -73,7 +114,7 @@ if(!r.ok&&r.type!=="opaqueredirect")throw 0;
 if(step){const v=await r.json();let d=li.querySelector(".d");if(!d){d=document.createElement("span");d.className="d";li.querySelector(".t").after(" ",d)}
 d.textContent=v.due;li.classList.toggle("late",v.late);bs[0].disabled=!v.canEarlier;bs[1].disabled=false;f.classList.remove("busy");q=Date.now();return}
 const d=li.closest("details"),ul=li.parentNode;li.classList.add("gone");
-setTimeout(()=>{li.remove();ul.querySelectorAll("li.sub").forEach((h)=>{const x=h.nextElementSibling;if(!x||x.classList.contains("sub"))h.remove()});const n=ul.querySelectorAll("li:not(.sub)").length;if(!n)d.remove();else{const s=d.querySelector("summary");s.textContent=s.textContent.replace(/\(\d+\)$/,"("+n+")")}},300);
+setTimeout(()=>{li.remove();ul.querySelectorAll("li.sub").forEach((h)=>{const x=h.nextElementSibling;if(!x||x.classList.contains("sub"))h.remove()});if(!ul.querySelector("li:not(.sub)"))d.remove();else apply()},300);
 }catch(x){f.classList.remove("busy");bs.forEach((b,i)=>b.disabled=was[i]);const m=document.createElement("span");m.className="err";m.textContent=step?"Could not move that, try again.":"Could not tick that off, try again.";li.querySelector(".b").append(m)}
 });
 })();`;
@@ -101,10 +142,11 @@ li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li
 button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
 details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
 li.sub{display:block;border-left-color:transparent;padding:.5rem 0 .1rem .5rem;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#777}li.sub:not(:first-child){margin-top:.3rem}
+[hidden]{display:none!important}.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 .6rem}button.pill{min-width:0;min-height:2.2rem;border-radius:1.1rem;padding:0 .8rem;font-size:.9rem}button.pill[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;color:#fff}.pill .n{opacity:.7;font-size:.8rem}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 .steps{float:right;clear:right;display:flex;gap:.3rem;margin:.15rem 0 0 .5rem}.steps form{display:flex;gap:.3rem}.steps button{min-width:2.4rem;min-height:2.2rem;border-radius:.6rem;font-size:1.2rem;line-height:1;padding:0;border-color:#8884;color:#777}.steps button:disabled{opacity:.3;cursor:default;background:transparent;border-color:#8884}.steps .pin button{font-size:1rem;filter:grayscale(1);opacity:.7}.steps .pin button:disabled{opacity:.3}.steps .pin button[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;filter:none;opacity:1}
 </style></head><body><h1>Tasks</h1>${navLink("/done")}<div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token, full)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${nonce ? pillBar([...open, ...done]) : ""}${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token, full)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}${nonce ? `<script nonce="${nonce}">${SCRIPT}</script>` : ""}</body></html>`;
 }
 

@@ -1,4 +1,4 @@
-import { addedByLooks, counts, dueClass, effectiveStatus, isFocus, listItems, slidingItems, type Item } from "./store.ts";
+import { addedByLooks, counts, tagCounts, dueClass, effectiveStatus, isFocus, listItems, slidingItems, type Item } from "./store.ts";
 import { addDays, localOf, parseLocal, showInstant, showLocal, todayIn, weekdayOf } from "./when.ts";
 
 // How tasks are SHOWN, always in the conversation's own clock: one item as a compact line (the tool replies and lists), and the phone-sized /tasks answer. Pure over the store's reads.
@@ -28,7 +28,14 @@ export function itemLine(it: Item, now: number, zone: string): string {
   if (status === "snoozed" && it.snoozeUntil !== undefined) parts.push(`snoozed until ${showInstant(it.snoozeUntil, zone, now)}`);
   else if (status !== "open") parts.push(status);
   if (it.sourceKind === "mail" || it.sourceKind === "meeting") parts.push(`from ${it.sourceKind}`);
+  if (it.tags?.length) parts.push(it.tags.map((t) => `#${t}`).join(" "));
   return parts.join(" | ");
+}
+
+/** "Tags in use: work 5, private 3" (open and snoozed items, most used first), so a run reuses a tag instead of inventing a near copy; "" when none. */
+export function tagsLine(key: string): string {
+  const t = tagCounts(key).slice(0, 20);
+  return t.length ? `Tags in use: ${t.map((x) => `${x.tag} ${x.count}`).join(", ")}` : "";
 }
 
 /** What a mutation tool tells back after its first line: the resolved dates in the conversation's clock, so the model can see what its words became and correct them. */
@@ -129,6 +136,8 @@ export function tasksFacts(key: string, now: number, zone: string): { text: stri
   const added = addedByLooks(key, now - ADDED_WINDOW_MS);
   const sliding = slidingItems(key, SLIDING_MOVES);
   const parts: string[] = [];
+  const tags = tagsLine(key);
+  if (tags) parts.push(tags);
   if (added.length) parts.push(`Added to the list by looks in the last 24 hours (you or another look did it; the chat log and your own posts show whether it was already mentioned):\n${added.map((it) => `${itemLine(it, now, zone)} | added ${showInstant(it.createdAt, zone, now)}${it.sourceRef ? ` | source ${it.sourceRef}` : ""}`).join("\n")}`);
   if (sliding.length) parts.push(`Open tasks whose due date or reminder was moved ${SLIDING_MOVES} or more times (load the tasks skill and follow "A task that keeps sliding" before you act on or remind about any of them):\n${sliding.map((s) => `#${s.item.id} ${s.item.title} | moved ${s.moves} times since ${showLocal(localOf(s.since, zone).date, todayIn(now, zone)).replace(/^\w+ /, "")}`).join("\n")}`);
   return { text: parts.join("\n\n"), fromMail: [...added, ...sliding.map((s) => s.item)].some((it) => it.sourceKind === "mail") };

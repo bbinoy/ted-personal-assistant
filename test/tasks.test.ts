@@ -571,3 +571,41 @@ test("tasks: the facts say how often an open task's due date or reminder moved, 
   assert.doesNotMatch(f.text, /Renew the pass|Tidy the shelf|Pay the fee/);
   assert.equal(tasksFacts(fresh(), NOW, ZONE).text, "");
 });
+
+test("tasks: tags are normalised, stored with the item, replaced by an edit, shown in the line and the facts, and filter a list", async () => {
+  const k = fresh();
+  const a = S.addItem(scope(k), { title: "Draft the report", tags: ["  #Work ", "work", "Project X", ""] });
+  assert.deepEqual(a.item.tags, ["work", "project-x"]);
+  assert.deepEqual(S.getItem(k, a.item.id)?.tags, ["work", "project-x"]); // (read back from the database)
+  assert.match(itemLine(a.item, NOW, ZONE), /#work #project-x$/);
+  assert.equal(S.addItem(scope(k), { title: "Plain" }).item.tags, undefined); // (rows with no tags carry no field)
+  const b = S.addItem(scope(k), { title: "Book the dentist", tags: ["private"] });
+  S.addItem(scope(k), { title: "Send the invoice", tags: ["work"] });
+  assert.throws(() => S.addItem(scope(k), { title: "Too many", tags: Array.from({ length: 9 }, (_, i) => `t${i}`) }), /at most 8 tags/);
+  assert.throws(() => S.addItem(scope(k), { title: "Too long", tags: ["x".repeat(31)] }), /too long/);
+  assert.deepEqual(S.listItems(k, { tags: ["Work"] }).map((i) => i.title), ["Draft the report", "Send the invoice"]);
+  assert.deepEqual(S.listItems(k, { tags: ["work", "project-x"] }).map((i) => i.title), ["Draft the report"]);
+  assert.deepEqual(S.listItems(k, { tags: ["nothing"] }), []);
+  assert.equal(tasksFacts(k, NOW, ZONE).text, "Tags in use: work 2, private 1, project-x 1");
+  const e = S.editItem(scope(k), a.item.id, { tags: ["private", "Zurich"] });
+  assert.deepEqual(e.item.tags, ["private", "zurich"]);
+  assert.equal(S.editItem(scope(k), a.item.id, { tags: [] }).item.tags, undefined);
+  assert.equal(S.editItem(scope(k), b.item.id, { tags: null }).item.tags, undefined);
+  S.completeItem(scope(k), b.item.id);
+  assert.deepEqual(S.tagCounts(k), [{ tag: "work", count: 1 }]); // (open and snoozed only)
+  // the tools
+  const t = chat(k);
+  assert.ok(t.add_task!.inputSchema.safeParse({ title: "Call Sam", tags: ["work"] }).success);
+  const added = await t.add_task!.handler({ title: "Call Sam", tags: ["Work", "London"] });
+  assert.match(text(added), /Added task/);
+  const listed = text(await t.list_tasks!.handler({ tags: ["london"] }));
+  assert.match(listed, /Tags in use: work 2, london 1/);
+  assert.match(listed, /Call Sam .*#work #london/);
+  assert.doesNotMatch(listed, /Send the invoice/);
+  const id = S.listItems(k, { q: "Call Sam" })[0]!.id;
+  await t.update_task!.handler({ id, tags: ["private"] });
+  assert.deepEqual(S.getItem(k, id)?.tags, ["private"]);
+  await t.update_task!.handler({ id, tags: null });
+  assert.equal(S.getItem(k, id)?.tags, undefined);
+  assert.equal(tasksFacts(fresh(), NOW, ZONE).text, "");
+});

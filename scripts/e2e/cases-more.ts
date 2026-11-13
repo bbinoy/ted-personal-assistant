@@ -1974,4 +1974,36 @@ const e60: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60];
+// ---- e61: tags: a new task reuses the tags the list already uses (here odd short names a model would not guess), not a spelled-out copy ----
+const e61: Case = {
+  id: "e61",
+  title: "tags in use are zrh, ldn, work and private: a task about the Zurich flat is added with zrh, not zurich",
+  turns: ["Remind me to book the plumber for the Zurich flat next week."],
+  world: (t) => ({
+    tasks: [
+      { title: "Renew the Zurich parking permit", due: t.day(4), tags: ["zrh", "private"] },
+      { title: "Collect the keys from the Zurich agent", tags: ["zrh"] },
+      { title: "Meet the London landlord", due: t.day(6), tags: ["ldn", "private"] },
+      { title: "Prepare the quarterly numbers for the board", due: t.day(3), tags: ["work"] },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = taskOf(o, /plumber/i);
+    const tags = task?.tags ?? [];
+    return [
+      check("the task was added", !!task),
+      check("it carries the tag zrh", tags.includes("zrh"), tags.join(", ")),
+      check("no spelled-out copy of it", !tags.some((x) => /^(zurich|zürich|zuerich|zur|zrh-flat)$/.test(x)), tags.join(", ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms the reminder was added, in a line or two, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "Book the plumber for the Zurich flat", due: s.time.nextWeekday(1), tags: ["zrh", "private"] });
+    s.say("Added: book the plumber for the Zurich flat, next Monday.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61];

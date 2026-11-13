@@ -48,9 +48,9 @@ test("only Today is open; the other sections are collapsed", () => {
 test("overdue and urgent rows carry their classes", () => {
   const id = add(OWNER_KEY, "Fix boiler", { due: "2026-10-23", urgent: true }).item.id;
   const html = tasksPage(OWNER_KEY, NOW, ZONE);
-  assert.match(html, /<li class="late">(?:(?!<\/li>).)*Pay rent/s);
-  assert.match(html, /<li class="urgent">(?:(?!<\/li>).)*Fix boiler/s);
-  assert.ok(!/<li class="late">(?:(?!<\/li>).)*Call Sam/s.test(html));
+  assert.match(html, /<li class="late"[^>]*>(?:(?!<\/li>).)*Pay rent/s);
+  assert.match(html, /<li class="urgent"[^>]*>(?:(?!<\/li>).)*Fix boiler/s);
+  assert.ok(!/<li class="late"[^>]*>(?:(?!<\/li>).)*Call Sam/s.test(html));
   S.dropItem(scope(OWNER_KEY), id);
 });
 
@@ -538,4 +538,37 @@ test("no token, no pin button; the script saves the page state before a pin", ()
   const html = tasksPage(OWNER_KEY, Date.now(), systemZone(), "tok", "N");
   assert.match(html, /class="pin" method="post" action="\/tasks\/\d+\/focus"/);
   assert.doesNotThrow(() => new Function(/<script nonce="N">(.*)<\/script>/s.exec(html)![1]!));
+});
+
+test("the pill bar lists the tags and the fields the rows show, with counts; every row carries its pills; without script there is no bar", () => {
+  const k = "pill-page-key";
+  const mk = (title: string, o: Partial<import("../src/tasks/store.ts").NewItem> = {}) => S.addItem(scope(k), { title, ...o });
+  mk("Draft the report", { tags: ["work", "london"], due: "2026-10-23" });
+  mk("Send the invoice", { tags: ["work"], person: "Ana", kind: "owed_to_me" });
+  mk("Book the dentist", { tags: ["private"], remindAt: NOW + 3_600_000 });
+  mk("Water the plants", { repeat: "every monday at 09:00", due: "2026-10-26" });
+  mk("Plain one");
+  const html = tasksPage(k, NOW, ZONE, "tok", "nonce1");
+  const bar = /<div class="pills".*?<\/div>/s.exec(html)![0];
+  assert.match(bar, /aria-pressed="true">all<\/button>/);
+  assert.match(bar, /data-p="t:work" aria-pressed="false">#work <span class="n">2<\/span>/);
+  assert.match(bar, /data-p="k:owed_to_me"[^>]*>waiting on /);
+  assert.match(bar, /data-p="p:Ana"/);
+  assert.match(bar, /data-p="r:reminder"/);
+  assert.match(bar, /data-p="r:repeats"/);
+  assert.ok(bar.indexOf("t:work") < bar.indexOf("k:owed_to_me") && bar.indexOf("k:owed_to_me") < bar.indexOf("p:Ana")); // tags first
+  const rowOf = (title: string) => new RegExp(`<li[^>]*>(?:(?!</li>).)*${title}`, "s").exec(html)![0];
+  assert.match(rowOf("Draft the report"), /data-pills="\[&#34;t:work&#34;,&#34;t:london&#34;\]"/);
+  assert.doesNotMatch(rowOf("Plain one"), /data-pills/);
+  assert.ok(html.includes("#work · #london</span>")); // (the grey line keeps the tags too)
+  assert.ok(!tasksPage(k, NOW, ZONE, "tok").includes('class="pills"')); // (no nonce, no script: no bar)
+  assert.ok(!tasksPage(OWNER_KEY, NOW, ZONE, "tok", "nonce1").includes('data-p="t:'));
+  assert.match(html, /localStorage/);
+});
+
+test("the page's inline script parses (the pill filter lives in it)", async () => {
+  const { Script } = await import("node:vm");
+  const src = /<script nonce="n1">([\s\S]*)<\/script>/.exec(tasksPage(OWNER_KEY, NOW, ZONE, "tok", "n1"))![1]!;
+  assert.doesNotThrow(() => new Script(src));
+  assert.match(src, /aria-pressed|setAttribute\("aria-pressed"/);
 });

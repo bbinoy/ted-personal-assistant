@@ -198,7 +198,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         return r.text;
       },
       tasks: {
-        add: (t) => void addItem(scope, { title: t.title, due: t.due, remindAt: t.remindAtMs }),
+        add: (t) => void addItem(scope, { title: t.title, due: t.due, remindAt: t.remindAtMs, tags: t.tags }),
         find: (part) => listItems(ckey, { status: ["open", "snoozed"], limit: 200 }, nowMs, o.zone).find((x) => x.id > firstId && x.title.toLowerCase().includes(part.toLowerCase()))!.id,
         done: (id) => void completeItem(scope, id),
         drop: (id) => void dropItem(scope, id),

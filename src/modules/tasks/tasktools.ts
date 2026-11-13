@@ -4,7 +4,7 @@ import type { Source } from "../../core/audit.ts";
 import { fence } from "../../core/fence.ts";
 import { isTenantKey, OWNER_KEY } from "../../core/ownerkey.ts";
 import { counts, addItem, LOOK_BY, completeItem, dropItem, editItem, KINDS, listItems, reopenItem, snoozeItem, SOURCE_KINDS, TaskError, type Filter, type Item, type Patch, type Scope, type Status } from "../../tasks/store.ts";
-import { echoLines, itemLine } from "../../tasks/render.ts";
+import { echoLines, itemLine, tagsLine } from "../../tasks/render.ts";
 import { USAGE as REPEAT_USAGE } from "../../tasks/repeat.ts";
 import { parseLocal, showLocal, todayIn, wallToUtc } from "../../tasks/when.ts";
 import { askingIn } from "../voice/voicenote.ts";
@@ -32,6 +32,7 @@ const DATE_RULES =
   "and pass explicit ISO: a day as YYYY-MM-DD, a time as YYYY-MM-DDTHH:MM on a 24-hour clock (no zone suffix, no seconds). Without a clock time a due is all-day. The reply says the weekday and date it understood: check it and fix it with update_task if it is wrong.";
 
 const ID = z.number().int().positive().describe("The item's number, like 4 (shown as #4)");
+const TAGS = z.array(z.string()).max(8).optional().describe("Short labels like work, private, london, a project; reuse the tags in use");
 const LOCAL = "YYYY-MM-DD or YYYY-MM-DDTHH:MM";
 
 // A local date or date-time argument as an instant: a bare day is 09:00 that day.
@@ -81,6 +82,7 @@ export function createTasksServer(run: TasksRun) {
       kind: z.enum(KINDS).optional().describe("task, i_owe (a promise the person made) or owed_to_me (they are waiting on someone)"),
       person: z.string().max(80).optional().describe("Items with this person (part of the name)"),
       assignee: z.string().max(80).optional().describe("Items assigned to this group member (part of the name)"),
+      tags: z.array(z.string()).max(4).optional().describe("Only items with all of these tags"),
       query: z.string().max(120).optional().describe("Words that must all appear in the title or details"),
       due_from: z.string().max(10).optional().describe("From this day on, YYYY-MM-DD (inclusive)"),
       due_to: z.string().max(10).optional().describe("Up to this day, YYYY-MM-DD (inclusive)"),
@@ -97,6 +99,7 @@ export function createTasksServer(run: TasksRun) {
         kind: a.kind,
         person: a.person,
         assignee: a.assignee,
+        tags: a.tags,
         q: a.query,
         dueFrom: a.due_from,
         dueTo: a.due_to,
@@ -107,7 +110,7 @@ export function createTasksServer(run: TasksRun) {
       const items = listItems(run.key, f, t, zone);
       const c = counts(run.key, t, zone);
       const head = `Today is ${showLocal(todayIn(t, zone), todayIn(t, zone))} (${todayIn(t, zone)}), time zone ${zone}. ${items.length} item${items.length === 1 ? "" : "s"} shown (${c.open} open, ${c.overdue} overdue).`;
-      return reply(fence("tasks", [head, ...items.map((it) => itemLine(it, t, zone))].join("\n"), 12_000));
+      return reply(fence("tasks", [head, tagsLine(run.key), ...items.map((it) => itemLine(it, t, zone))].filter(Boolean).join("\n"), 12_000));
     },
   );
 
@@ -126,6 +129,7 @@ export function createTasksServer(run: TasksRun) {
       repeat: z.string().max(120).optional().describe("A repeat rule: 'every monday at 09:00', 'every weekday', 'every 2 weeks', 'every month on the 1st'"),
       person: z.string().max(80).optional().describe("Who it is with (for i_owe and owed_to_me: who is owed or who owes)"),
       assignee: z.string().max(80).optional().describe("In a group: which member it is for"),
+      tags: TAGS,
       urgent: z.boolean().optional().describe("true only when the person says the reminder must reach them even at night; it then ignores quiet hours"),
       source_kind: z.enum(SOURCE_KINDS.filter((k) => k !== "import") as unknown as [string, ...string[]]).optional().describe("Where it came from: message (default), mail, meeting, other"),
       source_ref: z.string().max(300).optional().describe("The mail id, message or link it came from (stops the same one being added twice)"),
@@ -140,6 +144,7 @@ export function createTasksServer(run: TasksRun) {
           remindAt: a.remind === undefined ? undefined : instant("remind", a.remind, s.zone),
           repeat: a.repeat,
           person: a.person,
+          tags: a.tags,
           assignee: a.assignee ?? (isGroup && !run.unattended && a.remind !== undefined ? s.by : undefined), // "remind me" in a group: the reminder is for whoever said it
           urgent: a.urgent,
           sourceKind: a.source_kind as (typeof SOURCE_KINDS)[number] | undefined,
@@ -169,6 +174,7 @@ export function createTasksServer(run: TasksRun) {
           repeat: z.string().max(120).nullable().optional().describe("A repeat rule, or null to stop repeating"),
           person: z.string().max(80).nullable().optional(),
           assignee: z.string().max(80).nullable().optional(),
+          tags: TAGS.nullable().describe("The new full list of tags (replaces the old); null or [] clears"),
           urgent: z.boolean().optional().describe("true: the reminder ignores quiet hours; false: back to normal"),
           focus: z.boolean().optional().describe("true: put it in 'focus today' (today only, at most 5; it lapses by itself tomorrow); false: take it out"),
           reopen: z.boolean().optional().describe("true: put a done, dropped or snoozed item back on the open list (before any other change)"),
@@ -185,6 +191,7 @@ export function createTasksServer(run: TasksRun) {
               repeat: clearable(a.repeat),
               person: clearable(a.person),
               assignee: clearable(a.assignee),
+              tags: a.tags,
               urgent: a.urgent,
               focus: a.focus,
             };
