@@ -548,19 +548,26 @@ test("the pill bar lists the tags and the fields the rows show, with counts; eve
   mk("Book the dentist", { tags: ["private"], remindAt: NOW + 3_600_000 });
   mk("Water the plants", { repeat: "every monday at 09:00", due: "2026-10-26" });
   mk("Plain one");
+  mk("Call back", { person: "Zed" });
+  mk("Text back", { person: "Zed" });
   const html = tasksPage(k, NOW, ZONE, "tok", "nonce1");
-  const bar = /<div class="pills".*?<\/div>/s.exec(html)![0];
+  const bar = /<div class="pillbar".*?<\/div><\/div>/s.exec(html)![0];
+  const [top, people] = bar.split('<div class="pills people">') as [string, string];
   assert.match(bar, /aria-pressed="true">all<\/button>/);
-  assert.match(bar, /data-p="t:work" aria-pressed="false">#work <span class="n">2<\/span>/);
+  assert.match(bar, /data-p="t:work" aria-pressed="false">work <span class="n">2<\/span>/);
   assert.match(bar, /data-p="k:owed_to_me"[^>]*>waiting on /);
-  assert.match(bar, /data-p="p:Ana"/);
+  assert.match(people, /data-p="p:Ana"/); // people sit in their own scrolling row
+  assert.ok(people.indexOf("p:Zed") < people.indexOf("p:Ana")); // (most tasks first)
+  assert.ok(!top.includes("p:Ana") && !people.includes("t:work"));
+  assert.match(bar, /role="group" aria-label="Filter tasks"/);
   assert.match(bar, /data-p="r:reminder"/);
   assert.match(bar, /data-p="r:repeats"/);
-  assert.ok(bar.indexOf("t:work") < bar.indexOf("k:owed_to_me") && bar.indexOf("k:owed_to_me") < bar.indexOf("p:Ana")); // tags first
+  assert.ok(top.indexOf(">all<") < top.indexOf("t:work") && top.indexOf("t:work") < top.indexOf("k:owed_to_me")); // "all" first, then the most used (2 before 1), ties by label
+  assert.ok(top.indexOf("t:london") < top.indexOf("t:private") && top.indexOf("t:private") < top.indexOf("k:owed_to_me")); // (the 1s by label)
   const rowOf = (title: string) => new RegExp(`<li[^>]*>(?:(?!</li>).)*${title}`, "s").exec(html)![0];
   assert.match(rowOf("Draft the report"), /data-pills="\[&#34;t:work&#34;,&#34;t:london&#34;\]"/);
   assert.doesNotMatch(rowOf("Plain one"), /data-pills/);
-  assert.ok(html.includes("#work · #london</span>")); // (the grey line keeps the tags too)
+  assert.ok(html.includes("work · london</span>")); // (the grey line keeps the tags too, bare)
   assert.ok(!tasksPage(k, NOW, ZONE, "tok").includes('class="pills"')); // (no nonce, no script: no bar)
   assert.ok(!tasksPage(OWNER_KEY, NOW, ZONE, "tok", "nonce1").includes('data-p="t:'));
   assert.match(html, /localStorage/);

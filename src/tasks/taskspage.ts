@@ -42,7 +42,7 @@ interface Pill {
 /** What a task can be filtered by: its free tags, and the typed fields the row also shows (kind, person, from mail or meeting, reminder, repeats, urgent). */
 function pillsOf(it: Item): Pill[] {
   return [
-    ...(it.tags ?? []).map((t) => ({ id: `t:${t}`, label: `#${t}` })),
+    ...(it.tags ?? []).map((t) => ({ id: `t:${t}`, label: t })),
     ...(it.kind !== "task" ? [{ id: `k:${it.kind}`, label: KIND[it.kind] }] : []),
     ...(it.person ? [{ id: `p:${it.person}`, label: it.person }] : []),
     ...(it.sourceKind === "mail" || it.sourceKind === "meeting" ? [{ id: `s:${it.sourceKind}`, label: `from ${it.sourceKind}` }] : []),
@@ -52,19 +52,20 @@ function pillsOf(it: Item): Pill[] {
   ];
 }
 
-/** The pill bar: "all" first (pressed when nothing is selected), then every pill the shown tasks have with its count, free tags first and the most used first within each kind of pill. Without script it does nothing, so the caller leaves it out. */
+/** The pill bar, one filter group of two rows: "all" (pressed when nothing is selected) then every other pill the shown tasks have with its count, and below it the people on their own single line that scrolls sideways (left out when there are none), so many people do not fill the page. Within a row the most used comes first, ties by label. Without script it does nothing, so the caller leaves it out. */
 function pillBar(items: readonly Item[]): string {
   const n = new Map<string, { pill: Pill; count: number }>();
   for (const it of items) for (const p of pillsOf(it)) n.set(p.id, { pill: p, count: (n.get(p.id)?.count ?? 0) + 1 });
   if (!n.size) return "";
-  const order = (id: string): number => "tkpsr".indexOf(id[0]!);
-  const pills = [...n.values()].sort((a, b) => order(a.pill.id) - order(b.pill.id) || b.count - a.count || a.pill.label.localeCompare(b.pill.label));
-  return `<div class="pills" role="group" aria-label="Filter tasks"><button type="button" class="pill all" aria-pressed="true">all</button>${pills.map((x) => `<button type="button" class="pill" data-p="${esc(x.pill.id)}" aria-pressed="false">${esc(x.pill.label)} <span class="n">${x.count}</span></button>`).join("")}</div>`;
+  const all = [...n.values()].sort((a, b) => b.count - a.count || a.pill.label.localeCompare(b.pill.label));
+  const btns = (xs: typeof all): string => xs.map((x) => `<button type="button" class="pill" data-p="${esc(x.pill.id)}" aria-pressed="false">${esc(x.pill.label)} <span class="n">${x.count}</span></button>`).join("");
+  const people = all.filter((x) => x.pill.id.startsWith("p:"));
+  return `<div class="pillbar" role="group" aria-label="Filter tasks"><div class="pills"><button type="button" class="pill all" aria-pressed="true">all</button>${btns(all.filter((x) => !x.pill.id.startsWith("p:")))}</div>${people.length ? `<div class="pills people">${btns(people)}</div>` : ""}</div>`;
 }
 
 function row(it: Item, now: number, zone: string, token?: string, full = false): string {
   const { due, late, canEarlier } = dateView(it, now, zone);
-  const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind, ...(it.tags ?? []).map((t) => `#${t}`)].filter(Boolean).map((b) => esc(b!));
+  const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind, ...(it.tags ?? [])].filter(Boolean).map((b) => esc(b!));
   const pills = pillsOf(it).map((p) => p.id);
   const tick = token === undefined ? "" : `<form class="tick" method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
   const step = (dir: Dir, sign: string, off = false): string => `<button name="dir" value="${dir}" title="Move ${dir}" aria-label="Move ${dir}: ${esc(it.title)}"${off ? " disabled" : ""}>${sign}</button>`;
@@ -142,7 +143,7 @@ li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li
 button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
 details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
 li.sub{display:block;border-left-color:transparent;padding:.5rem 0 .1rem .5rem;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#777}li.sub:not(:first-child){margin-top:.3rem}
-[hidden]{display:none!important}.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 .6rem}button.pill{min-width:0;min-height:2.2rem;border-radius:1.1rem;padding:0 .8rem;font-size:.9rem}button.pill[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;color:#fff}.pill .n{opacity:.7;font-size:.8rem}
+[hidden]{display:none!important}.pillbar{margin:0 0 .6rem}.pills{display:flex;flex-wrap:wrap;gap:.4rem}.pills.people{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-top:.4rem}.pills.people::-webkit-scrollbar{display:none}.pills.people button.pill{flex:none}button.pill{min-width:0;min-height:2.2rem;border-radius:1.1rem;padding:0 .8rem;font-size:.9rem}button.pill[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;color:#fff}.pill .n{opacity:.7;font-size:.8rem}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 .steps{float:right;clear:right;display:flex;gap:.3rem;margin:.15rem 0 0 .5rem}.steps form{display:flex;gap:.3rem}.steps button{min-width:2.4rem;min-height:2.2rem;border-radius:.6rem;font-size:1.2rem;line-height:1;padding:0;border-color:#8884;color:#777}.steps button:disabled{opacity:.3;cursor:default;background:transparent;border-color:#8884}.steps .pin button{font-size:1rem;filter:grayscale(1);opacity:.7}.steps .pin button:disabled{opacity:.3}.steps .pin button[aria-pressed=true]{background:#2e7d6b;border-color:#2e7d6b;filter:none;opacity:1}
 </style></head><body><h1>Tasks</h1>${navLink("/done")}<div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
