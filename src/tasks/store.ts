@@ -31,7 +31,7 @@ export type Origin = (typeof ORIGINS)[number];
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type Action = (typeof ACTIONS)[number];
 
-export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, ref: 300, open: 1000, addedByLooksPerDay: 10, list: 200 } as const;
+export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, tag: 30, tags: 8, ref: 300, open: 1000, addedByLooksPerDay: 10, list: 200 } as const;
 
 export interface Item {
   id: number;
@@ -44,6 +44,7 @@ export interface Item {
   repeat?: string; // canonical rule text
   person?: string;
   assignee?: string;
+  tags?: string[]; // open-ended labels (normaliseTags), shown as #work
   status: Status;
   snoozeUntil?: number;
   sourceKind: SourceKind;
@@ -108,6 +109,7 @@ interface Row {
   repeat: string | null;
   person: string | null;
   assignee: string | null;
+  tags: string | null; // JSON array
   status: Status;
   snooze_until: number | null;
   source_kind: SourceKind;
@@ -130,6 +132,7 @@ const toItem = (r: Row): Item => ({
   ...(r.repeat !== null ? { repeat: r.repeat } : {}),
   ...(r.person !== null ? { person: r.person } : {}),
   ...(r.assignee !== null ? { assignee: r.assignee } : {}),
+  ...(r.tags ? { tags: JSON.parse(r.tags) as string[] } : {}),
   status: r.status,
   ...(r.snooze_until !== null ? { snoozeUntil: r.snooze_until } : {}),
   sourceKind: r.source_kind,
@@ -159,6 +162,22 @@ export function eventsOf(key: string, id: number): TaskEvent[] {
 }
 
 // ---- validation: strict, in words the model can act on ----
+
+const cleanTag = (raw: string): string => oneLine("task tag", raw, 100_000).trim().replace(/^#+/, "").trim().toLowerCase().replace(/\s+/g, "-");
+
+/** Tags as stored: trimmed, a leading # dropped, lower case, runs of spaces one hyphen, no duplicates, in the given order; null for none. Too long or too many is the model's to fix. */
+export function normaliseTags(v: readonly string[] | null | undefined): string[] | null | undefined {
+  if (v === undefined || v === null) return v === null ? null : undefined;
+  const out: string[] = [];
+  for (const raw of v) {
+    const t = cleanTag(raw);
+    if (!t) continue;
+    if (t.length > LIMITS.tag) throw new TaskError(`tag "${t.slice(0, 20)}…" is too long (${LIMITS.tag} characters at most): use a short label.`);
+    if (!out.includes(t)) out.push(t);
+  }
+  if (out.length > LIMITS.tags) throw new TaskError(`at most ${LIMITS.tags} tags per task.`);
+  return out.length ? out : null;
+}
 
 export const oneText = (label: string, v: string, max: number): string => {
   const t = oneLine(`task ${label}`, v, 100_000).trim();
@@ -194,7 +213,7 @@ function checkInstant(label: string, v: number | null | undefined): number | nul
 
 const NOUN: Record<Kind, string> = { task: "task", i_owe: "promise", owed_to_me: "item owed to you" };
 const VERB: Record<Action, string> = { added: "Added", edited: "Edited", done: "Completed", reopened: "Reopened", dropped: "Dropped", snoozed: "Snoozed", reminded: "Reminded about" };
-const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind", urgent: "urgent", focus_on: "focus" };
+const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", tags: "tags", kind: "kind", urgent: "urgent", focus_on: "focus" };
 
 /** The line for the journal and the tool's reply: "Added task #4 'Call Sam' (due Fri 24 Oct)". `zone` and `now` put dates in the conversation's clock. */
 export function lineOf(action: Action, it: Item, o: { zone: string; now: number; changed?: readonly string[]; next?: string }): string {
@@ -264,6 +283,7 @@ export interface NewItem {
   repeat?: string;
   person?: string;
   assignee?: string;
+  tags?: string[];
   urgent?: boolean; // only the person's own words may set it (never a background look)
   sourceKind?: SourceKind;
   sourceRef?: string;
@@ -327,6 +347,7 @@ export function addItem(scope: Scope, n: NewItem): Added {
   if (!isZone(scope.zone)) throw new TaskError("This conversation has no usable time zone.");
   const person = optText("person", n.person, LIMITS.person) ?? null;
   const assignee = optText("assignee", n.assignee, LIMITS.assignee) ?? null;
+  const tags = normaliseTags(n.tags) ?? null;
   const ref = n.sourceRef === undefined ? null : oneText("source_ref", n.sourceRef, LIMITS.ref);
   const dup = duplicateOf(db, title, kind, due ?? undefined, { kind: sourceKind, ref: ref ?? undefined });
   if (dup) return { item: dup, line: `Already on the list: #${dup.id} '${dup.title}' (${dup.status})`, duplicate: true };
@@ -335,10 +356,10 @@ export function addItem(scope: Scope, n: NewItem): Added {
   if (scope.unattended && addedToday(db, scope.zone, now) >= LIMITS.addedByLooksPerDay) throw new TaskError(`${LIMITS.addedByLooksPerDay} tasks were already added on your own today in this conversation (the daily cap against a flood of mail): add no more today; mention the rest in your message if they matter.`);
   const id = db.tx(() => {
     const r = db.run(
-      "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now, n.urgent && mayUrgent(scope) ? 1 : null,
+      "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, tags, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, tags && JSON.stringify(tags), status, scope.origin, sourceKind, ref, now, now, n.urgent && mayUrgent(scope) ? 1 : null,
     );
-    const after = { kind, title, ...(details ? { details } : {}), ...(due ? { due } : {}), ...(remindAt !== null ? { remind_at: remindAt } : {}), ...(repeat ? { repeat } : {}), ...(person ? { person } : {}), ...(assignee ? { assignee } : {}), status };
+    const after = { kind, title, ...(details ? { details } : {}), ...(due ? { due } : {}), ...(remindAt !== null ? { remind_at: remindAt } : {}), ...(repeat ? { repeat } : {}), ...(person ? { person } : {}), ...(assignee ? { assignee } : {}), ...(tags ? { tags: JSON.stringify(tags) } : {}), status };
     db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, 'added', NULL, ?)", r.lastInsertRowid, now, scope.by, JSON.stringify(after));
     return r.lastInsertRowid;
   });
@@ -357,6 +378,7 @@ export interface Patch {
   repeat?: string | null;
   person?: string | null;
   assignee?: string | null;
+  tags?: string[] | null; // replaces the list
   urgent?: boolean;
   focus?: boolean; // true: focus today (code writes today's local day; at most FOCUS_MAX a day); false: not
 }
@@ -391,6 +413,8 @@ export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line
   if (person !== undefined) set.person = person;
   const assignee = optText("assignee", p.assignee, LIMITS.assignee);
   if (assignee !== undefined) set.assignee = assignee;
+  const tags = normaliseTags(p.tags);
+  if (tags !== undefined) set.tags = tags && JSON.stringify(tags);
   if (p.urgent !== undefined && mayUrgent(scope)) set.urgent = p.urgent ? 1 : null; // (a group member's urgent is ignored)
   if (p.focus !== undefined) {
     const today = todayIn(nowOf(scope), scope.zone);
@@ -480,6 +504,7 @@ export interface Filter {
   kind?: Kind;
   person?: string; // contains, case-insensitive
   assignee?: string;
+  tags?: readonly string[]; // the item has all of them
   q?: string; // every word in the title, details, person or assignee
   dueFrom?: string; // local date, inclusive
   dueTo?: string;
@@ -520,11 +545,13 @@ export const activeItems = (key: string): Item[] => allItems(key).filter((it) =>
 
 export function listItems(key: string, f: Filter = {}, now = Date.now(), zone = "UTC"): Item[] {
   const want = f.status === undefined ? ["open"] : Array.isArray(f.status) ? f.status : [f.status];
+  const wantTags = (f.tags ?? []).map(cleanTag).filter(Boolean);
   const words = norm(f.q ?? "").split(" ").filter(Boolean);
   const out = allItems(key, f.kind).filter((it) => {
     if (!want.includes(effectiveStatus(it, now))) return false;
     if (f.person && !norm(it.person ?? "").includes(norm(f.person))) return false;
     if (f.assignee && !norm(it.assignee ?? "").includes(norm(f.assignee))) return false;
+    if (wantTags.length && !wantTags.every((t) => it.tags?.includes(t))) return false;
     if (words.length) {
       const hay = norm(`${it.title} ${it.details ?? ""} ${it.person ?? ""} ${it.assignee ?? ""}`);
       if (!words.every((w) => hay.includes(w))) return false;
@@ -538,6 +565,13 @@ export function listItems(key: string, f: Filter = {}, now = Date.now(), zone = 
   });
   out.sort((a, b) => dueKey(a).localeCompare(dueKey(b)) || a.id - b.id);
   return out.slice(0, Math.min(f.limit ?? 50, LIMITS.list));
+}
+
+/** The tags on the open and snoozed items, most used first, with how many items carry each: the fact that lets a run reuse "work" instead of inventing "job". */
+export function tagCounts(key: string): { tag: string; count: number }[] {
+  const n = new Map<string, number>();
+  for (const it of activeItems(key)) for (const t of it.tags ?? []) n.set(t, (n.get(t) ?? 0) + 1);
+  return [...n].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
 export interface Counts {

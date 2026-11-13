@@ -30,6 +30,8 @@ Something the owner collects (a book or film recommendation, a restaurant to try
 Call `list_tasks` first (it also tells you today's date and time zone), so you never add a
 duplicate.
 
+**Tags.** Give a new task `tags` from what you know: work or private, a place, a project (a person is `person`, not a tag). Reuse the tags the reply of `list_tasks` shows as in use ("Tags in use: ...") rather than a near copy; `list_tasks` with `tags` answers "what is on my work plate". `update_task` with `tags` replaces the whole list.
+
 ## Finishing is ticking off, never deleting
 
 Finishing a task is `complete_task` (the item stays, marked done, with the day; a repeating

@@ -317,6 +317,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "no daily cap on unprompted posts: the day's count (`hold`) is gone",
     up: `DROP TABLE hold;`,
   },
+  {
+    version: 32,
+    name: "task tags: open-ended labels on an item (a JSON array of short lower-case words)",
+    up: `ALTER TABLE items ADD COLUMN tags TEXT; -- JSON array, NULL for none`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
