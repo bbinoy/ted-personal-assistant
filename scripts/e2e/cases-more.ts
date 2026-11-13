@@ -1974,4 +1974,36 @@ const e60: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60];
+// ---- e61: tags: a new work task reuses the tag the list already uses ("work"), not a near copy ("job", "office") ----
+const e61: Case = {
+  id: "e61",
+  title: "tags in use are work and private: a new task about work is added with the existing work tag and no near-duplicate tag",
+  turns: ["Please add a task for me: send the Q4 budget draft to finance by Thursday."],
+  world: (t) => ({
+    tasks: [
+      { title: "Prepare the quarterly numbers for the board", due: t.day(3), tags: ["work"] },
+      { title: "Review the vendor contract", tags: ["work"] },
+      { title: "Book the dentist", tags: ["private"] },
+      { title: "Buy a birthday present for Rosa", due: t.day(5), tags: ["private"] },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = taskOf(o, /budget draft/i);
+    const tags = task?.tags ?? [];
+    return [
+      check("the task was added", !!task),
+      check("it carries the tag work", tags.includes("work"), tags.join(", ")),
+      check("no near copy of work, and not private", !tags.some((x) => /^(job|jobs|works|working|office|business|professional|career|private)$/.test(x)), tags.join(", ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It confirms the task was added, in a line or two, and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.tasks.add({ title: "Send the Q4 budget draft to finance", due: s.time.nextWeekday(4), tags: ["work"] });
+    s.say("Added: send the Q4 budget draft to finance, due Thursday.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61];
