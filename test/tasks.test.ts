@@ -10,7 +10,7 @@ import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./ru
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tasks-test-"));
 
 const S = await import("../src/tasks/store.ts");
-const { itemLine, tasksText, groupOpen } = await import("../src/tasks/render.ts");
+const { itemLine, tasksText, groupOpen, tasksFacts } = await import("../src/tasks/render.ts");
 const { tasksPage } = await import("../src/tasks/taskspage.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { classify } = await import("../src/policy/policy.ts");
@@ -552,4 +552,22 @@ test("tasks: the one-time Notion import is gone: no tool, no skill, no table; ol
   const k = fresh();
   assert.equal(convDb(convIdOfKey(k)).get("SELECT name FROM sqlite_master WHERE name = 'pending_imports'"), undefined);
   assert.equal(S.addItem(scope(k), { title: "From before", sourceKind: "import", sourceRef: "p1" }).item.sourceKind, "import");
+});
+
+test("tasks: the facts say how often an open task's due date or reminder moved, from 5 moves on, and nothing for fewer, done tasks or other edits", () => {
+  const k = fresh();
+  const slide = S.addItem(scope(k), { title: "Book flights for the trip", due: "2026-05-01" });
+  const twice = S.addItem(scope(k), { title: "Renew the pass", due: "2026-05-01" });
+  const retitled = S.addItem(scope(k), { title: "Tidy the shelf", due: "2026-05-01" });
+  const finished = S.addItem(scope(k), { title: "Pay the fee", due: "2026-05-01" });
+  const day = 86_400_000;
+  for (let i = 0; i < 6; i++) S.editItem(scope(k, { now: NOW - (10 - i) * day }), slide.item.id, i % 2 ? { due: `2026-05-${10 + i}` } : { remindAt: NOW + i * 3_600_000 });
+  for (let i = 0; i < 2; i++) S.editItem(scope(k), twice.item.id, { due: `2026-05-${10 + i}` });
+  for (let i = 0; i < 6; i++) S.editItem(scope(k), retitled.item.id, { title: `Tidy the shelf ${i}` });
+  for (let i = 0; i < 6; i++) S.editItem(scope(k), finished.item.id, { due: `2026-05-${10 + i}` });
+  S.completeItem(scope(k), finished.item.id);
+  const f = tasksFacts(k, NOW, ZONE);
+  assert.match(f.text, new RegExp(`#${slide.item.id} Book flights for the trip \\| moved 6 times since 12 Oct`));
+  assert.doesNotMatch(f.text, /Renew the pass|Tidy the shelf|Pay the fee/);
+  assert.equal(tasksFacts(fresh(), NOW, ZONE).text, "");
 });

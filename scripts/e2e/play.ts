@@ -12,6 +12,7 @@ import { runConversation, runLook } from "../../src/run/agent.ts";
 import { chatTurn } from "../../src/run/chattail.ts";
 import { ledgerEntries, recordMessage } from "../../src/core/messages.ts";
 import { liveConvDb } from "../../src/core/convdb.ts";
+import { convIdOfKey } from "../../src/core/convpaths.ts";
 import { lookState } from "../../src/conversation/ledger.ts";
 import { scopeOf } from "../../src/approvals/turnscope.ts";
 import { approveIn, setApprovers } from "../../src/approvals/permissions.ts";
@@ -102,8 +103,9 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const scope: Scope = { key: OWNER_KEY, zone: o.zone, by: "owner", origin: "owner", source: "chat", now: nowMs };
   const firstId = Math.max(0, ...listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).map((x) => x.id)); // (tasks of an earlier case in the same data folder are not this case's)
   for (const x of listItems(ckey, { status: ["open", "snoozed"], limit: 200 }, nowMs, o.zone)) dropItem(scope, x.id); // (a duplicate of a live task of an earlier case would be refused)
-  for (const { focus, ...t } of world.tasks ?? []) {
+  for (const { focus, moves, ...t } of world.tasks ?? []) {
     const { item } = addItem(scope, t);
+    for (let i = 0; i < (moves ?? 0); i++) liveConvDb(convIdOfKey(OWNER_KEY))?.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, 'owner', 'edited', ?, ?)", item.id, nowMs - (moves! - i) * 86_400_000, JSON.stringify({ due: `d${i}` }), JSON.stringify({ due: `d${i + 1}` })); // (a history of moved dates, written as rows: the journal and the chat log stay as the case starts them)
     if (focus) editItem(scope, item.id, { focus: true }); // (an owner's pin from the task page)
   }
 

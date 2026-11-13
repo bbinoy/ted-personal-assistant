@@ -1856,4 +1856,122 @@ const e53: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56];
+// ---- e57-e60: a task that keeps sliding (its due date moved 5 or more times): a step instead of one more reminder; the weekly review asks keep / drop / someday once; a task moved twice is an ordinary one ----
+const FLIGHTS_URL = "https://flights.example.org/lisbon-valmora";
+const FLIGHTS_PAGE = "<html><head><title>Flights from Lisbon to Valmora</title></head><body><h1>Flights from Lisbon to Valmora</h1><p>Morning flight 07:10, EUR 148, direct. Midday flight 12:40, EUR 119, one stop. Evening flight 19:55, EUR 171, direct. Fares are per person, one way.</p></body></html>";
+const sliding = (title: string, t: Time, extra: { due?: string; details?: string; person?: string; moves: number; remind?: boolean }) => ({ title, due: extra.due ?? t.today, ...(extra.details ? { details: extra.details } : {}), ...(extra.person ? { person: extra.person } : {}), ...(extra.remind === false ? {} : { remindAt: t.now.getTime() - 60_000 }), moves: extra.moves });
+const saidOf = (o: Outcome): string => o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m)).join("\n");
+const taskOf = (o: Outcome, part: RegExp) => o.tasks.find((x) => part.test(x.title));
+const e57: Case = {
+  id: "e57",
+  title: "a sliding task (due date moved 8 times): book flights for a trip: Ted researches options with prices and reports them in one short message, not another plain reminder",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [sliding("Book flights for the trip to Valmora", t, { moves: 8, details: "Two travellers from Lisbon to Valmora around 20 Nov, one way" })],
+    fetch: { [FLIGHTS_URL]: FLIGHTS_PAGE, "https://flights.example.org": FLIGHTS_PAGE },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = taskOf(o, /flights/i);
+    const said = saidOf(o);
+    return [
+      check("the options were looked up on the web", o.web.fetched.some((u) => u.includes("flights.example.org")) || o.web.searches.length > 0, o.web.searches.join(", ")),
+      check("the message gives fares", /148|119|171/.test(said), said.slice(0, 200)),
+      check("the task is still open (booking is left)", task?.status === "open", task?.status),
+      check("the due date was not moved again", task?.due?.slice(0, 10) === o.time.today, task?.due),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o), ...o.web.payments.map(() => "a payment was made")],
+  reply: ["It lists the flight options it found with their prices, in one short message (a few lines).", "It is not just a reminder to book the flights, and says what is left for the owner (to pick and book).", "It asks no question that blocks."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("flights Lisbon to Valmora 20 Nov");
+    s.open(FLIGHTS_URL);
+    s.say("Flights to Valmora: 07:10 direct EUR 148, 12:40 with one stop EUR 119, 19:55 direct EUR 171, per person one way. Tell me which and I will take it from there; the task stays open.");
+  },
+};
+const e58: Case = {
+  id: "e58",
+  title: "a sliding task (moved 7 times): call Sam about the deposit: a short draft message is prepared instead of another reminder to call",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [sliding("Call Sam about the workshop deposit", t, { moves: 7, person: "Sam" })],
+    mail: [{ from: { email: "sam.keller@example.com", displayName: "Sam Keller" }, subject: "Workshop deposit", body: "<p>Hi, could you let me know when you can send the deposit for the workshop? Thanks, Sam</p>", receivedAt: new Date(t.now.getTime() - 96 * 3_600_000).toISOString(), read: true }],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const d = o.mail.drafts().find((m) => m.to.some((p) => p.email === "sam.keller@example.com"));
+    const task = taskOf(o, /call sam/i);
+    return [
+      check("a short draft to Sam exists", !!d && plain(d.body).length < 600, d?.body.slice(0, 120)),
+      check("nothing was sent", o.mail.sent.length === 0),
+      check("the owner got a message", saidOf(o).length > 0),
+      check("the task is still open", task?.status === "open", task?.status),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It says a short message to Sam is drafted (not sent) instead of the call, and what is left for the owner (to look it over and say send).", "It is short: a few lines at most, and not just a reminder to call Sam.", "It asks no question that blocks."],
+  perfect: async (s) => {
+    s.turn(0);
+    const rows = JSON.parse(await s.tool(`${MB}search_conversations`, { query: "deposit" })) as { conversationId: string }[];
+    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hi Sam, I will send the deposit this week. Could you confirm the account to use? Thanks</p>" });
+    s.say("I drafted a short note to Sam about the deposit instead of another call reminder; say send if it looks right.");
+  },
+};
+const routineWeekly = (t: Time): string => `---\nname: weekly-review\ndescription: The weekly review\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nRun the ted-personal-assistant:weekly-review skill and deliver the review as it says.\n`;
+const e59: Case = {
+  id: "e59",
+  title: "the weekly review with a sliding task nothing can be done for (moved 9 times, a personal choice): one question, keep, drop or someday; nothing is changed yet",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [sliding("Decide what to do with the old storage unit", t, { due: t.day(-3), moves: 9, remind: false })],
+    notes: { "routine-weekly-review.md": routineWeekly(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = saidOf(o);
+    const task = taskOf(o, /storage unit/i);
+    return [
+      check("the review asks keep, drop or someday", /keep/i.test(said) && /drop/i.test(said) && /someday/i.test(said), said.slice(0, 300)),
+      check("the task is still open with its date", task?.status === "open" && task.due?.slice(0, 10) === o.time.day(-3), `${task?.status} ${task?.due}`),
+      check("the asking is not an approval question", o.asks.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It asks, once and for that task only, whether to keep it, drop it or make it someday.", "It does not list that task as an overdue item with days late, mentions it nowhere else, and does not scold.", "It is a short message (about 15 lines at most)."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.say("## Slipped\n- Nothing overdue besides one old one.\n\nThe storage unit decision has moved 9 times: keep, drop or someday?");
+  },
+};
+const e60: Case = {
+  id: "e60",
+  title: "guard: a task moved only twice is an ordinary task: it is reminded as today, not parked, dropped or put to the keep / drop / someday question",
+  turns: [],
+  look: true,
+  world: (t) => ({ tasks: [sliding("Book a table for Rosa's birthday dinner", t, { moves: 2 })] }),
+  maxQuestions: 0,
+  state: (o) => {
+    const task = taskOf(o, /birthday dinner/i);
+    const said = saidOf(o);
+    return [
+      check("the owner was told about the dinner", /dinner|table|Rosa/i.test(said), said.slice(0, 200)),
+      check("no keep / drop / someday question", !/someday/i.test(said), said.slice(0, 200)),
+      check("the task is open, unparked, same date", task?.status === "open" && !/someday/i.test(task.details ?? "") && task.due?.slice(0, 10) === o.time.today, `${task?.status} ${task?.due} ${task?.details}`),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It tells the owner in a line or two that the table for Rosa's birthday dinner is due today.", "It does not say the task keeps slipping or ask keep, drop or someday."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.say("The table for Rosa's birthday dinner is due today.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60];

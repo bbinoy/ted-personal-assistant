@@ -25,7 +25,7 @@ Dates come from `CURRENT TIME` (the week is Monday to today; next week is the fo
 Short lines, `-` bullets, no tables. The chat message must stand alone on a phone (about 15 lines at most).
 
 1. `## Wins` - 3 to 5 bullets: tasks finished, notable journal highlights, meetings held (a count). If it was thin, say so in one line.
-2. `## Slipped` - overdue tasks (the oldest first, with how many days late; at most 5, then "and N more") and tasks that sit snoozed. One line each, no scolding.
+2. `## Slipped` - overdue tasks (the oldest first, with how many days late; at most 5, then "and N more") and tasks that sit snoozed. One line each, no scolding. Tasks the facts name as sliding (the task skill's "A task that keeps sliding") that no run has taken a step on (the journal shows it) get no overdue line here and are not mentioned anywhere else in the message: each gets ONE line in this section instead, its name and "keep, drop or someday?", never asked twice (the chat log shows it). The answer is handled as the task skill says.
 3. `## Week ahead` - the 3 priorities that the calendar and the due dates point at, hardest-hitting first, one line each; then the busiest day and the meetings that need prep (one line, with the prep link).
 4. `## Follow up` - people: what they owe the owner (`owed_to_me`, with how long) and what the owner owes them (`i_owe`, due soon first). Name the person and the thing; you may draft a follow-up in the thread (never send) and do reversible tidy-up (snooze the stale tail to a date), saying so in one line.
 
