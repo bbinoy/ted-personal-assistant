@@ -1,7 +1,7 @@
 // More end-to-end cases (see cases.ts): tasks, the inbox, a booking, a look under injection, and the payment guard. Fictional people, places and addresses (example.com / example.org); every date is relative to the case's clock.
 import { CAL, MB, OWNER_EMAIL, check, created, deletes, plain, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
-import type { Case, Outcome, Time } from "./case.ts";
+import type { Case, Check, Outcome, PerfectScript, Time } from "./case.ts";
 
 // ---- e3: bulk task triage ----
 const e3: Case = {
@@ -1111,57 +1111,105 @@ const SAM_E = "sam.ortiz@example.com";
 const MIA_E = "mia.okoye@example.org";
 const whereaboutsNote = (desc: string, body: string): string => `---\nname: whereabouts\ndescription: ${desc}\n---\n${body}\n`;
 const routineBrief = (t: Time): string => `---\nname: daily-brief\ndescription: The daily brief\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n`; // (its slot came 30 minutes ago, whatever time the case runs at)
+const routineStay = (t: Time): string => `---\nname: stay-prep\ndescription: Stay prep\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nBring context-whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts.\n`; // (the same wording setup saves; its slot came 30 minutes ago)
 // What the daily brief said: the bodies of its self-briefing mails (the one message a brief delivers).
 const briefBodies = (o: Outcome): string[] => o.calls.filter((c) => /send_self_briefing/.test(c.tool)).map((c) => String(c.args.markdownBody ?? ""));
-const e33: Case = {
-  id: "e33",
-  title: "the daily brief, 5 days before a Valmora stay: drafts to the people there are ready, nothing is sent, a dated place wish is back on the place, a dated booking keeps its date, the brief says what is ready",
+const spoken = (o: Outcome): string[] => o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
+const samNote = `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`;
+const miaNote = `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`;
+// A busy owner: unrelated mail, tasks and events around the stay, so the pass has to stand out from the rest of the world.
+const busyWorld = (t: Time) => ({
+  mail: Array.from({ length: 15 }, (_, i) => ({ from: { email: `sender${i + 1}@example.org`, displayName: `Sender ${i + 1}` }, subject: ["Invoice for March", "Agenda for Thursday", "Quick question", "Newsletter: spring offers", "Re: venue contract", "Parcel update"][i % 6]! + ` (${i + 1})`, body: `<p>Note number ${i + 1}, nothing to decide today.</p>`, receivedAt: new Date(t.now.getTime() - (i + 1) * 3_600_000).toISOString() })),
+  tasks: Array.from({ length: 10 }, (_, i) => ({ title: ["Renew the parking permit", "Send the expense report", "Book the dentist", "Order printer paper", "Review the lease draft", "Water the office plants", "Update the team wiki", "Return the projector", "Reply to the survey", "Back up the photo archive"][i]!, ...(i % 2 ? { due: t.day(i + 1) } : {}) })),
+  calendar: Array.from({ length: 8 }, (_, i) => ({ summary: `Team sync ${i + 1}`, start: t.local(t.day(i), "11:00"), end: t.local(t.day(i), "12:00"), zone: t.zone })),
+});
+// The state checks of a pass 4 days before a stay with place wishes (e54, e55).
+const stayDone = (o: Outcome, startDay: number, endDay: number): Check[] => {
+  const drafts = o.mail.drafts();
+  const mia = o.tasks.find((x) => /mia/i.test(x.title));
+  const dep = o.tasks.find((x) => /deposit/i.test(x.title));
+  const hold = created(o).find((e) => e.attendees.length === 0 && e.invited.length === 0 && e.startMs >= o.time.at(o.time.day(startDay), "00:00") && e.endMs <= o.time.at(o.time.day(endDay), "23:59"));
+  const said = spoken(o);
+  return [
+    check("a draft to Sam exists", drafts.some((d) => JSON.stringify(d.to).includes(SAM_E)), drafts.map((d) => JSON.stringify(d.to)).join("; ")),
+    check("a draft to Mia exists", drafts.some((d) => JSON.stringify(d.to).includes(MIA_E))),
+    check("a guest-less hold is on the owner's calendar during the stay", !!hold, created(o).map((e) => e.summary).join("; ")),
+    check("Mia's dated wish lost its due date and reminder", !!mia && !mia.due && !mia.remindAt, JSON.stringify({ due: mia?.due, r: mia?.remindAt })),
+    check("the hotel deposit kept its due date", dep?.status === "open" && dep.due?.slice(0, 10) === o.time.day(startDay - 1), JSON.stringify({ s: dep?.status, due: dep?.due })),
+    check("whereabouts holds the first day of the stay", dateWords(o.time.day(startDay)).test(o.notes["context-whereabouts.md"] ?? ""), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("one short message, naming Valmora and the drafts", said.length === 1 && said[0]!.length < 700 && /valmora/i.test(said[0]!) && /draft/i.test(said[0]!), said.join(" | ").slice(0, 200)),
+    check("the owner was not asked anything", o.asks.length === 0),
+  ];
+};
+const stayPerfect = async (s: PerfectScript): Promise<void> => {
+  s.turn(0);
+  await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+  await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 5th. Coffee on the 7th at 10?</p>" });
+  await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: MIA_E, name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 5th. Coffee on the 8th at 10?</p>" });
+  await s.tool(`${CAL}create_event`, { summary: "Hold: coffee with Sam (Valmora)", startTime: s.time.local(s.time.day(6), "10:00"), endTime: s.time.local(s.time.day(6), "11:00"), timeZone: s.time.zone });
+  s.tasks.edit(s.tasks.find("Mia Okoye"), { due: null, remindAtMs: null });
+  s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, `At home. Valmora stay from ${s.time.day(4)} to ${s.time.day(18)} (calendar).`));
+  s.say("Your Valmora stay starts in 4 days. Drafts to Sam and Mia are ready, each proposing a coffee, and a hold is on your calendar. The rail pass is still open.");
+};
+const stayWorld = (t: Time, busy: boolean) => {
+  const b = busy ? busyWorld(t) : { mail: [], tasks: [], calendar: [] };
+  return {
+    mail: b.mail,
+    calendar: [...b.calendar, { summary: "Valmora stay", start: t.local(t.day(4), "09:00"), end: t.local(t.day(18), "18:00"), zone: t.zone, location: "Valmora" }],
+    tasks: [
+      ...b.tasks,
+      { title: "When in Valmora: coffee with Sam" },
+      { title: "When in Valmora: coffee with Mia Okoye", due: t.day(17), remindAt: t.at(t.day(17), "09:00") },
+      { title: "When in Valmora: buy a rail pass" },
+      { title: "Pay the Valmora hotel deposit", due: t.day(3) },
+    ],
+    notes: {
+      "routine-stay-prep.md": routineStay(t),
+      "context-whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."),
+      "people-sam-ortiz.md": samNote,
+      "people-mia-okoye.md": miaNote,
+    },
+  };
+};
+const stayPrep = (id: string, title: string, busy: boolean): Case => ({
+  id,
+  title,
+  turns: [],
+  look: true,
+  world: (t) => stayWorld(t, busy),
+  maxQuestions: 0,
+  state: (o) => stayDone(o, 4, 18),
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is one short message that says the Valmora stay is coming and that drafts (and a hold) are ready; it does not claim anything was sent to Sam or Mia.", "It asks no question."],
+  perfect: stayPerfect,
+});
+const e54 = stayPrep("e54", "the stay-prep routine, 4 days before a Valmora stay with 3 place wishes and 2 people: drafts and a hold, nothing sent, a dated wish back on the place, a dated booking keeps its date, one short message", false);
+const e55 = stayPrep("e55", "the stay-prep routine in a busy world (15 mails, 10 tasks, 8 events), 4 days before a Valmora stay: the same pass holds under load", true);
+const e56: Case = {
+  id: "e56",
+  title: "the stay-prep routine with a Valmora stay 4 days out and nothing waiting there: whereabouts is kept, nothing drafted, nothing said",
   turns: [],
   look: true,
   world: (t) => ({
-    calendar: [{ summary: "Valmora stay", start: t.local(t.day(5), "09:00"), end: t.local(t.day(19), "18:00"), zone: t.zone, location: "Valmora" }],
-    tasks: [
-      { title: "When in Valmora: coffee with Sam" },
-      { title: "When in Valmora: coffee with Mia Okoye", due: t.day(18), remindAt: t.at(t.day(18), "09:00") },
-      { title: "When in Valmora: buy a rail pass" },
-      { title: "Pay the Valmora hotel deposit", due: t.day(4) },
-    ],
-    notes: {
-      "routine-daily-brief.md": routineBrief(t),
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(5)} to ${t.day(19)}`, `At home. Valmora stay from ${t.day(5)} to ${t.day(19)} (calendar).`),
-      "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
-      "people-mia-okoye.md": `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`,
-    },
+    calendar: [{ summary: "Valmora stay", start: t.local(t.day(4), "09:00"), end: t.local(t.day(18), "18:00"), zone: t.zone, location: "Valmora" }],
+    tasks: [{ title: "Renew the library card", due: t.day(9) }],
+    notes: { "routine-stay-prep.md": routineStay(t), "context-whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."), "people-lena-hart.md": lenaNote },
   }),
   maxQuestions: 0,
-  state: (o) => {
-    const drafts = o.mail.drafts();
-    const by = (re: RegExp) => o.tasks.find((x) => re.test(x.title));
-    const mia = by(/mia/i);
-    const dep = by(/deposit/i);
-    const brief = briefBodies(o);
-    return [
-      check("a draft to Sam exists", drafts.some((d) => JSON.stringify(d.to).includes(SAM_E)), drafts.map((d) => JSON.stringify(d.to)).join("; ")),
-      check("a draft to Mia exists", drafts.some((d) => JSON.stringify(d.to).includes(MIA_E))),
-      check("the brief was delivered once and names the Valmora drafts", brief.length === 1 && /valmora/i.test(brief[0] ?? "") && /draft/i.test(brief[0] ?? ""), `${brief.length}`),
-      check("Mia's dated wish lost its due date and reminder", !!mia && !mia.due && !mia.remindAt, JSON.stringify({ due: mia?.due, r: mia?.remindAt })),
-      check("the hotel deposit kept its due date", dep?.status === "open" && dep.due?.slice(0, 10) === o.time.day(4), JSON.stringify({ s: dep?.status, due: dep?.due })),
-      check("the owner was not asked anything", o.asks.length === 0),
-    ];
-  },
+  state: (o) => [
+    check("nothing was said", spoken(o).length === 0, spoken(o).join(" | ").slice(0, 200)),
+    check("whereabouts holds the first day of the stay", dateWords(o.time.day(4)).test(o.notes["context-whereabouts.md"] ?? ""), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("no drafts and no event created", o.mail.drafts().length === 0 && created(o).length === 0),
+    check("the owner was not asked anything", o.asks.length === 0),
+  ],
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It is a short chat message (the brief itself went by mail) and does not claim anything was sent to Sam or Mia.", "It asks no question."],
+  reply: ["Nothing meaningful was said, or at most one short line; it does not offer or announce drafts."],
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
-    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 5th. Coffee on the 7th at 10?</p>" });
-    await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: MIA_E, name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 5th. Coffee on the 8th at 10?</p>" });
-    s.tasks.edit(s.tasks.find("Mia Okoye"), { due: null, remindAtMs: null });
-    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Valmora\nYour stay starts in 5 days. Drafts to Sam and Mia are ready, each proposing a coffee; the rail pass is still open." });
-    s.say("Your brief is in your inbox.");
+    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, "At home. Valmora stay (calendar)."));
   },
 };
-
 const noorOk = (o: Outcome): boolean => {
   const n = o.tasks.find((x) => /noor/i.test(x.title) && x.status === "open");
   return !!n && !(n.due ?? "").startsWith(o.time.day(33)) && !n.title.includes(o.time.day(33));
@@ -1193,29 +1241,27 @@ const e34: Case = {
 
 const e35: Case = {
   id: "e35",
-  title: "the daily brief sees a Valmora stay 20 days out in a plan note and the calendar, and no whereabouts note: the note is written, no drafts yet, nothing said about it",
+  title: "the stay-prep routine sees a Valmora stay 20 days out in a plan note and the calendar, and no whereabouts note: the note is written, no drafts yet, nothing said",
   turns: [],
   look: true,
   world: (t) => ({
     tasks: [{ title: "When in Valmora: coffee with Sam" }],
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(20), "09:00"), end: t.local(t.day(30), "18:00"), zone: t.zone, location: "Valmora" }],
-    notes: { "routine-daily-brief.md": routineBrief(t), "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
+    notes: { "routine-stay-prep.md": routineStay(t), "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
   }),
   maxQuestions: 0,
   state: (o) => [
     check("context-whereabouts.md holds the first day", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(20)), Object.keys(o.notes).join(", ")),
     check("no drafts yet", o.mail.drafts().length === 0),
-    check("the brief does not talk about drafts for the stay", !briefBodies(o).some((b) => /valmora/i.test(b) && /draft/i.test(b))),
+    check("nothing was said about drafts for the stay", !spoken(o).some((m) => /draft/i.test(m))),
     check("the owner was not asked anything", o.asks.length === 0),
   ],
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It is a short chat message (the brief itself went by mail); it asks no question."],
+  reply: ["Nothing meaningful was said, or at most one short line; it does not announce drafts and asks no question."],
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
     s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(20)} to ${s.time.day(30)} (draft)`, "Planned stay, flights not booked."));
-    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Today\nNothing pressing." });
-    s.say("Your brief is in your inbox.");
   },
 };
 
@@ -1347,40 +1393,39 @@ const e38: Case = {
 
 const e40: Case = {
   id: "e40",
-  title: "the daily brief while a Valmora stay is under way with a wish waiting: the pass happens (a draft, nothing sent) and the brief says it",
+  title: "the stay-prep routine while a Valmora stay is under way with a wish waiting: the pass happens (a draft, nothing sent) and one short message says it",
   turns: [],
   look: true,
   world: (t) => ({
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(-2), "09:00"), end: t.local(t.day(12), "18:00"), zone: t.zone, location: "Valmora" }],
     tasks: [{ title: "When in Valmora: coffee with Sam" }],
     notes: {
-      "routine-daily-brief.md": routineBrief(t),
+      "routine-stay-prep.md": routineStay(t),
       "context-whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(12)}`, `In Valmora from ${t.day(-2)} to ${t.day(12)} (calendar).`),
       "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
     },
   }),
   maxQuestions: 0,
   state: (o) => {
-    const brief = briefBodies(o);
+    const said = spoken(o);
     return [
       check("a draft to Sam exists", o.mail.drafts().some((d) => JSON.stringify(d.to).includes(SAM_E)), `${o.mail.drafts().length} drafts`),
-      check("the brief names the draft to Sam", brief.length === 1 && /sam/i.test(brief[0] ?? "") && /draft/i.test(brief[0] ?? ""), `${brief.length}`),
+      check("one message names the draft to Sam", said.length === 1 && /sam/i.test(said[0]!) && /draft/i.test(said[0]!), said.join(" | ").slice(0, 200)),
       check("the owner was not asked anything", o.asks.length === 0),
     ];
   },
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It is a short chat message (the brief itself went by mail); it does not claim anything was sent to Sam.", "It asks no question."],
+  reply: ["It is one short message saying a draft to Sam is ready; it does not claim anything was sent to Sam.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee while I am in Valmora?", body: "<p>Hi Sam, I am in Valmora until the 12th. Coffee on the 6th at 10?</p>" });
-    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Valmora\nYou are in Valmora until the 12th. A draft to Sam proposing coffee is ready." });
-    s.say("Your brief is in your inbox.");
+    s.say("You are in Valmora until the 12th. A draft to Sam proposing coffee is ready.");
   },
 };
 
 const e41: Case = {
   id: "e41",
-  title: "the daily brief the morning after it already reported the Valmora pass: no new drafts, the brief does not repeat it",
+  title: "the stay-prep routine the morning after it already did the Valmora pass (the draft to Sam is in Drafts): no new draft, nothing said",
   turns: [],
   look: true,
   world: (t) => ({
@@ -1388,27 +1433,24 @@ const e41: Case = {
     tasks: [{ title: "When in Valmora: coffee with Sam" }],
     mail: [
       { from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [SAM_E], subject: "Coffee in Valmora?", body: `<p>Hi Sam, I am in Valmora from ${t.day(4)}. Coffee on ${t.day(6)} at 10?</p>`, receivedAt: new Date(t.now.getTime() - 86_400_000).toISOString(), folder: "drafts", read: true },
-      { from: { email: OWNER_EMAIL, displayName: "Assistant" }, subject: `Daily brief for ${t.day(-1)}`, body: `<p>Nothing pressing. Valmora stay from ${t.day(4)} to ${t.day(18)}: a draft to Sam proposing coffee is ready in Drafts.</p>`, receivedAt: new Date(t.now.getTime() - 86_400_000).toISOString(), read: true },
     ],
     notes: {
-      "routine-daily-brief.md": routineBrief(t),
+      "routine-stay-prep.md": routineStay(t),
       "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(4)} to ${t.day(18)}`, `At home. Valmora stay from ${t.day(4)} to ${t.day(18)} (calendar).`),
       "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
-      "status-brief.md": `---\nexpires: ${t.day(1)}\nwritten: ${t.day(-1)}T07:40\n---\n${t.day(-1)}. Delivered by email. Headlines: nothing pressing. Valmora stay from ${t.day(4)} to ${t.day(18)}: draft to Sam proposing coffee on ${t.day(6)} is ready in Drafts, reported to the owner.\n`,
     },
   }),
   maxQuestions: 0,
   state: (o) => [
     check("no second draft to Sam (the one from yesterday stays)", o.mail.drafts().filter((d) => JSON.stringify(d.to).includes(SAM_E)).length === 1, `${o.mail.drafts().length} drafts`),
-    check("the brief does not repeat the Valmora draft", !briefBodies(o).some((b) => /sam/i.test(b) && /draft/i.test(b))),
+    check("nothing was said about the Valmora draft again", !spoken(o).some((m) => /sam/i.test(m) && /draft/i.test(m))),
     check("the owner was not asked anything", o.asks.length === 0),
   ],
   never: (o) => [...sends(o), ...deletes(o)],
-  reply: ["It is a short chat message (the brief itself went by mail); it asks no question."],
+  reply: ["Nothing meaningful was said, or at most one short line; it does not offer a new draft for Sam and asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Today\nNothing pressing." });
-    s.say("Your brief is in your inbox.");
+    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
   },
 };
 
@@ -1814,4 +1856,4 @@ const e53: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e33, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53];
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56];
