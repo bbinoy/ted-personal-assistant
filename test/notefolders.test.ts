@@ -41,8 +41,8 @@ test("walkNotes: relative paths, sorted; only .md, no index, no dot files, no de
 });
 
 test("note paths: one folder level, no dot, no traversal", () => {
-  for (const ok of ["a.md", "people/mara.md", "Style-x.md"]) assert.ok(NOTE_PATH.test(ok), ok);
-  for (const bad of ["../a.md", "a/../b.md", ".a.md", "a/b/c.md", "/a.md", "a/.md", "a\\b.md", "a.txt", "..md"]) assert.ok(!NOTE_PATH.test(bad), bad);
+  for (const ok of ["a.md", "people/mara.md", "Style-x.md", "café-été.md", "Ünï/ß_x.md", "日本語.md"]) assert.ok(NOTE_PATH.test(ok), ok);
+  for (const bad of ["../a.md", "a/../b.md", ".a.md", "a/b/c.md", "/a.md", "a/.md", "a\\b.md", "a.txt", "..md", "_x.md", "a/_x.md", "a.b/x.md"]) assert.ok(!NOTE_PATH.test(bad), bad);
 });
 
 test("forgetNote: removes a page in a folder and the folder with its last page; refuses a path out of the folder", () => {

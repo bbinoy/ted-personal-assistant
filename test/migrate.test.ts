@@ -73,6 +73,15 @@ test("migration: every old prefix moves to its folder or name, style notes becom
   rmSync(r, { recursive: true, force: true });
 });
 
+test("migration: names that are not page names as they stand are made safe, accented ones stay", () => {
+  const r = root();
+  const notes = seed(r, "owner", { "people-.md": note("Nobody. Lives in: Oslo."), "context-café-été.md": note("Accents."), "setup-.hidden.md": note("odd"), "routine-.md": note("r", "when: every day at 08:00\n") });
+  migrateAll(r);
+  assert.deepEqual(walkNotes(notes), ["café-été.md", "page.md", "routines/page.md", "setup/hidden.md"]);
+  assert.equal(readNotes(new Date(), notes).filter((n) => n.person).length, 1);
+  rmSync(r, { recursive: true, force: true });
+});
+
 test("migration: a taken name gets -2; a run twice changes nothing; a folder with no old prefix just gets its marker", () => {
   const r = root();
   const notes = seed(r, "owner", { "context-trip.md": note("Trip A."), "scheduling-trip.md": note("Trip B."), "trip.md": note("Trip C, already a page.") });

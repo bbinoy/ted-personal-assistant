@@ -49,8 +49,8 @@ export function noteSavedHint(tool: string, input: Record<string, unknown>, dir?
 }
 export const isIndex = (path: string, dir: string = NOTES_DIR) => resolve(path) === join(dir, "MEMORY.md");
 
-// A note's relative path: a file name, or `<folder>/<file>.md` (one folder level; neither part starts with a dot, so ".." can not pass).
-export const NOTE_PATH = /^(?:[a-z0-9][\w-]{0,40}\/)?[a-z0-9][\w.-]{0,80}\.md$/i;
+// A note's relative path: a file name, or `<folder>/<file>.md` (one folder level; letters and digits of any script, "_", "-" and (in a file name) "."; neither part starts with a dot or an underscore, so ".." can not pass).
+export const NOTE_PATH = /^(?:[\p{L}\p{N}][\p{L}\p{N}_-]{0,40}\/)?[\p{L}\p{N}][\p{L}\p{N}_.-]{0,80}\.md$/u;
 
 // Every note of a folder as a path relative to it ("people/mara.md"), sorted: the one place that lists notes. `.md` files only, MEMORY.md and dot files left out, symlinks not followed, one folder level deep.
 export function walkNotes(dir: string = NOTES_DIR): string[] {
@@ -217,7 +217,7 @@ export function readIndex(dir: string = NOTES_DIR): string {
 
 // Deletes one note and regenerates the index. Only a plain file name, or folder/name, inside the notes folder.
 export function forgetNote(file: string, dir: string = NOTES_DIR, now = new Date()): { ok: true; removed: Note | undefined } | { ok: false; error: string } {
-  if (!NOTE_PATH.test(file) || file === "MEMORY.md") return { ok: false, error: "give the note's file name, like style.md, or folder/name.md" };
+  if (!NOTE_PATH.test(file) || file.toLowerCase() === "memory.md") return { ok: false, error: "give the note's file name, like style.md, or folder/name.md" };
   const path = join(dir, file);
   if (!existsSync(path)) return { ok: false, error: `no note named ${file}. Read MEMORY.md for the list.` };
   const removed = parseNote(file, readFileSync(path, "utf8"));

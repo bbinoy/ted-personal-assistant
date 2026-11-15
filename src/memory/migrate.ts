@@ -4,7 +4,7 @@ import { emitRecord } from "../core/events.ts";
 import { convDbAt } from "../core/convdb.ts";
 import { dataRoot, isConvId, layout } from "../core/convpaths.ts";
 import { writeFileAtomic } from "../core/state.ts";
-import { parseNote, writeIndex } from "./notes.ts";
+import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 
 // TEMPORARY (deleted in the cleanup release, with scripts/restore-premigration.ts and every notes-premigration/ folder): the one-time move of every conversation's notes from the old flat layout, where the
 // start of a file name was its category (people-mara.md, setup-calendars.md, routine-brief.md), to pages (docs/ARCHITECTURE.md "Memory"). Code, deterministic, no model, before anything runs on the folders
@@ -43,11 +43,12 @@ function targetOf(file: string): string {
   if (!m) return file; // an unknown prefix: a plain page under its own name
   const kind = m[1]!.toLowerCase();
   const rest = file.slice(m[0].length);
-  if (kind === "setup") return `setup/${rest}`;
-  if (kind === "voice") return `setup/${file}`;
-  if (kind === "status") return `status/${rest}`;
-  if (kind === "routine") return `routines/${rest}`;
-  return rest; // people, context, scheduling, triage, brief
+  const to = kind === "setup" ? `setup/${rest}` : kind === "voice" ? `setup/${file}` : kind === "status" ? `status/${rest}` : kind === "routine" ? `routines/${rest}` : rest; // (people, context, scheduling, triage, brief: a plain page)
+  if (NOTE_PATH.test(to)) return to;
+  // a name that would not be a page name (nothing after the prefix, a leading dot, odd characters): made safe
+  const dir = to.includes("/") ? `${to.split("/")[0]}/` : "";
+  const stem = rest.replace(/\.md$/i, "").replace(/[^\p{L}\p{N}_.-]/gu, "-").replace(/^[^\p{L}\p{N}]+/u, "").slice(0, 80);
+  return `${dir}${stem || "page"}.md`;
 }
 
 const sameText = (a: string, b: string): boolean => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();

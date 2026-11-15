@@ -51,7 +51,7 @@ export interface NoteFile {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const FILE = /^(?:[a-z0-9][a-z0-9-]{0,40}\/)?[a-z0-9][a-z0-9-]{0,70}\.md$/;
+const FILE = /^(?:[\p{L}\p{N}][\p{L}\p{N}_-]{0,40}\/)?[\p{L}\p{N}][\p{L}\p{N}_-]{0,70}\.md$/u; // (capitals too: classOf lower-cases, so Setup/x.md is setup and refused as a target)
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const kept = (file: string) => file === HARD_NAMES_NOTE || file === STYLE_NOTE; // pages code reads by name: a merge never removes them
 
@@ -79,7 +79,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
   let count = existing.size;
   const reject = (file: string, why: string) => plan.rejected.push({ file, why });
   const quoted = (e: unknown) => typeof e === "string" && norm(e).length >= MIN_EVIDENCE && owner.includes(norm(e));
-  const writable = (file: string) => classOf(file) === "page";
+  const writable = (file: string) => classOf(file) === "page" && file.toLowerCase() !== "memory.md"; // (the index is code's, also where the file system ignores case)
   const notMemory = (s: string) => ["setup", "status"].includes(classOf(s)); // may hold text from mail or sent mail: never a source
 
   if (list.length > MAX_OPS) console.log(`dream: ${list.length - MAX_OPS} of ${list.length} proposals left out (too many)`);

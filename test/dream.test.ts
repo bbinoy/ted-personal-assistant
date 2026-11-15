@@ -52,11 +52,12 @@ test("dream: any page is the model's judgement; a quote, when given, must be the
 test("dream: routines, setup, status and odd names, bad input and a nested folder are never touched", () => {
   seed([note("setup/calendars.md", "calendar ids"), note("setup/voice-writing.md", "sign-off Best"), note("routines/brief.md", "do it"), note("status/brief.md", "x")]);
   const evidence = "Mara is my sister and her birthday";
-  for (const file of ["setup/calendars.md", "setup/voice-writing.md", "routines/brief.md", "status/brief.md", "Setup/x.md", "ROUTINES/x.md", "MEMORY.md", "../state/x.md", "a/b/c.md", "Mara.md", "setup.md/x.md"]) {
+  for (const file of ["setup/calendars.md", "setup/voice-writing.md", "routines/brief.md", "status/brief.md", "Setup/x.md", "ROUTINES/x.md", "MEMORY.md", "../state/x.md", "a/b/c.md", "setup.md/x.md", "_x.md", ".x.md"]) {
     assert.equal(planOps({ ops: [write({ file, evidence })] }, ctx()).actions.length, 0, file);
     assert.equal(planOps({ ops: [{ op: "delete", file, evidence }] }, ctx()).actions.length, 0, `delete ${file}`);
   }
   assert.equal(planOps({ ops: [write({ file: "people/mara.md", evidence })] }, ctx()).actions.length, 1, "a folder of the model's own is fine");
+  for (const ok of ["Mara.md", "café-été.md", "Ünï/ß_x.md"]) assert.equal(planOps({ ops: [write({ file: ok, evidence })] }, ctx()).actions.length, 1, ok);
   assert.deepEqual(planOps(null, ctx()).actions, []);
   assert.deepEqual(planOps({ ops: "nope" }, ctx()).actions, []);
   assert.equal(planOps({ ops: [write({ evidence, text: "x".repeat(MAX_NOTE_CHARS + 1) })] }, ctx()).actions.length, 0);
