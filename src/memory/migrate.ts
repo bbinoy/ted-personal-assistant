@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { convDbAt } from "../core/convdb.ts";
 import { dataRoot, isConvId, layout } from "../core/convpaths.ts";
-import { writeFileAtomic } from "../core/state.ts";
+import { NOTES_MARKER, writeFileAtomic } from "../core/state.ts";
 import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 
 // TEMPORARY (deleted in the cleanup release, with scripts/restore-premigration.ts and every notes-premigration/ folder): the one-time move of every conversation's notes from the old flat layout, where the
@@ -13,7 +13,7 @@ import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 // being "write the new file, then remove the old". The pages themselves are merged into subjects over the next nights by the ordinary dream.
 // Privacy: what is logged and audited is the conversation's id and counts. Never a file name (a name can be a person's name), for any conversation, errors included.
 
-export const MARKER = ".layout";
+export const MARKER = NOTES_MARKER;
 export const PREMIGRATION = "notes-premigration";
 const LEGACY = /^(people|context|scheduling|triage|brief|style|setup|voice|status|routine)-/i;
 

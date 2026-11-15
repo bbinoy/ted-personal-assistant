@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
@@ -6,7 +6,7 @@ import { LIMITS } from "../core/sanitize.ts";
 import { dayIn } from "../core/timezone.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { writeFileAtomic } from "../core/state.ts";
+import { makeNotesDir, writeFileAtomic } from "../core/state.ts";
 
 // A conversation's notes: the SDK's own auto-memory, in its notes folder (conversations/<id>/notes/). EVERY run keeps them the same way, with the SDK's Read, Write and Edit confined to that
 // folder (policy.ts): markdown pages the model names and organises itself (a page per subject, linked with [[page]]) plus an index, MEMORY.md, that the SDK loads into every turn. The index is CODE's
@@ -25,7 +25,7 @@ export const HARD_NAMES_NOTE = "hard-names.md"; // the correct spellings of hard
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 
 export function ensureNotesDir(): void {
-  mkdirSync(NOTES_DIR, { recursive: true, mode: 0o700 });
+  makeNotesDir(NOTES_DIR);
 }
 
 // True only for a path inside a notes folder (the owner's by default; a group passes its own): ".." resolved

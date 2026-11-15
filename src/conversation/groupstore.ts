@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { Scope } from "../memory/dreamplan.ts";
 import { compactIfNeeded, GROUP_LOG_MAX_BYTES, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
 import { matchLines } from "../core/logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, conversationsDir, groupConvId, isConvId } from "../core/convpaths.ts";
-import { moveAside, readText, writeFileAtomic } from "../core/state.ts";
+import { makeNotesDir, moveAside, readText, writeFileAtomic } from "../core/state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { noteSponsored } from "../core/ownerkey.ts";
@@ -43,7 +43,7 @@ export function groupDir(groupId: string, name?: string): string {
   const p = convPaths(groupConvId(groupId));
   const dir = p.dir;
   if (named.has(groupId) && (!name || named.get(groupId) === name) && existsSync(p.notes)) return dir;
-  mkdirSync(p.notes, { recursive: true, mode: 0o700 });
+  makeNotesDir(p.notes);
   const meta = p.meta;
   const known = readMeta(meta);
   // The folder is named by a 64-bit hash of the id. A different group that hashes to the same folder (someone who grinds ids) must never

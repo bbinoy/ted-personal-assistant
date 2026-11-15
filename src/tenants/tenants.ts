@@ -6,7 +6,7 @@ import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { convPaths, friendConvId, instancePaths, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { dataPath, parseJson, writeFileAtomic, writeJson } from "../core/state.ts";
+import { dataPath, makeNotesDir, parseJson, writeFileAtomic, writeJson } from "../core/state.ts";
 import { convDb, peekConvDb, removeConvDir } from "../core/convdb.ts";
 import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
@@ -321,7 +321,7 @@ export function newTenantId(name: string, taken: ReadonlySet<string> = new Set(l
 // Folders and files of a tenant, owner-only. Idempotent.
 export function provision(rec: TenantRecord): TenantContext {
   const ctx = tenantContext(rec);
-  mkdirSync(ctx.notesDir, { recursive: true, mode: 0o700 });
+  makeNotesDir(ctx.notesDir);
   mkdirSync(ctx.backupDir, { recursive: true, mode: 0o700 });
   if (!existsSync(ctx.configFile)) writeFileAtomic(ctx.configFile, "{}\n");
   return tenantContext(rec);

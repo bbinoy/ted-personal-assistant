@@ -164,11 +164,11 @@ test("undo: a conversation that is dreamt can undo its dream with its own memory
   for (let n = 0; n < 3; n++) say(n, groupLogFile(g));
   const wrote = async () => ({ ops: [{ op: "write", file: "scheduling-games.md", description: "games", text: "Games are on Thursdays.", evidence: "we play on Thursdays" }, { op: "delete", file: "context-old.md", reason: "expired" }] });
   await createDreamer({ conversations: () => [groupConversation(g)], run: () => wrote }).run(NOW);
-  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["scheduling-games.md"]);
+  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f.endsWith(".md") && f !== "MEMORY.md"), ["scheduling-games.md"]);
   const server = createMemoryServer({ source: "chat", notesDir: groupNotesDir(g), groupId: g, dream: dreamScope({ kind: "group", groupId: g }) }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
   const r = await server.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(r.content[0]!.text, /Restored 1 notes/);
-  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["context-old.md"]);
+  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f.endsWith(".md") && f !== "MEMORY.md"), ["context-old.md"]);
 });
 
 test("one dreamer: a conversation someone is talking to is skipped for now, its day stays open, and it is dreamt once it is quiet", async () => {

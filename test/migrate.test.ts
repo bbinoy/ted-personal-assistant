@@ -8,6 +8,7 @@ import { convDbAt } from "../src/core/convdb.ts";
 import { layout } from "../src/core/convpaths.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { MARKER, migrateAll, PREMIGRATION, unmigrated } from "../src/memory/migrate.ts";
+import { makeNotesDir } from "../src/core/state.ts";
 import { classOf, readNotes, walkNotes } from "../src/memory/notes.ts";
 import { readNoteFiles } from "../src/conversation/dream.ts";
 import { fromNote } from "../src/modules/people/people.ts";
@@ -79,6 +80,19 @@ test("migration: names that are not page names as they stand are made safe, acce
   migrateAll(r);
   assert.deepEqual(walkNotes(notes), ["café-été.md", "page.md", "routines/page.md", "setup/hidden.md"]);
   assert.equal(readNotes(new Date(), notes).filter((n) => n.person).length, 1);
+  rmSync(r, { recursive: true, force: true });
+});
+
+test("migration: a notes folder born after the upgrade carries the marker, so a routine-foo page there keeps its name and key", () => {
+  const r = root();
+  const notes = layout(r).conv("group-0123456789abcdef").notes;
+  makeNotesDir(notes);
+  assert.equal(existsSync(join(notes, MARKER)), true);
+  makeNotesDir(notes); // idempotent
+  writeFileSync(join(notes, "routine-foo.md"), note("A page the model named like that."));
+  migrateAll(r);
+  assert.deepEqual(walkNotes(notes), ["routine-foo.md"]);
+  assert.equal(existsSync(join(layout(r).conv("group-0123456789abcdef").dir, PREMIGRATION)), false);
   rmSync(r, { recursive: true, force: true });
 });
 
