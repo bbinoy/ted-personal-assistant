@@ -14,7 +14,7 @@ Look in this conversation's memory notes before you answer anything about where 
 - `surf-profile`: home place and its coordinates, boards and sports, kite quiver (sizes), rider weight, skill level, wind units (knots by default), dislikes, and optionally how far they will travel. The notes override anything below.
 - `spot-<name>`, one note per spot (for example `spot-larkmere`): name, lat/lon of the launch point at the shore, which wind directions are onshore, side-on or offshore (and where that came from), hazards, notes.
 
-Save a note the way you save any other (one fact per note file in the notes folder, with its line in MEMORY.md) and say in a few words what you saved.
+Save a page the way you save any other (one page per subject in the notes folder; MEMORY.md is the index code keeps) and say in a few words what you saved.
 
 **Defaults when the notes say nothing:** consider spots within about 100 km of home. If the person names a spot, use that spot, whatever its distance, and always include their saved spots. The travel range is only for suggesting places they did not name; it never excludes a named or saved spot or a holiday destination.
 

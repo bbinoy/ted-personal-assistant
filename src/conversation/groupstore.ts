@@ -14,7 +14,7 @@ import { plainSummary } from "../tenants/tenants.ts";
 // Everything a group has: its own notes (what members asked the assistant to remember there) and its own
 // message history, in the same formats as the owner's, but in a conversation folder that nothing private reads
 // or writes. A group is told apart by a short hash of its id (convpaths.ts groupConvId); its folder is conversations/group-<hash>/:
-//   notes/        the group's notes, one fact per file
+//   notes/        the group's notes, pages like any conversation's
 //   notes-backup/ snapshots of those notes made by the group's dream
 //   meta.json     the group's id and name
 //   session.json  the group's resumed SDK session (like the owner's)

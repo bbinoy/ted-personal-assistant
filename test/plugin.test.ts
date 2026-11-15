@@ -41,6 +41,12 @@ test("plugin: every skill that needs setup names the note it reads, and setup sa
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));
 });
 
+test("skills and persona name no file of the old layout (people-x.md, setup-x.md, routine-x.md...): pages are named by the model, the folders are routines/, setup/ and status/", () => {
+  const OLD = /`?(people|context|scheduling|triage|brief|style|setup|status|routine)-(<|\*|[a-z]+(-[a-z]+)*\.md)/;
+  const texts = [...skills.map((s) => [`skill ${s}`, readFileSync(join(skillsDir, s, "SKILL.md"), "utf8")] as const), ...readdirSync(join(settings.pluginDir, "..", "assistants", "ted", "persona")).map((f) => [`persona ${f}`, readFileSync(join(settings.pluginDir, "..", "assistants", "ted", "persona", f), "utf8")] as const)];
+  for (const [name, text] of texts) assert.doesNotMatch(text.replace(/style-src/g, ""), OLD, name);
+});
+
 test("setup: missing items are listed, in prompts as an offer in chat and a skip-and-say elsewhere", () => {
   const note = (file: string): Note => ({ file, class: "setup", text: "x" });
   assert.equal(missingSetup([]).length, setupItems().length);
