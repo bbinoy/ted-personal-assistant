@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, r
 import { dirname, join } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { convDbAt } from "../core/convdb.ts";
-import { dataRoot, isConvId, layout } from "../core/convpaths.ts";
+import { dataRoot, isConvId, layout, OWNER_CONV } from "../core/convpaths.ts";
 import { NOTES_MARKER, writeFileAtomic } from "../core/state.ts";
 import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 
@@ -15,6 +15,8 @@ import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 
 export const MARKER = NOTES_MARKER;
 export const PREMIGRATION = "notes-premigration";
+export const SNAPSHOTS = "dream-snapshots"; // in the copy: the dream's snapshots of the old layout
+export const KEYS_FILE = ".routine-keys.json"; // in the copy's folder: which routine_runs key became which (the restore replays it backwards)
 const LEGACY = /^(people|context|scheduling|triage|brief|style|setup|voice|status|routine)-/i;
 
 const norm = (s: string): string => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^\p{L}\p{N}@.\s-]/gu, " ").replace(/\s+/g, " ").trim();
@@ -62,6 +64,7 @@ function migrateOne(root: string, conv: string): Counts | undefined {
   const flat = readdirSync(l.notes, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md").map((e) => e.name).sort();
   const counts: Counts = { moved: 0, mergedStyle: 0, collided: 0 };
   let step = 1;
+  const keysPath = join(l.dir, PREMIGRATION, KEYS_FILE);
   try {
     if (flat.some((f) => LEGACY.test(f))) {
       // 1. the copy of the whole folder (status included), kept once: a resumed run does not replace it
@@ -70,6 +73,9 @@ function migrateOne(root: string, conv: string): Counts | undefined {
         cpSync(l.notes, `${keep}.tmp`, { recursive: true });
         renameSync(`${keep}.tmp`, keep);
       }
+      // the dream's old snapshots are of the old layout: "undo the dream" must never restore one over pages, so they go into the copy (the restore brings them back)
+      if (existsSync(l.notesBackup) && !existsSync(join(keep, SNAPSHOTS))) renameSync(l.notesBackup, join(keep, SNAPSHOTS));
+      const keys: Record<string, string> = existsSync(keysPath) ? JSON.parse(readFileSync(keysPath, "utf8")) : {};
       // 2. the style notes become one page, style.md: the bodies as bullets, nothing reworded; what style.md already holds is not added again
       step = 2;
       const styles = flat.filter((f) => /^style-/i.test(f));
@@ -97,6 +103,10 @@ function migrateOne(root: string, conv: string): Counts | undefined {
           if (n === 2) counts.collided++;
           to = targetOf(f).replace(/(\.md)$/i, `-${n}$1`);
         }
+        if (/^routine-/i.test(f)) {
+          keys[f.replace(/\.md$/i, "")] = to.replace(/^.*\//, "").replace(/\.md$/i, ""); // (written before the old file goes: a restart still knows)
+          writeFileAtomic(keysPath, JSON.stringify(keys));
+        }
         if (out) {
           mkdirSync(dirname(join(l.notes, to)), { recursive: true, mode: 0o700 });
           writeFileAtomic(join(l.notes, to), out);
@@ -109,8 +119,11 @@ function migrateOne(root: string, conv: string): Counts | undefined {
     step = 4;
     if (existsSync(l.db)) {
       const db = convDbAt(root, conv);
-      db.run("UPDATE OR IGNORE routine_runs SET name = substr(name, 9) WHERE name LIKE 'routine-%'");
-      db.run("DELETE FROM routine_runs WHERE name LIKE 'routine-%'"); // (a key that met a record of the new name: the old one is of no use)
+      const keys: Record<string, string> = existsSync(keysPath) ? JSON.parse(readFileSync(keysPath, "utf8")) : {};
+      for (const [old, now] of Object.entries(keys)) {
+        db.run("UPDATE OR IGNORE routine_runs SET name = ? WHERE name = ?", now, old);
+        db.run("DELETE FROM routine_runs WHERE name = ?", old); // (a key that met a record of the new name: the old one is of no use)
+      }
     }
     // 5. the index again, the marker last
     step = 5;
@@ -122,12 +135,14 @@ function migrateOne(root: string, conv: string): Counts | undefined {
   return counts.moved || counts.mergedStyle || counts.collided ? counts : undefined;
 }
 
-// Every conversation folder of the data folder (the owner, each group, each friend). Idempotent: one with its marker is skipped. A conversation that fails is logged and the next one is still done, but at the end this
-// throws, so the agent refuses to start on a mixed layout; the failed one is tried again at the next start and its old files stay put.
+// Every conversation folder of the data folder (the owner first, then each group and friend). Idempotent: one with its marker is skipped. A failure of the OWNER's conversation throws, so the agent refuses to start on
+// a mixed layout of its own chat. Any other conversation that fails is logged (its id and the error code) and the agent starts; it is tried again at the next start, its old files stay put (its old-prefixed files
+// are plain pages meanwhile), and the doctor counts it.
 export function migrateAll(root: string = dataRoot()): void {
   const l = layout(root);
   const failed: string[] = [];
-  for (const conv of existsSync(l.conversations) ? readdirSync(l.conversations).filter(isConvId).sort() : []) {
+  const ids = (existsSync(l.conversations) ? readdirSync(l.conversations).filter(isConvId).sort() : []).sort((a, b) => Number(b === OWNER_CONV) - Number(a === OWNER_CONV));
+  for (const conv of ids) {
     try {
       const counts = migrateOne(root, conv);
       if (!counts) continue;
@@ -137,13 +152,17 @@ export function migrateAll(root: string = dataRoot()): void {
       failed.push(conv);
       console.error(`memory migration: ${(e as Error).message}${(e as { code?: string }).code ? ` (${(e as { code?: string }).code})` : ""}`);
       emitRecord("memory_migrated", "failed", "background", { conv, step: (e as { step?: number }).step ?? 0 });
+      if (conv === OWNER_CONV) throw new Error("memory migration failed for the owner's conversation; the agent does not start on a mixed layout (see the log), the old files are untouched");
     }
   }
-  if (failed.length) throw new Error(`memory migration failed for ${failed.length} conversation(s): ${failed.join(", ")}; the agent does not start on a mixed layout (see the log), the old files are untouched`);
+  if (failed.length) console.error(`memory migration: ${failed.length} other conversation(s) not moved yet, tried again at the next start`);
 }
 
-// The doctor's count (owner only): top-level files that still carry an old prefix in a folder with no marker. A number, never a name.
-export function unmigrated(notesDir: string): number {
-  if (!existsSync(notesDir) || existsSync(join(notesDir, MARKER))) return 0;
-  return readdirSync(notesDir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md") && LEGACY.test(e.name)).length;
+// The doctor's count: how many conversations (any kind) still have old-prefixed files in a folder with no marker. A number, never a name.
+export function unmigrated(root: string = dataRoot()): number {
+  const l = layout(root);
+  return (existsSync(l.conversations) ? readdirSync(l.conversations).filter(isConvId) : []).filter((conv) => {
+    const dir = l.conv(conv).notes;
+    return existsSync(dir) && !existsSync(join(dir, MARKER)) && readdirSync(dir, { withFileTypes: true }).some((e) => e.isFile() && e.name.endsWith(".md") && LEGACY.test(e.name));
+  }).length;
 }

@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { convDbAt } from "../src/core/convdb.ts";
 import { layout } from "../src/core/convpaths.ts";
 import { readAudit } from "../src/core/audit.ts";
+import { snapshotsOf, undoLatest } from "../src/memory/dreamapply.ts";
 import { MARKER, migrateAll, PREMIGRATION, unmigrated } from "../src/memory/migrate.ts";
 import { makeNotesDir } from "../src/core/state.ts";
 import { classOf, readNotes, walkNotes } from "../src/memory/notes.ts";
@@ -68,7 +69,7 @@ test("migration: every old prefix moves to its folder or name, style notes becom
   assert.match(index, /## setup\n- \[setup\/calendars\]/);
   assert.doesNotMatch(index, /stale index|status\/brief/);
   assert.equal(existsSync(join(notes, MARKER)), true);
-  assert.equal(unmigrated(notes), 0);
+  assert.equal(unmigrated(r), 0);
   assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION, "people-mara-silva.md")), true, "the copy of the old folder, status included");
   assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION, "status-brief.md")), true);
   rmSync(r, { recursive: true, force: true });
@@ -139,51 +140,96 @@ test("migration: the routines' run records get the new key, other records are le
   const db = convDbAt(r, "owner");
   for (const name of ["routine-pep-talk", "pep-talk", "routine-orphan", "other"]) db.run("INSERT INTO routine_runs (name, since) VALUES (?, ?)", name, 1);
   migrateAll(r);
-  assert.deepEqual(db.all<{ name: string }>("SELECT name FROM routine_runs ORDER BY name").map((x) => x.name), ["orphan", "other", "pep-talk"], "the record of the new name wins over the renamed old one");
+  assert.deepEqual(db.all<{ name: string }>("SELECT name FROM routine_runs ORDER BY name").map((x) => x.name), ["other", "pep-talk", "routine-orphan"], "the record of the new name wins over the renamed old one; a record of no routine is left to the retention rule");
   rmSync(r, { recursive: true, force: true });
 });
 
-test("migration: a failing conversation stops the start, leaves its old files, and never names a file in the log or the audit", () => {
-  const r = root();
-  const secret = "people-zorbel-quint.md";
-  const bad = seed(r, "owner", { [secret]: note("Zorbel Quint. Lives in: Oslo."), "context-ok.md": note("fine") });
-  const friend = seed(r, "friend-ab12cd34", { "people-vanka-roth.md": note("Vanka Roth. Lives in: Riga."), "context-trip.md": note("trip") });
-  // the owner's folder cannot take the copy: a file sits where the copy's temp folder goes
-  writeFileSync(join(layout(r).conv("owner").dir, `${PREMIGRATION}.tmp`), "in the way");
+const quiet = (fn: () => void): string => {
   const lines: string[] = [];
   const log = console.log;
   const err = console.error;
   console.log = (...a: unknown[]) => void lines.push(a.join(" "));
   console.error = (...a: unknown[]) => void lines.push(a.join(" "));
   try {
-    assert.throws(() => migrateAll(r), /memory migration failed for 1 conversation/);
+    fn();
   } finally {
     console.log = log;
     console.error = err;
   }
-  assert.ok(existsSync(join(bad, secret)), "the old files stay");
-  assert.equal(existsSync(join(bad, MARKER)), false, "no marker: tried again at the next start");
-  assert.equal(existsSync(join(friend, MARKER)), true, "the friend's conversation was done, with the same code");
-  assert.ok(existsSync(join(friend, "vanka-roth.md")));
-  const text = lines.join("\n") + JSON.stringify(readAudit((e) => e.tool === "memory_migrated"));
-  assert.match(text, /memory migrated: friend-ab12cd34 moved 2, merged-style 0, collided 0/);
-  assert.match(text, /owner: failed at step 1/);
-  assert.doesNotMatch(text, /zorbel|quint|vanka|roth|people-|context-|trip|\.md/i, "ids and counts only, for the owner and a friend alike");
+  return lines.join("\n") + JSON.stringify(readAudit((e) => e.tool === "memory_migrated"));
+};
+
+test("migration: a failing friend does not stop the start, keeps its old files, is counted by the doctor, and no file is named in the log or the audit", () => {
+  const r = root();
+  const owner = seed(r, "owner", { "people-zorbel-quint.md": note("Zorbel Quint. Lives in: Oslo."), "context-ok.md": note("fine") });
+  const friend = seed(r, "friend-ab12cd34", { "people-vanka-roth.md": note("Vanka Roth. Lives in: Riga."), "context-trip.md": note("trip") });
+  writeFileSync(join(layout(r).conv("friend-ab12cd34").dir, `${PREMIGRATION}.tmp`), "in the way"); // the copy cannot be made
+  const text = quiet(() => migrateAll(r)); // (does not throw)
+  assert.equal(existsSync(join(owner, MARKER)), true, "the owner was done first");
+  assert.ok(existsSync(join(friend, "people-vanka-roth.md")), "the friend's old files stay");
+  assert.equal(existsSync(join(friend, MARKER)), false, "no marker: tried again at the next start");
+  assert.equal(unmigrated(r), 1, "the doctor counts conversations, not files");
+  assert.match(text, /memory migrated: owner moved 2, merged-style 0, collided 0/);
+  assert.match(text, /friend-ab12cd34: failed at step 1/);
+  assert.doesNotMatch(text, /zorbel|quint|vanka|roth|people-|context-|trip|\.md/i, "ids and counts only");
+  rmSync(join(layout(r).conv("friend-ab12cd34").dir, `${PREMIGRATION}.tmp`));
+  migrateAll(r);
+  assert.ok(existsSync(join(friend, "vanka-roth.md")), "the next start moves it");
+  assert.equal(unmigrated(r), 0);
   rmSync(r, { recursive: true, force: true });
 });
 
-test("restore: the script puts the copy back, removes the marker and gives the routines their old keys", () => {
+test("migration: a failing OWNER conversation refuses the start and names nothing", () => {
   const r = root();
-  const notes = seed(r, "owner", { "people-mara.md": note("Mara. Lives in: Bern."), "routine-x.md": note("x", "when: every day at 08:00\n"), "style-a.md": note("A rule.") });
+  const owner = seed(r, "owner", { "people-zorbel-quint.md": note("Zorbel Quint. Lives in: Oslo.") });
+  const friend = seed(r, "friend-ab12cd34", { "context-trip.md": note("trip") });
+  writeFileSync(join(layout(r).conv("owner").dir, `${PREMIGRATION}.tmp`), "in the way");
+  const text = quiet(() => assert.throws(() => migrateAll(r), /owner's conversation/));
+  assert.ok(existsSync(join(owner, "people-zorbel-quint.md")));
+  assert.equal(existsSync(join(friend, MARKER)), false);
+  assert.match(text, /owner: failed at step 1/);
+  assert.doesNotMatch(text, /zorbel|quint|people-|\.md/i);
+  rmSync(r, { recursive: true, force: true });
+});
+
+test("migration: the dream's old snapshots go into the copy, so an undo never restores a flat file over pages", () => {
+  const r = root();
+  const notes = seed(r, "owner", { "people-mara.md": note("Mara. Lives in: Bern."), "routine-x.md": note("x", "when: every day at 08:00\n") });
+  const backups = layout(r).conv("owner").notesBackup;
+  mkdirSync(join(backups, "2026-05-02T04-00-00-000Z"), { recursive: true });
+  writeFileSync(join(backups, "2026-05-02T04-00-00-000Z", "people-mara.md"), note("the old snapshot"));
+  migrateAll(r);
+  assert.deepEqual(snapshotsOf(backups), [], "no snapshot of the old layout is left to undo");
+  const scope = { notesDir: notes, backupsDir: backups, maxNotes: 100 };
+  assert.equal(undoLatest(scope).ok, false);
+  assert.deepEqual(walkNotes(notes), ["mara.md", "routines/x.md"], "the pages are as the migration left them");
+  assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION, "dream-snapshots", "2026-05-02T04-00-00-000Z", "people-mara.md")), true);
+  rmSync(r, { recursive: true, force: true });
+});
+
+test("restore: the script puts the copy and the old snapshots back, removes the marker, replays the routine keys (collisions included) and sets the copy aside", () => {
+  const r = root();
+  const notes = seed(r, "owner", { "people-mara.md": note("Mara. Lives in: Bern."), "routine-x.md": note("x", "when: every day at 08:00\n"), "x.md": note("a page that takes the name x"), "style-a.md": note("A rule.") });
+  const backups = layout(r).conv("owner").notesBackup;
+  mkdirSync(join(backups, "2026-05-02T04-00-00-000Z"), { recursive: true });
+  writeFileSync(join(backups, "2026-05-02T04-00-00-000Z", "people-mara.md"), note("old snapshot"));
   convDbAt(r, "owner").run("INSERT INTO routine_runs (name, since) VALUES ('routine-x', 1)");
   migrateAll(r);
-  assert.deepEqual(walkNotes(notes).sort(), ["mara.md", "routines/x.md", "style.md"]);
+  assert.deepEqual(walkNotes(notes), ["mara.md", "routines/x.md", "style.md", "x.md"], "the routine's stem x is free inside routines/, the page x.md is another folder");
+  assert.deepEqual(convDbAt(r, "owner").all<{ name: string }>("SELECT name FROM routine_runs").map((x) => x.name), ["x"]);
   convDbAt(r, "owner").close();
-  const out = execFileSync(process.execPath, ["--conditions=workspace-source", "scripts/restore-premigration.ts", "owner"], { env: { ...process.env, HARNESS_DATA_DIR: r }, encoding: "utf8" });
+  const run = () => execFileSync(process.execPath, ["--conditions=workspace-source", "scripts/restore-premigration.ts", "owner"], { env: { ...process.env, HARNESS_DATA_DIR: r }, encoding: "utf8" });
+  const out = run();
   assert.match(out, /^owner: notes restored/);
-  assert.deepEqual(walkNotes(notes).sort(), ["people-mara.md", "routine-x.md", "style-a.md"]);
+  assert.deepEqual(walkNotes(notes).sort(), ["people-mara.md", "routine-x.md", "style-a.md", "x.md"]);
   assert.equal(existsSync(join(notes, MARKER)), false);
+  assert.equal(existsSync(join(notes, "dream-snapshots")), false, "the snapshots are not notes");
+  assert.deepEqual(snapshotsOf(backups), ["2026-05-02T04-00-00-000Z"]);
   assert.deepEqual(convDbAt(r, "owner").all<{ name: string }>("SELECT name FROM routine_runs").map((x) => x.name), ["routine-x"]);
-  assert.throws(() => execFileSync(process.execPath, ["--conditions=workspace-source", "scripts/restore-premigration.ts", "friend-nobody1"], { env: { ...process.env, HARNESS_DATA_DIR: r }, stdio: "pipe" }), /status 1|Command failed/);
+  assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION)), false);
+  assert.equal(readdirSync(layout(r).conv("owner").dir).filter((f) => f.startsWith(`${PREMIGRATION}.restored-`)).length, 1, "set aside, so a later migration takes a fresh copy");
+  assert.throws(() => execFileSync(process.execPath, ["--conditions=workspace-source", "scripts/restore-premigration.ts", "owner"], { env: { ...process.env, HARNESS_DATA_DIR: r }, stdio: "pipe" }), /status 1|Command failed/);
+  migrateAll(r); // the restored folder is migrated again, from a fresh copy
+  assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION)), true);
   rmSync(r, { recursive: true, force: true });
 });

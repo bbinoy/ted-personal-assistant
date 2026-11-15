@@ -442,7 +442,7 @@ export async function doctor() {
     line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`, (statSync(dir).mode & 0o077) === 0 ? "" : `fix: chmod 700 ${dir}`);
     line(loose.length === 0 ? true : "warn", `${name}/ files are owner-only`, loose.length ? `group/world-readable: ${loose.join(", ")}` : "");
   }
-  line(unmigrated(convPaths(OWNER_CONV).notes) === 0 ? true : "warn", "the owner's notes", `${readNotes().length} pages, ${brokenLinks(readNotes()).length} broken links, ${unmigrated(convPaths(OWNER_CONV).notes)} unmigrated`); // counts only, never a name
+  line(unmigrated() === 0 ? true : "warn", "the owner's notes", `${readNotes().length} pages, ${brokenLinks(readNotes()).length} broken links, ${unmigrated()} conversation(s) not yet moved to pages`); // counts only, never a name
 
   const voice = voiceReady(settings.whisperModel);
   line(voice.ok ? true : "warn", "voice messages", voice.ok ? "transcribed locally with whisper.cpp" : `not available, missing: ${voice.missing.join("; ")}`);
