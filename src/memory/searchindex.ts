@@ -1,4 +1,5 @@
-import { chmodSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync } from "node:fs";
+import { walkNotes } from "./notes.ts";
+import { chmodSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -267,7 +268,7 @@ export class SearchIndex {
     this.#today = today;
     let files: { f: string; mtime: number; size: number }[] = [];
     try {
-      files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && !f.startsWith(".")).sort().flatMap((f) => {
+      files = walkNotes(dir).flatMap((f) => {
         try { const s = statSync(join(dir, f)); return s.isFile() && s.size <= MAX_NOTE_BYTES * 4 ? [{ f, mtime: s.mtimeMs, size: s.size }] : []; } catch { return []; }
       });
     } catch { /* no folder: no notes */ }
@@ -283,7 +284,7 @@ export class SearchIndex {
         try { raw = readFileSync(join(dir, f), "utf8"); } catch { continue; }
         const body = noteBody(raw, today);
         if (!body) continue;
-        this.#insert({ src: "n", t: Math.floor(mtime), ts: 0, kind: "note", by: "", of: 0, name: f, text: body, off: 0, len: 0, extra: f.replace(/\.md$/, "").replace(/[-_]/g, " ") });
+        this.#insert({ src: "n", t: Math.floor(mtime), ts: 0, kind: "note", by: "", of: 0, name: f, text: body, off: 0, len: 0, extra: `${f.replace(/\.md$/, "").replace(/[-_/]/g, " ")} ${[...raw.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]!.replace(/[-_/]/g, " ")).join(" ")}`.trim() });
         n++;
         if (performance.now() - t0 > SLICE_MS) { await yieldLoop(); t0 = performance.now(); } // (the one transaction stays open; nothing else uses this connection)
       }

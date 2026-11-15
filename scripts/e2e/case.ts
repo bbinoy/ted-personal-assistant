@@ -59,6 +59,7 @@ export interface Case {
   title: string;
   turns: string[]; // the owner's messages, one chat turn each, in the same conversation; none for a look
   look?: boolean; // the trigger is a background look (heartbeat/look.ts), not a message
+  dream?: boolean; // the trigger is the nightly dream over the seeded notes, with `turns` as the person's lines of the day (no chat turn is run; the graded outcome is the notes)
   group?: { members: string[]; turns: { from: string; text: string; addressed?: boolean }[] }; // the trigger is a group chat the owner sponsors: the messages go through the production intake (vouch, gate, participation, group prompt). `members`: the other members by name; `from` is a member's name or "owner"; `addressed`: tagged or quoted (default no, so the participation gate decides); `turns` above is empty
   interject?: { on: string; text: string; afterMs?: number }; // the owner's chat only: a second message, sent through the production intake `afterMs` after the named tool (a full tool name) is first called, while the first turn is still running
   world: (t: Time) => World;
@@ -85,6 +86,7 @@ export interface PerfectScript {
   };
   ask(tool: string, question: string, answer: string, payment?: boolean): void; // a question the scripted run put to the owner
   note(file: string, text: string): void; // a note file the run saved
+  forget(file: string): void; // a note file the run removed
   search(query: string): string; // a web search, answered by the case's fake web
   open(url: string): string; // a page opened on the case's fake web
   say(text: string): void;

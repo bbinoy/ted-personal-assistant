@@ -21,6 +21,7 @@ import { groupDir, loadSponsors, recordGroup } from "./conversation/groupstore.t
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir, namesPrompt } from "./memory/notes.ts";
+import { migrateAll } from "./memory/migrate.ts";
 import { searchScope, warmSearchIndexes } from "./memory/search.ts";
 import { compactIfNeeded, GROUP_LOG_MAX_BYTES, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
@@ -55,6 +56,7 @@ import { instancePaths } from "./core/convpaths.ts";
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
+migrateAll(); // once, before anything runs on the notes: the old flat layout (category prefixes) becomes pages (memory/migrate.ts; temporary)
 sweepStaleRuns(); // page views and screenshots of a browse run that never ended
 if (!ledgerDamage() && new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 

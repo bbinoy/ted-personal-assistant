@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { ASSISTANTS_DIR } from "./paths.ts";
 
 // The assistant preset: what makes this harness "Ted, the personal assistant" and not another assistant, as DATA.
-// A preset is a folder (assistants/<name>/): preset.json (the rhythm, the note categories, the run limits, the assistant's own skills)
+// A preset is a folder (assistants/<name>/): preset.json (the rhythm, the run limits, the assistant's own skills)
 // and persona/*.md (the words of every prompt). Code reads it; a different folder is a different personality and rhythm on the same
 // harness (ASSISTANT_PRESET=<name or folder>). What a preset can NOT reach stays in code: policy, approvals, isolation, payments,
 // the capability table, the heartbeat's triage gate. Enforcement never depends on a prompt's wording, so a preset only changes how the
@@ -23,8 +23,6 @@ interface Rhythm {
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
-  // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; others: the ones the notes (and dreams) of a group and of a friend have.
-  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly others: readonly string[]; readonly background: readonly string[] };
   readonly limits: Limits; // one set for every conversation's runs: the owner's, each group's and each friend's
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert every run may delegate to (run/delegation.ts); expert-opus is the same on OPUS_MODEL
@@ -101,9 +99,9 @@ export const PROMPTS = {
   summary: [],
   identity: ["own", "group", "who", "mail", "personality", "participation", "sources", "reactions", "send", "writes", "channel"],
   capabilities: ["own", "group", "who", "mail", "reads", "asker", "asks", "provider", "mailSkill", "brief", "mailName", "mailFind", "mailSend", "mailEdit", "google", "people", "timed", "browse", "weather", "draw"],
-  shared: ["whose", "asker", "who", "categories", "own", "group", "reads", "mail", "dream", "ownerDir", "logsDir"],
+  shared: ["whose", "asker", "who", "own", "group", "reads", "mail", "dream", "ownerDir", "logsDir"],
   tasks: ["own", "group", "who", "reads", "mail"],
-  dream: ["subject", "own", "group", "categories", "hardNames", "peopleGuide"],
+  dream: ["subject", "own", "group", "peopleGuide"],
   background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   delegate: ["who", "delegated"],
   expert: ["personality", "own", "who"],
@@ -185,16 +183,6 @@ export function loadPreset(dir: string): Preset {
     },
   };
 
-  const n = sec("notes");
-  const categories = words(at("notes.categories"), n.categories);
-  if (categories.length === 0 || new Set(categories).size !== categories.length) fail(at("notes.categories"), "needs at least one category, each once");
-  const subset = (path: string, v: unknown): string[] => {
-    const list = words(at(path), v);
-    const stray = list.find((c) => !categories.includes(c));
-    return stray ? fail(at(path), `"${stray}" is not one of notes.categories (${categories.join(", ")})`) : list;
-  };
-  const notes = { categories, dream: subset("notes.dream", n.dream), others: subset("notes.others", n.others), background: n.background === undefined ? [] : words(at("notes.background"), n.background).filter((c) => categories.includes(c)) }; // (a preset that extends another and changes the categories keeps the ones it still has)
-
   if (json.profiles !== undefined) fail(where, '"profiles" is gone: use one "limits": { "maxTurns": ..., "maxBudgetUsd": ... } for every conversation');
   const l = sec("limits");
   const limits = { maxTurns: int(at("limits.maxTurns"), l.maxTurns, 1, 1000), maxBudgetUsd: num(at("limits.maxBudgetUsd"), l.maxBudgetUsd, 0.01, 1000) };
@@ -220,7 +208,7 @@ export function loadPreset(dir: string): Preset {
     for (const used of namesIn(t.nodes)) if (!allowed.has(used)) fail(file, `{{${used}}} is not available here (this text may use ${[...allowed].map((a) => `{{${a}}}`).join(", ") || "nothing"})`);
     persona[key] = t;
   }
-  return { name, rhythm, notes, limits, skills: { core, order }, expert, persona };
+  return { name, rhythm, limits, skills: { core, order }, expert, persona };
 }
 
 // The preset this process runs: ASSISTANT_PRESET is the name of a folder in assistants/ (default "ted") or the path of one.

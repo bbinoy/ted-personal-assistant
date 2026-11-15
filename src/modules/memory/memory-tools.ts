@@ -67,7 +67,7 @@ export function createMemoryServer(scope: MemoryScope) {
           : groupId
           ? "Delete one of THIS group's memory notes, and its line in MEMORY.md (anyone in the group may ask)."
           : "Delete one memory note, and its line in MEMORY.md. Only when the OWNER asked you to forget it.",
-        { file: z.string().describe("The note's file name, like style-no-em-dashes.md") },
+        { file: z.string().describe("The page's file name, like style.md or people/mara-silva.md") },
         async ({ file }) => {
           const r = forgetNote(file, notesDir);
           emitRecord("memory_forget", r.ok ? "removed" : "not-removed", source);

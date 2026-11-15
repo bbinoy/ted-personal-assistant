@@ -23,7 +23,6 @@ const { runConversation, runLook } = await import("../src/run/agent.ts");
 const { TRIGGERS, runFor } = await import("../src/run/runoptions.ts");
 const { forgetShown, turnFactsFrom } = await import("../src/run/turncontext.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
-const { CATEGORIES } = await import("../src/memory/notes.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const T = await import("../src/tenants/tenants.ts");
 
@@ -81,7 +80,7 @@ const NAMES = Object.keys(KINDS) as KindName[];
 // A note in each conversation, so that each has an index to be told.
 for (const k of Object.values(KINDS)) {
   mkdirSync(k.conv.notesDir, { recursive: true });
-  writeFileSync(join(k.conv.notesDir, `${CATEGORIES[0]}-probe.md`), "---\ndescription: NOTES-MARK probe\n---\nbody\n");
+  writeFileSync(join(k.conv.notesDir, "probe.md"), "---\ndescription: NOTES-MARK probe\n---\nbody\n");
 }
 recordMessage("notice", Date.now(), "NOTICE-MARK alert", new Date()); // (the owner's chat is told the notices of the last day, by the real clock)
 

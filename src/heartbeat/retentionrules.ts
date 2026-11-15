@@ -12,7 +12,7 @@ import { writeFileAtomic } from "../core/state.ts";
 import { dayAt } from "../core/timezone.ts";
 import { layoutOf as openbaoLayout } from "../secrets/openbaoadmin.ts";
 import { NOTES_BACKUP_KEEP, snapshotsOf } from "../memory/dreamapply.ts";
-import { forgetNote } from "../memory/notes.ts";
+import { forgetNote, NOTE_PATH, walkNotes } from "../memory/notes.ts";
 import { MAX_AGE_MS as VOICE_SOURCE_WINDOW_MS } from "../modules/voice/voicenote.ts";
 
 // The file-based retention rules (core/retention.ts says how they run). Each is a factory over a data layout and its window, so a test gives a temp folder and a fake clock; `fileRules()` is the set
@@ -164,8 +164,8 @@ export function expiredNotesRule(L: () => Layout, deleteDays: () => number): Ret
         if (!isConvId(conv)) continue;
         const p = L().conv(conv);
         const holding = join(p.notesBackup, EXPIRED_DIR);
-        for (const f of names(p.notes)) {
-          if (!f.endsWith(".md") || f === "MEMORY.md" || !/^[\w.-]+\.md$/.test(f)) continue;
+        for (const f of walkNotes(p.notes)) {
+          if (!NOTE_PATH.test(f)) continue;
           const path = join(p.notes, f);
           let raw: string;
           try {
@@ -180,7 +180,7 @@ export function expiredNotesRule(L: () => Layout, deleteDays: () => number): Ret
           if (!o.dryRun) {
             if (expires >= deleteBefore) {
               mkdirSync(holding, { recursive: true, mode: 0o700 });
-              cpSync(path, join(holding, `${expires}-${f}`)); // (dated by its expiry: two days' status-brief.md do not collide, and the age is in the name)
+              cpSync(path, join(holding, `${expires}-${f.replace(/\//g, "__")}`)); // (dated by its expiry: two days' briefs do not collide, and the age is in the name)
               moved++;
             }
             forgetNote(f, p.notes, now); // the file, and the index made again without it, after the copy

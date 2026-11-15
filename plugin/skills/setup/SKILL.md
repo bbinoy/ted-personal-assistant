@@ -6,8 +6,8 @@ description: Use in chat when the owner asks to set up, connect or configure the
 # Setup, through the chat
 
 The other skills hold no personal details. Which calendars to check, where the
-Notion pages are and how the owner writes all live in the owner's **memory notes**
-(`setup-*` and `voice-*` files). This skill fills them in, in conversation. The
+Notion pages are and how the owner writes all live in the owner's **memory pages**
+(the files in the `setup/` folder). This skill fills them in, in conversation. The
 owner never touches a file or a terminal.
 
 ## At the end: the separate account (once, briefly)
@@ -61,7 +61,7 @@ Read `MEMORY.md` in your notes. The checklist below is what the skills need; ski
 what already has a note unless the owner wants to change it. Start with what the
 owner's request needs, or with the first missing item if they just said "set up".
 
-### 1. Calendars (`setup-calendars.md`)
+### 1. Calendars (`setup/calendars.md`)
 
 1. Call the calendar tool `list_calendars`. Show the calendars by name and ask
    which ones to include in the day's review. Say which you assume (their own,
@@ -80,7 +80,7 @@ Tasks live in the assistant itself (the `list_tasks` / `add_task` tools): there 
 task page or database to find, and **a new owner is never asked for one**. Say so in
 one line if tasks come up.
 
-### 3. Meeting notes (`setup-meetings.md`)
+### 3. Meeting notes (`setup/meetings.md`)
 
 Find it yourself first here too.
 
@@ -96,7 +96,7 @@ Find it yourself first here too.
    source id, property names, default template name and id) or sub-pages of a
    parent page; and the "all meetings" view URL if there is one.
 
-### 4. How the owner writes (`voice-writing.md`)
+### 4. How the owner writes (`setup/voice-writing.md`)
 
 1. Explain: drafted replies should sound like them, and you can learn that from
    their sent mail. Ask permission to read their recent sent messages (up to 15,
@@ -108,16 +108,16 @@ Find it yourself first here too.
    low-pressure, humour); habits and words they avoid; languages they switch
    between. Describe patterns only. Quote no mail text, no names, no addresses.
 4. Show the description and ask what to change. Save it only after they agree.
-   Wording rules such as "never use em dashes" are separate `style-` notes.
+   Wording rules such as "never use em dashes" go on the `style.md` page, a rule a line.
 
 ### 5. Optional
 
-- **Booking link** (`setup-booking-link.md`): ask if they have a link they send
+- **Booking link** (`setup/booking-link.md`): ask if they have a link they send
   for scheduling; save it, or skip.
-- **Brief topics** (`brief-radar-topics.md`): ask which topics or places the daily
+- **Brief topics** (`radar-topics.md`): ask which topics or places the daily
   brief's radar should follow; save them, or skip.
 - **Quiet preferences:** if they mention things like "no meetings before 10", save
-  those as `scheduling-` notes.
+  those as a page of their own.
 
 ### 6. What you can do, and the recurring routines
 
@@ -141,12 +141,12 @@ it and a time to choose:
   what time?" (suggest 08:00 every day)
 
 On a yes, save the routine note with the time they chose (the routine rules say how:
-`routine-daily-brief.md`, `routine-evening-wrap.md`, `routine-weekly-review.md`, `routine-stay-prep.md`; the
+`routines/daily-brief.md`, `routines/evening-wrap.md`, `routines/weekly-review.md`, `routines/stay-prep.md`; the
 `when:` line, and as the body "Run the ted-personal-assistant:daily-brief skill and
-deliver the brief as it says." with the skill's name for the others; for stay prep the body is "Bring context-whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts."). The tool reply
+deliver the brief as it says." with the skill's name for the others; for stay prep the body is "Bring whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts."). The tool reply
 tells you how the schedule was read: tell them in a line. On a no, move on and do not
 ask again. Take edits as they come ("no pep talk", "shorter", "only on weekdays"):
-save a content wish as a `brief-` note as the daily brief skill describes, and a
+save a content wish as a page as the daily brief skill describes, and a
 change of time as an edit of the routine's note. Other routines they want ("every
 Monday at 9 summarise my week") are routine notes the same way.
 

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { namesPrompt } from "../src/memory/notes.ts";
 
 const folder = () => mkdtempSync(join(tmpdir(), "voicenames-"));
-const note = (dir: string, body: string, file = "context-hard-names.md") => writeFileSync(join(dir, file), `---\nname: hard names\ndescription: spellings\n---\n\n${body}\n`);
+const note = (dir: string, body: string, file = "hard-names.md") => writeFileSync(join(dir, file), `---\nname: hard names\ndescription: spellings\n---\n\n${body}\n`);
 
 test("voice names: the prompt is the conversation's own hard-names note, without front matter", () => {
   const mine = folder();

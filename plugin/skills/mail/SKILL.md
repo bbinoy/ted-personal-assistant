@@ -168,7 +168,7 @@ your head: take what decides the case and move on.
      reversible, journaled and listed in the brief. Doubt about a mail from a real
      person, money or an official deadline is different: keep that one.
    - **The owner's notes are the strongest context, weighed with the situation.**
-     A preference they stated in their own words (`triage-` notes: "mail from X is
+     A preference they stated in their own words (a page of theirs: "mail from X is
      always urgent") wins. A blanket rule or a lesson from one incident ("never
      archive onboarding mail") serves the need behind it (the mail whose link is
      still needed stays, the routine notices go) and lapses once that situation is
@@ -195,7 +195,7 @@ Newsletters are archived from the row by the looks, unread, as soon as they are 
 The daily brief (`ted-personal-assistant:daily-brief`, step "Newsletter radar") reads
 them afterwards: from the newsletters archived since the previous brief (the journal's
 archive list) plus any still in the inbox, it opens up to **3** that best match the topics
-in the owner's `brief-radar-topics` note (with no such note, skip the radar). Only the
+in the owner's `radar-topics` note (with no such note, skip the radar). Only the
 brief reads newsletters; a look never does.
 
 - **Opening an archived mail:** Gmail `get_thread` with the journal's id. Mailbird: the
@@ -239,25 +239,25 @@ did) and `npm run restore <id>` (un-archive).
 
 ## Drafting and the owner's voice
 
-How the owner writes is in their `voice-writing` note (length, greetings and
+How the owner writes is in their `setup/voice-writing` note (length, greetings and
 sign-offs per language, tone, habits). Draft in that voice. Match the
 correspondent's language and the thread's register first (read the existing
 messages and mirror them rather than defaulting to a generic reply style); the
 voice note is the default within that. Wording rules (for example "no em dashes")
-are in the owner's `style-` notes; follow those too.
+are on the owner's `style.md` page; follow those too.
 
-**If there is no `voice-writing` note:** still draft (short, plain, polite, in the
+**If there is no `setup/voice-writing` note:** still draft (short, plain, polite, in the
 thread's language, signed with the owner's first name), and:
-- read their sent mail, save the `voice-writing` note yourself (as the setup skill says), and say so in one line.
+- read their sent mail, save the `setup/voice-writing` note yourself (as the setup skill says), and say so in one line.
 
-**Work and private accounts.** When the owner has a work account next to a private one, handle both the same way, with the same approvals. Which account (and calendar) is work comes from their notes, else from its domain and content; once you know, save it in a `context-work` note (accounts, calendar, work signature) and never ask what you can infer. A reply leaves from the account the thread arrived in; a new mail from the account that fits its recipient and topic (a colleague or work matter: work). Never carry private content into a work thread, or work content into a private one. Work mail is professional in tone and signed with the work signature if a note has one; private mail stays as above.
+**Work and private accounts.** When the owner has a work account next to a private one, handle both the same way, with the same approvals. Which account (and calendar) is work comes from their notes, else from its domain and content; once you know, save it in a `work` note (accounts, calendar, work signature) and never ask what you can infer. A reply leaves from the account the thread arrived in; a new mail from the account that fits its recipient and topic (a colleague or work matter: work). Never carry private content into a work thread, or work content into a private one. Work mail is professional in tone and signed with the work signature if a note has one; private mail stays as above.
 
 **Replies stay in their thread.** Draft any reply as a reply to the existing message
 (the provider skill says how), never as a new mail. A new draft is only for a
 brand-new email with no thread. To change a reply, edit your existing draft in the thread (a look's draft counts: look for it first); if a new draft replaces your own older one, discard the older one and say nothing about it.
 
 **Scheduling.** When a draft is about finding a time, offer the owner's booking
-link if there is a `setup-booking-link` note (phrase it naturally), or name 2-3
+link if there is a `setup/booking-link` note (phrase it naturally), or name 2-3
 concrete slots from their real free time. When the other side has proposed times,
 check them against the calendar and confirm one rather than sending the link back.
 

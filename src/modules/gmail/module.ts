@@ -97,7 +97,7 @@ export const gmailModule: ToolModule = {
     noFix: ["send", "reply", "forward"],
   },
   skills: [{ name: "mail", required: true }, { name: "gmail", required: true }],
-  setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
+  setup: [{ file: "setup/voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
   hide: {
     prefix: GMAIL_PREFIX,
     visible: ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"],

@@ -1,6 +1,6 @@
 import { fileStamp } from "./timezone.ts";
 import { rotateIfOver } from "./rotate.ts";
-import { appendFileSync, chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { isInside } from "./contain.ts";
 import { settings } from "./settings.ts";
@@ -37,6 +37,14 @@ let tmpSeq = 0;
 
 // The one atomic write for any file under the data root (state, logs, notes): temp file with a unique name (pid + counter), written, fsynced, closed, renamed over the target,
 // then the folder fsynced (best effort: not every platform lets a folder be opened). `mode`: owner-only by default.
+// A notes folder as the one place that makes it: a folder that did not exist is born in the layout of pages, so it carries the marker (memory/migrate.ts moves only folders without one). Idempotent.
+export const NOTES_MARKER = ".layout";
+export function makeNotesDir(dir: string): void {
+  const fresh = !existsSync(dir);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (fresh) writeFileAtomic(join(dir, NOTES_MARKER), "2\n");
+}
+
 export function writeFileAtomic(path: string, text: string, mode = 0o600): void {
   ensureDir(path);
   const tmp = `${path}.${process.pid}.${++tmpSeq}.tmp`;

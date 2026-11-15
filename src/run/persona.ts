@@ -133,7 +133,7 @@ function systemFor(conv: Pick<Conversation, "kind">, caps: ReadonlySet<Capabilit
       channel: own ? (settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`) : "",
     }),
     rules(s, timed),
-    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, categories: identity(own ? ownerConv : { kind: "group" }).categories.join(", "), own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
+    say("shared", { whose: own ? `${OWNER}'s` : group ? "this group's own" : `${who}'s own`, asker: s.asker, who, own, group, reads: looker.reads, mail: s.mail, dream: caps.has("dream"), ownerDir: own ? convPaths(OWNER_CONV).dir : "", logsDir: own ? logPaths().dir : "" }),
     timed ? say("routine") : undefined,
     caps.has("tasks") ? say("tasks", { own, group, who, reads: looker.reads, mail: s.mail }) : undefined,
     background(looker, caps),
@@ -177,7 +177,7 @@ export const GATE_DEFAULTS = {
 // The log summary's system prompt (summarize.ts) is the preset's too.
 export const summarySystem = (): string => say("summary");
 
-// How a person's note is written, from the stay-in-touch skill itself (its "Writing a person's note" section), so the dream and the skill never drift apart. Empty if the skill is absent.
+// How a page about a person is written, from the stay-in-touch skill itself (its "Writing a person's note" section), so the dream and the skill never drift apart. Empty if the skill is absent.
 function peopleGuide(): string {
   try {
     const text = readFileSync(`${settings.pluginDir}/skills/stay-in-touch/SKILL.md`, "utf8");
@@ -192,10 +192,9 @@ function peopleGuide(): string {
 }
 
 // The nightly dream (dream.ts), one prompt for every conversation: reads what the owner, a friend or a group's members said and proposes changes to those notes as
-// JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
-// conversation has (the preset's notes.dream, .tenant or .group).
-export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), hardNames: d.categories.includes("context"), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
+// JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three.
+export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant" }): string {
+  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, peopleGuide: peopleGuide() });
 }
 
 // The general expert every run may delegate to (run/delegation.ts): the persona's expert text, the same rules and the same notes as the run it works for (`for`: that conversation's

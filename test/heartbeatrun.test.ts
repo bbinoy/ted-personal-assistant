@@ -36,8 +36,8 @@ interface Answer { triage?: unknown[]; judged?: [string, string, string]; hold?:
 function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () => number }; paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
-  mkdirSync(join(dir, "n"));
-  for (const [skill, when] of [["daily-brief", "every day at 07:30"], ["evening-wrap", "every weekday at 18:30"], ["weekly-review", "every fri at 16:30"]]) writeFileSync(join(dir, "n", `routine-${skill}.md`), `---\nwhen: ${when}\n---\nRun the ted-personal-assistant:${skill} skill and deliver it as it says.\n`); // (the owner's routine notes)
+  mkdirSync(join(dir, "n", "routines"), { recursive: true });
+  for (const [skill, when] of [["daily-brief", "every day at 07:30"], ["evening-wrap", "every weekday at 18:30"], ["weekly-review", "every fri at 16:30"]]) writeFileSync(join(dir, "n", `routines/${skill}.md`), `---\nwhen: ${when}\n---\nRun the ted-personal-assistant:${skill} skill and deliver it as it says.\n`); // (the owner's routine notes)
   const conv: Conversation = { ...owner(), logFile: scratchLog(`hb-owner-${Math.random().toString(36).slice(2)}.jsonl`), notesDir: join(dir, "n") };
   const seen = { runs: [] as string[], prompts: [] as string[], provenance: [] as (RunProvenance | undefined)[], posted: [] as string[], recorded: [] as [string, string][] };
   let now = DAY;
@@ -208,11 +208,11 @@ test("a routine due inside quiet hours is delivered (posts and sends are not hel
   const QUIZ = new Date(2026, 9, 14, 22, 5, 0);
   const quiz = (m: string) => {
     const r = rig(() => ({ message: m, nextCheckMinutes: 60 }));
-    writeFileSync(join(r.conv.notesDir, "routine-quiz.md"), "---\nwhen: every day at 22:00\n---\nPost the evening quiz.\n");
+    writeFileSync(join(r.conv.notesDir, "routines/quiz.md"), "---\nwhen: every day at 22:00\n---\nPost the evening quiz.\n");
     return r;
   };
   const due = quiz("Quiz time: what is the capital of Peru?");
-  liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-quiz', ?)", new Date(2026, 9, 1).getTime());
+  liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('quiz', ?)", new Date(2026, 9, 1).getTime());
   due.at(QUIZ);
   assert.equal(await due.w.look(due.conv, QUIZ), "posted");
   assert.deepEqual(due.seen.posted, ["Quiz time: what is the capital of Peru?"]);
@@ -388,19 +388,19 @@ test("the daily brief is a routine like the others: the look is handed it as a f
   console.error = () => {};
   const BRIEF = "expert-daily-brief";
   const MAIL = "mcp__mailbird__send_self_briefing";
-  const record = () => readRecord(owner().convId, "routine-daily-brief");
-  const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime());
+  const record = () => readRecord(owner().convId, "daily-brief");
+  const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('daily-brief', ?)", new Date(2026, 9, 1).getTime());
   try {
     arm();
     const ok = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, calls: [MAIL], message: "Morning." }));
     ok.at(new Date(2026, 9, 14, 8, 0));
     await ok.w.look(ok.conv, new Date(2026, 9, 14, 8, 0));
-    assert.match(ok.seen.prompts[0]!, /routine-daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
+    assert.match(ok.seen.prompts[0]!, /daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
     assert.equal(record()!.status, "delivered");
     assert.equal(record()!.attempts, 1);
     const again = rig(() => ({ message: "[[silent]]" }));
     await again.w.look(again.conv, new Date(2026, 9, 14, 8, 30));
-    assert.doesNotMatch(again.seen.prompts[0] ?? "", /routine-daily-brief: due now/, "once per day: delivered is done");
+    assert.doesNotMatch(again.seen.prompts[0] ?? "", /daily-brief: due now/, "once per day: delivered is done");
 
     for (const answer of [{ agents: [BRIEF], timeout: true }, { agents: [BRIEF], throws: true }] as Answer[]) {
       arm();
@@ -423,8 +423,8 @@ test("a routine that must deliver by email is not complete without it: it fails,
   console.error = () => {};
   const BRIEF = "expert-daily-brief";
   const MAIL = "mcp__mailbird__send_self_briefing";
-  const record = () => readRecord(owner().convId, "routine-daily-brief");
-  const arm = () => (liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"), liveConvDb(owner().convId)!.run("INSERT INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime()));
+  const record = () => readRecord(owner().convId, "daily-brief");
+  const arm = () => (liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"), liveConvDb(owner().convId)!.run("INSERT INTO routine_runs (name, since) VALUES ('daily-brief', ?)", new Date(2026, 9, 1).getTime()));
   try {
     arm();
     const first = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." })); // (the expert answered and the chat message went out, but no email)
@@ -432,7 +432,7 @@ test("a routine that must deliver by email is not complete without it: it fails,
     assert.deepEqual([record()!.status, record()!.owes, record()!.chatSent, record()!.attempts], ["failed", "email", true, 1], "no email send: not complete, and the chat message is on record");
     const retry = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "mailed" }, calls: [MAIL], message: "[[silent]]" }));
     await retry.w.look(retry.conv, new Date(2026, 9, 14, 8, 10));
-    assert.match(retry.seen.prompts[0]!, /routine-daily-brief: due now \(every day at 07:30, the earlier attempt finished without its email\)[\s\S]*ONLY the email is owed[\s\S]*the final answer is \[\[silent\]\]/);
+    assert.match(retry.seen.prompts[0]!, /daily-brief: due now \(every day at 07:30, the earlier attempt finished without its email\)[\s\S]*ONLY the email is owed[\s\S]*the final answer is \[\[silent\]\]/);
     assert.deepEqual([record()!.status, record()!.owes, record()!.attempts], ["delivered", undefined, 2], "the email went out: complete, nothing owed");
     arm(); // two attempts without the email: given up, and the doctor line says what never went out
     let last = first;
@@ -695,12 +695,12 @@ async function eveningLook(a: Answer, day = 14) { // (a day of its own for each 
   const at = new Date(2026, 9, day, 18, 35, 0); // after 18:30
   r.at(at);
   const out = await r.w.look(r.conv, at);
-  return { out, rec: readRecord(r.conv.convId, "routine-evening-wrap")!, seen: r.seen };
+  return { out, rec: readRecord(r.conv.convId, "evening-wrap")!, seen: r.seen };
 }
 
 test("routines: delivered when the expert's result came back; delegating twice is one attempt", async () => {
   const done = await eveningLook({ agents: ["expert-evening-wrap", "expert-evening-wrap"], results: { "expert-evening-wrap": "A quiet one." } });
-  assert.match(done.seen.prompts.at(-1)!, /routine-evening-wrap: due now/);
+  assert.match(done.seen.prompts.at(-1)!, /evening-wrap: due now/);
   assert.equal(done.rec.status, "delivered");
   assert.equal(done.rec.attempts, 1, "the same routine handed on twice in one look is one attempt");
 });

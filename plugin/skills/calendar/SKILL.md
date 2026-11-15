@@ -8,14 +8,14 @@ description: Use for reviewing the owner's Google Calendar - listing the day's /
 ## Setup (from the owner's notes)
 
 Which calendars to check, the time zone and which calendar travel bookings go on
-are in the owner's `setup-calendars` note (the `setup` notes in your memory block
+are in the owner's `setup/calendars` note (the `setup` notes in your memory block
 or `MEMORY.md`). Use exactly those; do not guess calendar ids.
 
 **If the calendar tools (`list_calendars`, `list_events`) do not exist** (the connector is not connected in the owner's Claude account), say so plainly, never guess or invent calendar data, skip this part, and in an unattended run end the brief with one line: "🔌 <connector> isn't connected, so calendar was skipped." In chat, add how to fix it: connect it under Settings, Connectors in their Claude account, then message you again.
 
-**If there is no `setup-calendars` note:**
+**If there is no `setup/calendars` note:**
 - in chat, load `ted-personal-assistant:setup` and set it up with the owner now;
-- in an unattended run, call `list_calendars` and save the `setup-calendars` note yourself, as the setup skill says, then carry on and say so in one line.
+- in an unattended run, call `list_calendars` and save the `setup/calendars` note yourself, as the setup skill says, then carry on and say so in one line.
 
 A work calendar shared into the owner's Google account is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one; which is which follows the mail skill's "Work and private accounts".
 
@@ -47,7 +47,7 @@ location - and hand it to `ted-personal-assistant:meeting-prep`, which decides w
 
 If an email asks to move a meeting, or two things clash, propose 2-3
 concrete alternative slots from the owner's actual free time (following the
-owner's `scheduling-` notes) in the brief. For an event with guests or other
+owner's meeting preferences in their pages) in the brief. For an event with guests or other
 people, do **not** call `update_event` on your own - the owner decides, then asks.
 A clash among the owner's own guest-less events or placeholders is fixed
 with `update_event`, in any run; say so in one line.

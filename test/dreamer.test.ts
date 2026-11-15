@@ -55,7 +55,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
   const groups = c.calls.filter((p) => /the group chat/.test(p));
   assert.equal(c.calls.length, 1 + 5, "the owner, and at most five groups (the sixth group is over the cap, the seventh is quiet)");
   assert.equal(groups.length, 5);
-  assert.match(c.calls[0]!, /The notes you keep about /);
+  assert.match(c.calls[0]!, /The pages you keep about /);
   assert.match(groups[0]!, /What the group chat "Group \d" said and did/);
   // the owner's words are evidence in a private chat; a group's members' lines are evidence in a group: the same function, two data
   const rows = readAudit((e) => e.tool === "dream_run");
@@ -125,20 +125,20 @@ test("dream state: the owner's and a group's are each in their own conversation'
   assert.equal(readDream(OWNER_CONV).lastRunAt, NOW.toISOString());
 });
 
-test("one prompt: the same template for the owner, a friend and a group, with their categories from the preset", () => {
-  const cats = preset().notes;
-  const owned = dreamSystem({ subject: settings.owner, kind: "owner", categories: cats.dream });
-  const friend = dreamSystem({ subject: "Mia", kind: "tenant", categories: cats.others });
-  const group = dreamSystem({ subject: 'the group chat "Football"', kind: "group", categories: cats.others });
+test("one prompt: the same template for the owner, a friend and a group", () => {
+  const owned = dreamSystem({ subject: settings.owner, kind: "owner" });
+  const friend = dreamSystem({ subject: "Mia", kind: "tenant" });
+  const group = dreamSystem({ subject: 'the group chat "Football"', kind: "group" });
   assert.match(owned, new RegExp(`${settings.owner} keeps their notes locally`));
   assert.doesNotMatch(friend, /keeps their notes locally/);
   assert.match(friend, /Mia is a friend of /);
   assert.match(group, /what the group's members wrote/);
-  for (const [p, list] of [[owned, cats.dream], [friend, cats.others], [group, cats.others]] as const) {
-    assert.ok(p.includes(`with a category of ${list.join(", ")}.`), "the categories of that conversation, from the preset");
-    assert.match(p, /Update people, context and scheduling notes freely/);
+  for (const p of [owned, friend, group]) {
+    assert.match(p, /one page per subject/);
+    assert.doesNotMatch(p, /categor|<category>|one fact per note/);
+    assert.match(p, /Every write says where it comes from/);
   }
-  assert.match(dreamPrompt(NOW, "Mia", [], ["[10-13 20:00] Mia: hi"]), /The notes you keep about Mia right now/);
+  assert.match(dreamPrompt(NOW, "Mia", [], ["[10-13 20:00] Mia: hi"]), /The pages you keep about Mia right now/);
 });
 
 test("dreamPrompt: every whole note reaches the dream; over the bound only whole notes are left out", () => {
@@ -150,7 +150,7 @@ test("dreamPrompt: every whole note reaches the dream; over the bound only whole
   const p = dreamPrompt(NOW, "Mia", many, []);
   const bodies = p.split("### n-").slice(1);
   assert.ok(bodies.length > 0 && bodies.length < 40);
-  assert.equal((p.match(/fact/g) ?? []).length, bodies.length * 1999 + 1, "every kept note is whole");
+  assert.equal((p.match(/\bfact\b/g) ?? []).length, bodies.length * 1999, "every kept note is whole");
   assert.ok(p.includes("n-00.md") && !p.includes("n-39.md"));
 });
 
@@ -164,11 +164,11 @@ test("undo: a conversation that is dreamt can undo its dream with its own memory
   for (let n = 0; n < 3; n++) say(n, groupLogFile(g));
   const wrote = async () => ({ ops: [{ op: "write", file: "scheduling-games.md", description: "games", text: "Games are on Thursdays.", evidence: "we play on Thursdays" }, { op: "delete", file: "context-old.md", reason: "expired" }] });
   await createDreamer({ conversations: () => [groupConversation(g)], run: () => wrote }).run(NOW);
-  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["scheduling-games.md"]);
+  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f.endsWith(".md") && f !== "MEMORY.md"), ["scheduling-games.md"]);
   const server = createMemoryServer({ source: "chat", notesDir: groupNotesDir(g), groupId: g, dream: dreamScope({ kind: "group", groupId: g }) }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
   const r = await server.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(r.content[0]!.text, /Restored 1 notes/);
-  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["context-old.md"]);
+  assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f.endsWith(".md") && f !== "MEMORY.md"), ["context-old.md"]);
 });
 
 test("one dreamer: a conversation someone is talking to is skipped for now, its day stays open, and it is dreamt once it is quiet", async () => {

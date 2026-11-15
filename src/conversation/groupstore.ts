@@ -1,12 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { Scope } from "../memory/dreamplan.ts";
 import { compactIfNeeded, GROUP_LOG_MAX_BYTES, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
 import { matchLines } from "../core/logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
-import { preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, conversationsDir, groupConvId, isConvId } from "../core/convpaths.ts";
-import { moveAside, readText, writeFileAtomic } from "../core/state.ts";
+import { makeNotesDir, moveAside, readText, writeFileAtomic } from "../core/state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { noteSponsored } from "../core/ownerkey.ts";
@@ -15,14 +14,13 @@ import { plainSummary } from "../tenants/tenants.ts";
 // Everything a group has: its own notes (what members asked the assistant to remember there) and its own
 // message history, in the same formats as the owner's, but in a conversation folder that nothing private reads
 // or writes. A group is told apart by a short hash of its id (convpaths.ts groupConvId); its folder is conversations/group-<hash>/:
-//   notes/        the group's notes, one fact per file
+//   notes/        the group's notes, pages like any conversation's
 //   notes-backup/ snapshots of those notes made by the group's dream
 //   meta.json     the group's id and name
 //   session.json  the group's resumed SDK session (like the owner's)
 //   messages.jsonl everything written in the group and the assistant's replies, size-bounded
 // The owner's chat cannot read it (policy.ts: only conversations/owner/); she searches a group's history with search_logs (a fixed tool), and nothing flows the other way.
 
-const GROUP_CATEGORIES = preset().notes.others;
 
 export const groupLogFile = (groupId: string): string => convPaths(groupConvId(groupId)).messages;
 
@@ -45,7 +43,7 @@ export function groupDir(groupId: string, name?: string): string {
   const p = convPaths(groupConvId(groupId));
   const dir = p.dir;
   if (named.has(groupId) && (!name || named.get(groupId) === name) && existsSync(p.notes)) return dir;
-  mkdirSync(p.notes, { recursive: true, mode: 0o700 });
+  makeNotesDir(p.notes);
   const meta = p.meta;
   const known = readMeta(meta);
   // The folder is named by a 64-bit hash of the id. A different group that hashes to the same folder (someone who grinds ids) must never
@@ -91,7 +89,7 @@ export function setSponsor(groupId: string, sponsor: string, name?: string): voi
 export const groupScope = (groupId: string): Scope => {
   groupDir(groupId); // (the folder is made first)
   const p = convPaths(groupConvId(groupId));
-  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: GROUP_CATEGORIES, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: p.notes, backupsDir: p.notesBackup, maxNotes: settings.memoryMaxNotes };
 };
 
 interface KnownGroup {
@@ -161,7 +159,7 @@ export const groupNotesDir = (groupId: string): string => convPaths(groupConvId(
 
 // Pure: the group's notes as fenced data for the group's prompt.
 export function groupNotesBlock(notes: readonly Note[]): string {
-  const lines = notes.map((n) => `- [${n.category}] ${n.file}: ${n.text.replace(/\s*\n\s*/g, " ").slice(0, MAX_NOTE_CHARS)}${n.expires ? ` (until ${n.expires})` : ""}`);
+  const lines = notes.map((n) => `- ${n.file}: ${n.text.replace(/\s*\n\s*/g, " ").slice(0, MAX_NOTE_CHARS)}${n.expires ? ` (until ${n.expires})` : ""}`);
   return lines.length ? lines.join("\n") : "";
 }
 

@@ -8,6 +8,7 @@ import { MAX_HELD } from "../core/ownerfact.ts";
 import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 import { STALE_MINUTES } from "../tasks/routines.ts";
 import { scheduledIn } from "../modules/tasks/routinelist.ts";
+import { stemOf } from "../memory/notes.ts";
 
 // The retention rule for the tables of every conversation's assistant.db (core/convdb.ts; core/retention.ts says how rules run). Each table is bounded where it is written already; this is the
 // nightly guarantee that the bound holds (a changed bound, a crash between a write and its trim) and the sweep of what has only an age:
@@ -18,7 +19,7 @@ import { scheduledIn } from "../modules/tasks/routinelist.ts";
 //   reminders       a claimed / retry mark older than a day whose task is no longer open or snoozed (done, dropped); the marks of an open task stay: they are its at-most-once record
 //   lapsed_approvals  rows older than 7 days (a declined or lapsed question no run got to)
 //   pending_actions   rows asked more than 7 days ago (a question lapses in 15 minutes and a yes in 15 more: whatever is left is long over)
-//   routine_runs    rows of a routine whose note (routine-<name>.md, broken ones too) is gone; one still `started` (not yet stale) stays
+//   routine_runs    rows of a routine whose page (routines/<name>.md, broken ones too) is gone; one still `started` (not yet stale) stays
 // NEVER touched: the session record, the dream day, /quiet, a friend's bookkeeping, the `told` marks (a once-told mark must outlive everything). A dry run counts and removes nothing.
 // Only conversations that HAVE a database are visited (none is made for the sweep).
 
@@ -34,7 +35,7 @@ const names = (dir: string): string[] => {
 function pruneRoutineRuns(db: ReturnType<typeof convDbAt>, notesDir: string, now: Date, dry: boolean): number {
   if (!existsSync(notesDir)) return 0; // (no notes folder to read: say nothing is gone)
   const { routines, broken } = scheduledIn({ notesDir, zone: "UTC", now: new Date(now.getTime() - 2 * 86_400_000) }); // (two days back: a note that expires today is still a routine; the expired-notes rule sets it aside)
-  const alive = new Set([...routines.map((r) => r.name), ...broken.map((b) => b.file.replace(/\.md$/, ""))]);
+  const alive = new Set([...routines.map((r) => r.name), ...broken.map((b) => stemOf(b.file))]);
   const stale = now.getTime() - STALE_MINUTES * 60_000;
   let n = 0;
   for (const r of db.all<{ name: string; status: string | null; at: number | null }>("SELECT name, status, at FROM routine_runs")) {

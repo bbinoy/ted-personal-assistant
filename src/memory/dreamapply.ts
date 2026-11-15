@@ -1,11 +1,11 @@
 import { fileStamp } from "../core/timezone.ts";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import type { Plan, Scope } from "./dreamplan.ts";
-import { forgetNote, STATUS_PREFIX, writeIndex } from "./notes.ts";
+import { classOf, forgetNote, walkNotes, writeIndex } from "./notes.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
@@ -18,7 +18,7 @@ export const NOTES_BACKUP_KEEP = 7;
 function snapshot(now: Date, scope: Scope): string {
   mkdirSync(scope.backupsDir, { recursive: true, mode: 0o700 });
   const dir = join(scope.backupsDir, fileStamp(now));
-  cpSync(scope.notesDir, dir, { recursive: true, filter: (src) => !basename(src).startsWith(STATUS_PREFIX) }); // a status note is not the dream's: an undo must not bring back yesterday's
+  cpSync(scope.notesDir, dir, { recursive: true, filter: (src) => classOf(`${relative(scope.notesDir, src)}/`) !== "status" }); // a status page is not the dream's: an undo must not bring back yesterday's
   for (const old of snapshotsOf(scope.backupsDir).slice(0, -NOTES_BACKUP_KEEP)) rmSync(join(scope.backupsDir, old), { recursive: true, force: true });
   return dir;
 }
@@ -48,7 +48,7 @@ export function applyPlan(plan: Plan, now = new Date(), scope: Scope, base?: Not
   }
   for (const a of plan.actions) {
     if (protectedFiles.has(a.file) || stale(a.file)) {
-      console.log(`dream: skipped ${a.file}: it changed while the dream was running`);
+      console.log("dream: skipped a note: it changed while the dream was running"); // (no file name: a friend's notes stay out of the log)
       continue;
     }
     if (a.kind === "delete") forgetNote(a.file, scope.notesDir, now);
@@ -64,11 +64,16 @@ export function undoLatest(scope: Scope): { ok: true; restored: number; from: st
   const latest = snaps.at(-1);
   if (!latest) return { ok: false, error: "there is no dream to undo" };
   const dir = join(scope.backupsDir, latest);
-  for (const f of readdirSync(scope.notesDir)) if (f.endsWith(".md") && !f.startsWith(STATUS_PREFIX)) rmSync(join(scope.notesDir, f));
+  for (const f of walkNotes(scope.notesDir)) {
+    if (classOf(f) === "status") continue;
+    rmSync(join(scope.notesDir, f));
+    if (f.includes("/")) try { rmdirSync(dirname(join(scope.notesDir, f))); } catch { /* not empty */ } // (the dream's folders go too, the ones it made)
+  }
   let restored = 0;
-  for (const f of readdirSync(dir)) {
+  for (const f of walkNotes(dir)) {
+    mkdirSync(dirname(join(scope.notesDir, f)), { recursive: true, mode: 0o700 });
     cpSync(join(dir, f), join(scope.notesDir, f));
-    if (f !== "MEMORY.md") restored++;
+    restored++;
   }
   rmSync(dir, { recursive: true, force: true });
   writeIndex(scope.notesDir);

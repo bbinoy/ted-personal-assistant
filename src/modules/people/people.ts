@@ -1,7 +1,7 @@
 import { readNotes, type Note } from "../../memory/notes.ts";
 
 // find_person's logic, pure but for the notes folder and the one injected Google lookup: who might "Sam" be, with an address, from the sources THIS conversation may use.
-//   notes     the conversation's own people-* notes 
+//   notes     the conversation's own pages about a person (front matter `person: Full Name`)
 //   contacts  a friend's own Google Contacts, through her own server (tenants only; a group or the owner has none: the owner's Google connectors have no contacts tool)
 // Candidates are ranked, deduped by address and each carries its sources. An address found here is a SUGGESTION: it does not make a send safer or freer (approvals still show the
 // recipients as code reads them from the call, and the recipient floor still asks for an address the owner did not type: docs/SAFETY.md "Finding people").
@@ -40,17 +40,11 @@ export function contactsIn(text: string): { emails: string[]; phones: string[] }
   return { emails, phones };
 }
 
-// Pure: a people note as a candidate (nothing for any other note; a note with no address still names the person). The name is the one the note starts with ("Mara Silva. Lives in ..."), else the file's.
+// Pure: a page about a person as a candidate (nothing for any other page; a page with no address still names the person). The name is the page's `person:` field.
 export function fromNote(n: Note): Candidate | undefined {
-  if (n.category !== "people") return undefined;
-  const slug = n.file.replace(/^people-/, "").replace(/\.md$/, "").replace(/-/g, " ");
-  const first = n.text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
-  const lead = /^([^.:;,\n]{2,60}?)(?:\.|:|;|,| - |$)/.exec(first)?.[1]?.trim();
-  const head = tokens(slug)[0];
-  const spelled = slug.replace(/\b\p{L}/gu, (c) => c.toUpperCase()); // people-mara-silva.md -> Mara Silva
-  const name = lead && tokens(lead).length <= 5 && !/@/.test(lead) && (!head || tokens(lead).some((w) => w.startsWith(head))) ? lead : spelled; // (the opening words only when they carry the file's name: "Lives in Porto" is not one)
+  if (!n.person || n.class !== "page") return undefined; // (a setup, status or routine page is no known person, whatever its front matter says)
   const { emails, phones } = contactsIn(n.text);
-  return { name: name || spelled, emails, phones, from: [{ source: "notes", detail: n.file }] };
+  return { name: n.person, emails, phones, from: [{ source: "notes", detail: n.file }] };
 }
 
 // Pure: a friend's Google Contacts answer (workspace-mcp's search_contacts text: blocks of "Contact ID:", "Name:", "Email:" or "Emails:" with "  - " lines, "Phone(s):") as candidates.
@@ -118,7 +112,7 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
     .map((x) => x.c);
 }
 
-// The people THIS conversation knows by name and address, read at once from its own people notes (a folder of the conversation, never another's). Synchronous on purpose: the
+// The people THIS conversation knows by name and address, read at once from its own pages about a person (a folder of the conversation, never another's). Synchronous on purpose: the
 // recipient floor (approvals/autojudge.ts) needs it inside a permission check, and a friend's Google Contacts need a network call per query, so only what is saved as a note counts.
 export const knownPeople = (notesDir: string | undefined): Candidate[] => (notesDir ? readNotes(undefined, notesDir).flatMap((n) => fromNote(n) ?? []) : []);
 
@@ -163,8 +157,8 @@ export interface Lookup {
 export async function findPerson(query: string, o: Lookup): Promise<string> {
   const reports: SourceReport[] = [];
   const found: Candidate[] = [];
-  const notes = readNotes(o.now, o.notesDir, o.zone).filter((n) => n.category === "people");
-  reports.push({ source: `people notes (${notes.length})`, used: true });
+  const notes = readNotes(o.now, o.notesDir, o.zone).filter((n) => n.person);
+  reports.push({ source: `pages about people (${notes.length})`, used: true });
   found.push(...notes.flatMap((n) => fromNote(n) ?? []));
   if (o.contacts) {
     try {

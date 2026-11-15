@@ -1,31 +1,26 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { HARD_NAMES_NOTE, MAX_NOTE_CHARS, STATUS_PREFIX, parseNote, type Category } from "./notes.ts";
+import { classOf, HARD_NAMES_NOTE, MAX_NOTE_CHARS, parseNote, STYLE_NOTE } from "./notes.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
-// The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
-// shape or content; a scope says where a dream works and what it may touch.
-// Trust splits by what a note does: a FACTUAL note (people, context, scheduling) is the model's judgement, from anything it was shown (the snapshot and "undo the dream" are the
-// safety); a note that steers behaviour (triage, style, brief, any other) needs the person's own words for a new or changed rule (CLAUDE.md §1).
+// The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts shape or content; a scope says where a dream works.
+// What a page is for is the model's judgement: facts, preferences and standing instructions alike are pages it keeps (CLAUDE.md §1), and the snapshot with "undo the dream" is the safety. Code guards data
+// integrity and made-up provenance, not source trust: `evidence`, when given, must be a verbatim quote of the person's own words (a made-up one rejects the write); a write with none is a tidy (merge, split,
+// link repair, reformat) and is shown as one. A page grants no permission whatever it says: the code floor and the judge gate every action.
 
-const FACTUAL = ["people-", "context-", "scheduling-"]; // notes that record facts; every other category steers behaviour
 const MAX_OPS = 30;
-const MAX_WRITES = 12; // a merge, a split and a few new people notes in one night
+const MAX_WRITES = 20; // a merge night touches many pages
 const MAX_DELETES = 12;
-const MIN_EVIDENCE = 12; // characters of the owner's own words a new fact must quote
+const MIN_EVIDENCE = 12; // characters of the person's own words a delete may rest on
 const MAX_REASONED_DELETES = 3; // deletes a night that rest on the model's reason alone (not an expiry, a quote or a rewrite of the note's content)
 const MIN_REASON = 10; // characters of the model's own reason for deleting a note
 
-
-// What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
-// pages) and voice-* notes come from the owner's sent mail: neither is learned from chat, and
-// neither (nor status-*) may be a source of a write. A routine-* note may be one, read-only.
-// Where a dream works and what it may touch. The owner's own notes are one scope; every group has its own
-// (groupstore.ts), so a group's dream can never read or write anything but that group's notes.
+// Where a dream works: the conversation's notes folder, its snapshots (never inside it), and the most pages it may hold. The owner's own notes are one scope; every group has its own (groupstore.ts), so a
+// group's dream can never read or write anything but that group's notes. What it may touch is the pages (class "page"): never routines/ (a schedule that runs by itself is code's, not a tidy target), setup/
+// (calendar ids, Notion pages, text from sent mail) or status/. A setup or status page is never a source of a write either; a routine page may be one, read-only.
 export interface Scope {
   notesDir: string;
   backupsDir: string; // snapshots go here, never inside notesDir
-  categories: readonly Category[];
   maxNotes: number;
 }
 
@@ -35,13 +30,14 @@ interface Op {
   description?: string;
   text?: string;
   expires?: string;
-  evidence?: string; // a verbatim quote of the owner's own words
+  person?: string; // the page is about this one person (front matter `person:`)
+  evidence?: string; // a verbatim quote of the person's own words: where the write comes from
   consolidates?: string[]; // existing notes this one replaces (a merge or a rewrite)
   reason?: string;
 }
 
 type Action =
-  | { kind: "add" | "update" | "merge"; file: string; description: string; content: string; merged: string[] }
+  | { kind: "add" | "update" | "merge"; file: string; description: string; content: string; merged: string[]; evidence?: string }
   | { kind: "delete"; file: string; why: string };
 
 export interface Plan {
@@ -55,25 +51,14 @@ export interface NoteFile {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const NOT_SOURCE = [STATUS_PREFIX, "setup-", "voice-"]; // may hold text from mail: never a source
-const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
+const FILE = /^(?:[\p{L}\p{N}][\p{L}\p{N}_-]{0,40}\/)?[\p{L}\p{N}][\p{L}\p{N}_-]{0,70}\.md$/u; // (capitals too: classOf lower-cases, so Setup/x.md is setup and refused as a target)
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const kept = (file: string) => file === HARD_NAMES_NOTE || file === STYLE_NOTE; // pages code reads by name: a merge never removes them
 
 // Pure: the note file the dream writes (same shape the chat's notes have).
-export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date): string {
+export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date, person?: string): string {
   const name = file.replace(/\.md$/, "");
-  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
-}
-
-// The floor for a rule note built from existing notes: no number, capitalised word (but a sentence's first), email or link in it that no note or word of the person holds. Reworded instructions
-// are not caught here (the prompt and the assistant-lines rule hold those); new names, numbers, addresses and links are.
-const NEW_DETAIL = /\d+(?:[.,:]\d+)*|\S+@\S+|(?:https?:\/\/|www\.)\S+|(?<![.!?\n:*#>-]\s*)(?<!^)\p{Lu}[\p{L}'-]*/gu;
-function addsDetails(text: string, known: string): boolean {
-  const k = norm(known);
-  return (text.match(NEW_DETAIL) ?? []).some((t) => {
-    const w = norm(t.replace(/[.,;:)]+$/, ""));
-    return /^\d/.test(w) ? !new RegExp(`(?<!\\d)${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`).test(k) : !k.includes(w);
-  });
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${person ? `person: ${JSON.stringify(person)}\n` : ""}${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
 }
 
 // Pure: which of the model's proposals may be applied. Never trusts shape or content.
@@ -89,14 +74,13 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
   const written = new Set<string>(); // files an accepted write in this plan targets
   const reasonOnly = new Set<string>(); // deletes that rest on the model's reason alone
   const lost = new Set<string>(); // sources of a rejected write: nothing about them changes
-  const factual = (file: string) => FACTUAL.some((p) => file.startsWith(p));
-  const known = [...existing.values()].map((n) => n?.text ?? "").join("\n") + "\n" + ctx.ownerText;
   const textLen = new Map<string, number>();
   let writes = 0;
   let count = existing.size;
   const reject = (file: string, why: string) => plan.rejected.push({ file, why });
   const quoted = (e: unknown) => typeof e === "string" && norm(e).length >= MIN_EVIDENCE && owner.includes(norm(e));
-  const writable = (file: string) => scope.categories.some((c) => file.startsWith(`${c}-`));
+  const writable = (file: string) => classOf(file) === "page" && file.toLowerCase() !== "memory.md"; // (the index is code's, also where the file system ignores case)
+  const notMemory = (s: string) => ["setup", "status"].includes(classOf(s)); // may hold text from mail or sent mail: never a source
 
   if (list.length > MAX_OPS) console.log(`dream: ${list.length - MAX_OPS} of ${list.length} proposals left out (too many)`);
   for (const o of list.slice(0, MAX_OPS) as Op[]) {
@@ -109,22 +93,21 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
       if (written.has(file)) { reject(file, "written in this plan"); continue; }
       const expired = !!note?.expires && note.expires < ctx.today;
       const reasoned = typeof o.reason === "string" && o.reason.trim().length >= MIN_REASON;
-      if (!expired && !quoted(o.evidence) && !reasoned) { reject(file, "not expired, no quote from the owner and no reason"); continue; }
+      if (!expired && !quoted(o.evidence) && !reasoned) { reject(file, "not expired, no quote from the person and no reason"); continue; }
       if (deleted.length >= MAX_DELETES) { reject(file, "too many deletions"); continue; }
       if (!expired && !quoted(o.evidence)) reasonOnly.add(file);
       gone.add(file);
       deleted.push(file);
-      plan.actions.push({ kind: "delete", file, why: expired ? "expired" : reasoned ? String(o.reason).trim().slice(0, 120) : "the owner said so" });
+      plan.actions.push({ kind: "delete", file, why: expired ? "expired" : reasoned ? String(o.reason).trim().slice(0, 120) : "the person said so" });
       count--;
       continue;
     }
 
     if (o.op !== "write") { reject(file, "unknown operation"); continue; }
-    // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
-    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
+    // Source names are tidied (a leading "./" or "notes/" dropped, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
+    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().replace(/^(?:\.?\/+|notes\/)/, "")).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
     const selfNamed = named.includes(file);
-    // Notes that may hold text from mail (status, setup, voice) are no source: dropped like a missing one. Reasons name a file, capped.
-    const notMemory = (s: string) => NOT_SOURCE.some((p) => s.startsWith(p));
+    // Notes that may hold text from mail (status, setup) are no source: dropped like a missing one. Reasons name a file, capped.
     const shown = (s: string) => (FILE.test(s) ? s : "(invalid name)");
     const sources = named.filter((s) => s !== file && existing.get(s) && !notMemory(s));
     const missing = named.filter((s) => s !== file && (!existing.get(s) || notMemory(s))).map((s) => (notMemory(s) ? `source not memory: ${shown(s)}` : `source missing: ${shown(s)}`)).join(", ");
@@ -134,26 +117,17 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     if (!text || text.length > MAX_NOTE_CHARS || !description) { bad("empty, or longer than a note may be"); continue; }
     if (o.expires !== undefined && !(typeof o.expires === "string" && DATE.test(o.expires) && o.expires >= ctx.today)) { bad("bad expiry date"); continue; }
     if (writes >= MAX_WRITES) { bad("too many changes in one run"); continue; }
-
-    let kind: "add" | "update" | "merge";
-    const built = sources.length > 0 || (selfNamed && existing.has(file));
-    if (factual(file)) kind = built ? "merge" : existing.has(file) ? "update" : "add"; // a fact is the model's judgement: no quote, no floor
-    else if (built) {
-      // A rule note built from existing notes (merge, split, reformat, rewritten from itself): what they hold is already memory, so no quote and no length limit.
-      if (sources.some(factual)) { bad("a rule note is not built from fact notes (it needs the person's own words)"); continue; }
-      if (addsDetails(text, known)) { bad("adds details no note or quote holds"); continue; }
-      kind = "merge";
-    } else {
-      if (!quoted(o.evidence)) { bad("needs a verbatim quote from the person's own words (rule note)"); continue; }
-      kind = existing.has(file) ? "update" : "add";
-    }
+    const evidence = typeof o.evidence === "string" && o.evidence.trim() ? o.evidence.trim() : undefined;
+    if (evidence && !owner.includes(norm(evidence))) { bad("the quote is not in the person's own words"); continue; }
+    const kind: "add" | "update" | "merge" = sources.length > 0 || (selfNamed && existing.has(file)) ? "merge" : existing.has(file) ? "update" : "add";
     if (!existing.has(file) && count >= (ctx.maxNotes ?? scope.maxNotes)) { bad("memory is full"); continue; }
     if (gone.has(file)) { bad("deleted in this plan"); continue; }
     writes++;
     written.add(file);
     textLen.set(file, text.length);
     if (!existing.has(file)) count++;
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: named.filter((s) => existing.get(s) && !notMemory(s)) }); // (sources are only deleted by a delete of their own)
+    const person = typeof o.person === "string" && o.person.trim() ? o.person.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist) : existing.get(file)?.person; // (a page about a person keeps being one when the model leaves the field out)
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now, person), merged: named.filter((s) => existing.get(s) && !notMemory(s)), ...(evidence ? { evidence } : {}) }); // (sources are only deleted by a delete of their own)
   }
 
   // A rejected write takes back every delete and rewrite of its sources (a split loses nothing it did not keep).
@@ -164,13 +138,12 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
   for (const w of live) for (const x of w.merged) if (x !== w.file) fed.set(x, (fed.get(x) ?? 0) + 1);
   let reasoned = 0;
   drop((a) => a.kind !== "delete" || !reasonOnly.has(a.file) || fed.has(a.file) || ++reasoned <= MAX_REASONED_DELETES, "too many deletions on a reason alone");
-  // A merge into another file of the same kind that is no longer than its sources takes them away (else duplicates grow every night); a source feeding two or more writes is a split and stays, as does one written again.
+  // A merge that is no longer than its sources takes them away (else duplicates grow every night); a source feeding two or more writes is a split and stays, as does one written again. The pages code reads by name stay.
   const gonePlan = new Set(plan.actions.filter((a) => a.kind === "delete").map((a) => a.file));
   for (const w of live) {
     const total = w.merged.reduce((n, x) => n + (existing.get(x)?.text.length ?? 0), 0);
     for (const x of w.merged) {
-      if (x === w.file || !writable(x) || x === HARD_NAMES_NOTE || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total) continue;
-      if (x.split("-")[0] !== w.file.split("-")[0] || gonePlan.size >= MAX_DELETES) continue;
+      if (x === w.file || !writable(x) || kept(x) || w.file === HARD_NAMES_NOTE || fed.get(x) !== 1 || written.has(x) || gonePlan.has(x) || (textLen.get(w.file) ?? 0) > total || gonePlan.size >= MAX_DELETES) continue;
       gonePlan.add(x);
       plan.actions.push({ kind: "delete", file: x, why: `merged into ${w.file}` });
     }

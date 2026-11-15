@@ -89,9 +89,10 @@ test("a send in an untrusted run to someone the owner did not name is never judg
   assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "the owner wrote the address: judged");
 });
 
+const person = (t: string): string => `---\nperson: ${JSON.stringify(t.split(".")[0])}\n---\n${t}`; // a page about a person: its first words are the name
 const notes = (files: Record<string, string>): string => {
   const d = mkdtempSync(join(tmpdir(), "known-"));
-  for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), t);
+  for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), person(t));
   return d;
 };
 const MARA = { "people-mara-holm.md": "Mara Holm. mara.holm@example.com" };
@@ -163,7 +164,7 @@ test("a wake-up task is judged like a chat message, whatever notes the run read 
   assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 });
 });
 
-test("a people note written during an untrusted run does not make its address known to that run; one from before does", async () => {
+test("a page about a person written during an untrusted run does not make its address known to that run; one from before does", async () => {
   let asked = 0;
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "fine" });
   const run = (dir: string) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, dir, judge as never, undefined, undefined, false, { provenance: scopeOf("snap").read, conversation: "snap", untrusted: true });
@@ -171,7 +172,7 @@ test("a people note written during an untrusted run does not make its address kn
   scopeOf("snap").say("invite Zed to tea");
   const dir = notes({});
   const can = run(dir);
-  writeFileSync(join(dir, "people-zed.md"), "Zed. zed@evil.example"); // (saved from a mail the run read)
+  writeFileSync(join(dir, "people-zed.md"), person("Zed. zed@evil.example")); // (saved from a mail the run read)
   await can(CAL, event("zed@evil.example", 1), opts);
   assert.equal(asked, 1, "the note of this run does not count: the owner is asked");
   await run(dir)(CAL, event("zed@evil.example", 2), opts);

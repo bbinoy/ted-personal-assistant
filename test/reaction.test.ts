@@ -19,7 +19,7 @@ test("memory: a note write tells the model to mention it, so a reply that is onl
   const dir = NOTES_DIR;
   assert.match(noteSavedHint("Write", { file_path: `${dir}/people-sam.md`, content: "x" }, dir) ?? "", /Mention what you saved.*even if you only react/);
   assert.match(noteSavedHint("Edit", { file_path: `${dir}/people-sam.md` }, dir) ?? "", /Mention/);
-  for (const [tool, file] of [["Write", "MEMORY.md"], ["Write", "status-brief.md"], ["Write", "routine-x.md"], ["Read", "people-sam.md"]] as const) assert.equal(noteSavedHint(tool, { file_path: `${dir}/${file}` }, dir), undefined, file);
+  for (const [tool, file] of [["Write", "MEMORY.md"], ["Write", "status/brief.md"], ["Write", "routines/x.md"], ["Read", "people-sam.md"]] as const) assert.equal(noteSavedHint(tool, { file_path: `${dir}/${file}` }, dir), undefined, file);
   assert.equal(noteSavedHint("Write", { file_path: "/tmp/elsewhere.md" }, dir), undefined);
   assert.equal(noteSavedHint("Write", { file_path: `${dir}/a.md` }, undefined), undefined);
 });

@@ -11,7 +11,6 @@ import { callLabel, createdLabel, idsInCall, idsInResult } from "./created.ts";
 import type { RunProvenance } from "./autojudge.ts";
 import { rememberNames, seenName } from "./seennames.ts";
 import { scopeOf } from "./turnscope.ts";
-import { STATUS_PREFIX } from "../memory/notes.ts";
 
 // What the journal says about an action, written by code (core/sinks/journalsink.ts writes the line): WHAT was done (named by the object, not only its id), WHY (first from what code knows:
 // the person's message and when, the approval they answered, the judge's verdict, the run's standing instruction), and how to UNDO it where there is a way. The model's own reason is never
@@ -19,7 +18,7 @@ import { STATUS_PREFIX } from "../memory/notes.ts";
 
 // ---- which calls are actions ----
 
-// Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a write of a status- note is the brief's own record (isStatusWrite), a drawing or a voice is sent as a message.
+// Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a write of a status page is the brief's own record (isStatusWrite), a drawing or a voice is sent as a message.
 const NOT_ACTIONS = new Set(["send", "draw", "voice", "weather"]);
 const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]) }; // (the rest of this server reads: search_logs, journal)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
@@ -28,8 +27,8 @@ const NOTE_WRITES = new Set(["Write", "Edit"]);
 const NON_ACTIONS: ReadonlySet<string> = new Set(["Agent", "Task", "TodoWrite", "ToolSearch", "StructuredOutput"]);
 export const isNonAction = (tool: string): boolean => NON_ACTIONS.has(tool);
 
-// A write of one of the assistant's own records (status-<name>.md, such as the brief's headlines): plumbing, not an action.
-const isStatusWrite = (input?: Record<string, unknown>): boolean => typeof input?.file_path === "string" && input.file_path.split("/").pop()!.startsWith(STATUS_PREFIX);
+// A write of one of the assistant's own records (notes/status/<name>.md, such as the brief's headlines): plumbing, not an action.
+const isStatusWrite = (input?: Record<string, unknown>): boolean => typeof input?.file_path === "string" && /\/status\/[^/]+$/i.test(input.file_path);
 
 // Pure: does a successful call of this tool belong in the journal? Never a read (a look-up, a search, the journal itself); never plumbing.
 export function journalable(tool: string, input?: Record<string, unknown>): boolean {
@@ -174,7 +173,7 @@ export interface WhyInput {
   now?: number;
 }
 
-// Pure: "per your notes: triage-linkedin, triage-newsletters and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
+// Pure: "per your notes: linkedin-mail, newsletters and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
 function notesText(notes: readonly string[] | undefined): string {
   if (!notes?.length) return "";
   return `per your notes: ${notes.slice(0, 3).join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;

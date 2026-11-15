@@ -1,62 +1,87 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
 import { LIMITS } from "../core/sanitize.ts";
-import { preset } from "../core/preset.ts";
 import { dayIn } from "../core/timezone.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { writeFileAtomic } from "../core/state.ts";
+import { makeNotesDir, writeFileAtomic } from "../core/state.ts";
 
 // A conversation's notes: the SDK's own auto-memory, in its notes folder (conversations/<id>/notes/). EVERY run keeps them the same way, with the SDK's Read, Write and Edit confined to that
-// folder (policy.ts): small markdown files (one fact each) plus an index, MEMORY.md, that the SDK loads into every turn. The index is CODE's (writeIndex): regenerated from the notes' front
-// matter after every change, so it can neither drift nor list a note that has expired. This module reads the notes, writes the index and holds the guards around them.
+// folder (policy.ts): markdown pages the model names and organises itself (a page per subject, linked with [[page]]) plus an index, MEMORY.md, that the SDK loads into every turn. The index is CODE's
+// (writeIndex): regenerated from the pages' front matter after every change, so it can neither drift nor list a page that has expired. This module reads the notes, writes the index and holds the guards around them.
 //
-// The category is the start of the file name ("triage-quark-not-urgent.md"). A run only sees
-// the categories it needs (setup and voice notes: where the owner's calendars and Notion pages
-// are, how they write; see plugin/skills); a note with a name we do not recognise is shown to nobody but
-// chat, so a mislabelled note fails closed. A note may carry `expires: YYYY-MM-DD` in its
-// front matter; after that day it is no longer shown. A `routine-` note carries `when:` (a repeat rule) and says what to do then (tasks/routines.ts plans it).
+// A page's class is its first folder (classOf), the only structure code imposes: `routines/` (a `when:` line, planned by tasks/routines.ts), `setup/` (calendars, Notion pages, how the owner writes: written by the
+// skills) and `status/` (the assistant's own records, with `expires:`; not memory) are special; every other page, in a folder of the model's choosing or at the top, is just a page. A few fixed names are read by
+// code (style.md, hard-names.md). A page may carry `expires: YYYY-MM-DD` in its front matter; after that day it is no longer shown.
 
 export const NOTES_DIR = convPaths(OWNER_CONV).notes;
 
-// The categories are the assistant preset's (assistants/<name>/preset.json "notes"): which kinds of note this assistant keeps.
-export const CATEGORIES: readonly string[] = preset().notes.categories;
-export type Category = string;
-
 export const MAX_NOTE_CHARS = 20_000; // a bound nobody should meet: it only stops one runaway file from filling a prompt
-export const STATUS_PREFIX = "status-"; // the assistant's own records (status-brief.md, written by the daily-brief skill with Write): not the owner's memory (no notice), not the dream's (neither shown to it nor snapshotted or undone with it)
+export const INDEX_MAX_CHARS = 16_000; // the index is part of every run's prompt: past this, folders collapse to one line, then the tail is left out (the search finds it)
+export const STYLE_NOTE = "style.md"; // how replies are written: the page code hands to groups and the gate
+export const HARD_NAMES_NOTE = "hard-names.md"; // the correct spellings of hard names: the page code hands to the transcriber
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 
 export function ensureNotesDir(): void {
-  mkdirSync(NOTES_DIR, { recursive: true, mode: 0o700 });
+  makeNotesDir(NOTES_DIR);
 }
 
 // True only for a path inside a notes folder (the owner's by default; a group passes its own): ".." resolved
 // and symlinks followed first (contain.ts). This is the one gate on what the file tools may write.
 export const isNotePath = (path: unknown, dir: string = NOTES_DIR): path is string => isInside(path, dir);
 
+export type NoteClass = "routine" | "setup" | "status" | "page";
+// The class of a page from its path relative to the notes folder: the first folder, lower-cased (a case-insensitive file system makes `Setup/x.md` the same file as `setup/x.md`). A top-level file is a page.
+export function classOf(rel: string): NoteClass {
+  const first = rel.includes("/") ? rel.split("/")[0]!.toLowerCase() : "";
+  return first === "routines" ? "routine" : first === "setup" ? "setup" : first === "status" ? "status" : "page";
+}
+export const stemOf = (rel: string): string => rel.replace(/^.*\//, "").replace(/\.md$/i, "");
+
 /** The tool result's hint after a note was saved: the reply says so (a reaction alone would leave the change unmentioned). Not for the index, the assistant's own status records or a routine (its result says more). */
 export function noteSavedHint(tool: string, input: Record<string, unknown>, dir?: string): string | undefined {
   const path = input.file_path;
   if ((tool !== "Write" && tool !== "Edit") || !dir || !isNotePath(path, dir) || isIndex(path, dir)) return undefined;
-  const file = basename(path);
-  return file.startsWith(STATUS_PREFIX) || file.startsWith("routine-") ? undefined : "Note saved. Mention what you saved or updated in your reply, in a few words, even if you only react.";
+  const cls = classOf(relative(resolve(dir), resolve(path)));
+  return cls === "status" || cls === "routine" ? undefined : "Note saved. Mention what you saved or updated in your reply, in a few words, even if you only react.";
 }
 export const isIndex = (path: string, dir: string = NOTES_DIR) => resolve(path) === join(dir, "MEMORY.md");
 
-export interface Note {
-  file: string;
-  category: Category;
-  text: string; // body without front matter
-  expires?: string;
-  description?: string; // the front matter's one-line description: the note's line in the index
-  when?: string; // a routine note's schedule (front matter `when: every weekday at 18:30`, a repeat rule: tasks/repeat.ts); the body is what to do then
+// A note's relative path: a file name, or `<folder>/<file>.md` (one folder level; letters and digits of any script, "_", "-" and (in a file name) "."; neither part starts with a dot or an underscore, so ".." can not pass).
+export const NOTE_PATH = /^(?:[\p{L}\p{N}][\p{L}\p{N}_-]{0,40}\/)?[\p{L}\p{N}][\p{L}\p{N}_.-]{0,80}\.md$/u;
+
+// Every note of a folder as a path relative to it ("people/mara.md"), sorted: the one place that lists notes. `.md` files only, MEMORY.md and dot files left out, symlinks not followed, one folder level deep.
+export function walkNotes(dir: string = NOTES_DIR): string[] {
+  const out: string[] = [];
+  const visit = (sub: string, depth: number): void => {
+    let entries;
+    try {
+      entries = readdirSync(join(dir, sub), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      if (e.isDirectory() && depth < 1) visit(`${sub}${e.name}/`, depth + 1);
+      else if (e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md") out.push(`${sub}${e.name}`);
+    }
+  };
+  visit("", 0);
+  return out.sort();
 }
 
-export const categoryOf = (file: string): Category | undefined =>
-  CATEGORIES.find((c) => file.toLowerCase().startsWith(`${c}-`) && file.endsWith(".md"));
+export interface Note {
+  file: string; // the path relative to the notes folder ("people/mara-silva.md")
+  class: NoteClass;
+  text: string; // body without front matter
+  expires?: string;
+  description?: string; // the front matter's one-line description: the page's line in the index
+  title?: string; // front matter `title:`: the page's name in the index (default the file's stem)
+  person?: string; // front matter `person: Full Name`: the page is about one person (the people module reads these)
+  when?: string; // a routine's schedule (front matter `when: every weekday at 18:30`, a repeat rule: tasks/repeat.ts); the body is what to do then
+}
 
 const oneLine = (t: string): string => t.replace(/\s+/g, " ").trim().slice(0, LIMITS.gist);
 const unquote = (v: string): string => {
@@ -67,43 +92,34 @@ const unquote = (v: string): string => {
   }
 };
 
-// Pure: split "---\nfront matter\n---\nbody". Never throws.
+// Pure: split "---\nfront matter\n---\nbody". Never throws. A page with no text is no page.
 export function parseNote(file: string, raw: string): Note | undefined {
-  const category = categoryOf(file);
-  if (!category) return undefined;
   let body = raw.replace(/\r\n/g, "\n");
-  let expires: string | undefined;
-  let description: string | undefined;
-  let when: string | undefined;
+  let front = "";
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(body);
   if (m) {
-    const e = /^\s*expires:\s*["']?(\d{4}-\d{2}-\d{2})["']?\s*$/m.exec(m[1]!);
-    if (e) expires = e[1];
-    description = oneLine(unquote(/^\s*description:[ \t]*(.*?)[ \t]*$/m.exec(m[1]!)?.[1] ?? "")) || undefined; // (these fields may sit nested under `metadata:`, where the SDK's writer puts them: the patterns allow the indent)
-    when = /^\s*when:[ \t]*["']?(.*?)["']?[ \t]*$/m.exec(m[1]!)?.[1] || undefined;
+    front = m[1]!;
     body = body.slice(m[0].length);
   }
+  // (these fields may sit nested under `metadata:`, where the SDK's writer puts them: the patterns allow the indent)
+  const get = (name: string) => oneLine(unquote(new RegExp(`^\\s*${name}:[ \\t]*(.*?)[ \\t]*$`, "m").exec(front)?.[1] ?? "")) || undefined;
+  const expires = /^\s*expires:\s*["']?(\d{4}-\d{2}-\d{2})["']?\s*$/m.exec(front)?.[1];
+  const when = /^\s*when:[ \t]*["']?(.*?)["']?[ \t]*$/m.exec(front)?.[1] || undefined;
+  const description = get("description");
+  const title = get("title");
+  const person = get("person");
   const text = body.replace(/[\u0000-\u0008\u000B-\u001F\u007F\u2028\u2029]/g, "").replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "").trim();
-  return text ? { file, category, text, ...(expires ? { expires } : {}), ...(description ? { description } : {}), ...(when ? { when } : {}) } : undefined;
+  return text ? { file, class: classOf(file), text, ...(expires ? { expires } : {}), ...(description ? { description } : {}), ...(title ? { title } : {}), ...(person ? { person } : {}), ...(when ? { when } : {}) } : undefined;
 }
 
 const isActive = (n: Note, today: string) => !n.expires || today <= n.expires;
 
-// The owner's style notes: the personality the assistant takes into groups (and what a group's gate is told of it).
-export const styleLines = (now: Date): string =>
-  readNotes(now).filter((n) => n.category === "style").map((n) => `- ${n.text.replace(/\s*\n\s*/g, " ").slice(0, LIMITS.logLine)}`).join("\n");
-
-// `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's.
-export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string, prefix = ""): Note[] {
-  let files: string[] = [];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && f.startsWith(prefix)).sort();
-  } catch {
-    return [];
-  }
+// `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's. `cls`: only the pages of that class.
+export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string, cls?: NoteClass): Note[] {
   const today = dayIn(now, zone);
   const out: Note[] = [];
-  for (const f of files) {
+  for (const f of walkNotes(dir)) {
+    if (cls && classOf(f) !== cls) continue;
     try {
       const n = parseNote(f, readFileSync(join(dir, f), "utf8"));
       if (n && isActive(n, today)) out.push(n);
@@ -112,8 +128,12 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
   return out;
 }
 
-// The hard names the assistant keeps in this conversation's notes (context-hard-names.md, one list of correct spellings) as whisper's initial prompt, so a voice note spells them as the list does. Capped at `max` characters; nothing when the note is missing, empty or unreadable.
-export const HARD_NAMES_NOTE = "context-hard-names.md";
+// The owner's style page (style.md, one rule a line): the personality the assistant takes into groups. At most one log line per rule.
+export const styleRules = (now: Date, dir: string = NOTES_DIR): string[] =>
+  (readNotes(now, dir).find((n) => n.file === STYLE_NOTE)?.text ?? "").split("\n").map((l) => l.replace(/^\s*[-*]\s*/, "").trim().slice(0, LIMITS.logLine)).filter(Boolean);
+export const styleLines = (now: Date): string => styleRules(now).map((l) => `- ${l}`).join("\n");
+
+// The hard names the assistant keeps in this conversation's notes (hard-names.md, one list of correct spellings) as whisper's initial prompt, so a voice note spells them as the list does. Capped at `max` characters; nothing when the page is missing, empty or unreadable.
 export function namesPrompt(dir: string, max = 300): string | undefined {
   try {
     const list = parseNote(HARD_NAMES_NOTE, readFileSync(join(dir, HARD_NAMES_NOTE), "utf8"))?.text.replace(/\s+/g, " ").trim().slice(0, max).trim();
@@ -125,20 +145,52 @@ export function namesPrompt(dir: string, max = 300): string | undefined {
 
 const gistOf = (text: string): string => text.split("\n").map((l) => l.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, LIMITS.gist) ?? "";
 
-// Pure: the index, MEMORY.md, as the SDK reads it: one line per note, "- people: [Mara](people-mara.md) - Mara lives in Lisbon (until 2026-11-01)". Expired notes are not passed in, the assistant's
-// own records (status-) are not memory, the number is capped (MEMORY_MAX_NOTES).
-export const indexOf = (notes: readonly Note[]): string =>
-  notes
-    .filter((n) => !n.file.startsWith(STATUS_PREFIX))
-    .slice(0, MAX_NOTES_SHOWN)
-    .map((n) => `- ${n.category}: [${n.file.replace(/\.md$/, "").replace(/^[a-z]+-/, "").replace(/-/g, " ")}](${n.file}) - ${n.description ?? gistOf(n.text)}${n.expires ? ` (until ${n.expires})` : ""}`)
-    .join("\n");
+const lineOf = (n: Note): string => {
+  const name = n.class === "page" ? n.title ?? n.person ?? stemOf(n.file) : n.file.replace(/\.md$/i, "");
+  return `- [${name}](${n.file}) - ${n.description ?? (n.class === "routine" && n.when ? n.when : gistOf(n.text))}${n.expires ? ` (until ${n.expires})` : ""}`;
+};
+
+// Pure: the index, MEMORY.md, as the SDK reads it, in up to three parts: routines, setup, pages (one line each: "- [Mara Silva](people/mara-silva.md) - sister; lives in Lisbon (until 2026-11-01)"). Expired pages are
+// not passed in and the assistant's own records (status/) are not memory. Pages are in path order, so a folder's pages sit together and an edit changes only its own line (the prompt cache of the index survives
+// other edits). Over `max` characters the result is deterministic: the folder with the most text collapses to one line of its page names, again and again until it fits, and only then the tail is left out, ending
+// with a line that says how many pages and that the search finds them. Routines and setup are always shown in full.
+export function indexOf(notes: readonly Note[], max: number = INDEX_MAX_CHARS): string {
+  const sorted = (c: NoteClass) => notes.filter((n) => n.class === c).sort((a, b) => (a.file < b.file ? -1 : 1));
+  const routines = sorted("routine").map(lineOf);
+  const setup = sorted("setup").map(lineOf);
+  const pages = sorted("page");
+  if (!routines.length && !setup.length && !pages.length) return "";
+  type Row = { folder?: string; names: string[]; lines: string[]; collapsed: boolean }; // one top-level page, or all pages of one folder (they are contiguous in path order)
+  const rows: Row[] = [];
+  for (const n of pages) {
+    const folder = n.file.includes("/") ? n.file.split("/")[0] : undefined;
+    const last = rows.at(-1);
+    if (folder && last?.folder === folder) { last.names.push(stemOf(n.file)); last.lines.push(lineOf(n)); } else rows.push({ folder, names: [stemOf(n.file)], lines: [lineOf(n)], collapsed: false });
+  }
+  const shown = (r: Row): string[] => {
+    if (!r.collapsed) return r.lines;
+    const all = r.names.join(", ");
+    return [`- ${r.folder}/ (${r.names.length}): ${all.length > LIMITS.gist ? `${all.slice(0, LIMITS.gist).replace(/,[^,]*$/, "")}, ...` : all}`];
+  };
+  const head = `# Memory (read a page with Read; find more with search_logs)${routines.length ? `\n## routines\n${routines.join("\n")}` : ""}${setup.length ? `\n## setup\n${setup.join("\n")}` : ""}${pages.length ? "\n## pages" : ""}`;
+  const total = (list: readonly string[]) => head.length + list.reduce((s, l) => s + 1 + l.length, 0);
+  while (total(rows.flatMap(shown)) > max) {
+    const open = rows.filter((r) => r.folder && !r.collapsed && r.lines.length > 1);
+    if (!open.length) break;
+    open.reduce((a, b) => (b.lines.join("\n").length > a.lines.join("\n").length ? b : a)).collapsed = true;
+  }
+  const kept = rows.slice();
+  let left = 0;
+  const more = () => `- (+${left} more pages: search_logs finds them)`;
+  while (kept.length && total([...kept.flatMap(shown), ...(left ? [more()] : [])]) > max) left += kept.pop()!.names.length;
+  return [head, ...kept.flatMap(shown), ...(left ? [more()] : [])].join("\n");
+}
 
 // Writes MEMORY.md from the notes (after any change to them, and at the start of a run for what changed meanwhile or has expired). Only when it differs, and only in a folder that exists, so a
 // conversation with no notes has no file. Whatever the model or the SDK wrote there is replaced: code's index wins.
 export function writeIndex(dir: string = NOTES_DIR, now = new Date(), zone?: string): void {
   if (!existsSync(dir)) return;
-  const text = indexOf(readNotes(now, dir, zone));
+  const text = indexOf(readNotes(now, dir, zone).filter((n) => n.class !== "status"));
   const path = join(dir, "MEMORY.md");
   const next = text ? `${text}\n` : "";
   const was = existsSync(path) ? readFileSync(path, "utf8") : undefined;
@@ -150,14 +202,10 @@ export function withinCaps(tool: string, input: Record<string, unknown>, dir: st
   if (tool !== "Write" && tool !== "Edit") return true;
   if (String((tool === "Write" ? input.content : input.new_string) ?? "").length > MAX_NOTE_CHARS) return false;
   if (tool !== "Write" || typeof input.file_path !== "string" || existsSync(input.file_path)) return true;
-  try {
-    return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").length < MAX_NOTES_SHOWN;
-  } catch {
-    return true;
-  }
+  return walkNotes(dir).length < MAX_NOTES_SHOWN;
 }
 
-// The index as data for a prompt that is not a run of its own (the expert a look hands work to): one line per note, and where to read one in full. Empty when there are no notes.
+// The index as data for a prompt that is not a run of its own (the expert a look hands work to): one line per page, and where to read one in full. Empty when there are no notes.
 export function readIndex(dir: string = NOTES_DIR): string {
   try {
     const text = readFileSync(join(dir, "MEMORY.md"), "utf8").trim();
@@ -167,13 +215,14 @@ export function readIndex(dir: string = NOTES_DIR): string {
   }
 }
 
-// Deletes one note and regenerates the index. Only a plain file name inside the notes folder.
+// Deletes one note and regenerates the index. Only a plain file name, or folder/name, inside the notes folder.
 export function forgetNote(file: string, dir: string = NOTES_DIR, now = new Date()): { ok: true; removed: Note | undefined } | { ok: false; error: string } {
-  if (!/^[\w.-]+\.md$/.test(file) || file === "MEMORY.md") return { ok: false, error: "give the note's file name, like style-no-em-dashes.md" };
+  if (!NOTE_PATH.test(file) || file.toLowerCase() === "memory.md") return { ok: false, error: "give the note's file name, like style.md, or folder/name.md" };
   const path = join(dir, file);
   if (!existsSync(path)) return { ok: false, error: `no note named ${file}. Read MEMORY.md for the list.` };
   const removed = parseNote(file, readFileSync(path, "utf8"));
   rmSync(path);
+  if (file.includes("/")) try { rmdirSync(dirname(path)); } catch { /* not empty */ } // (the folder of a last page goes with it)
   writeIndex(dir, now);
   return { ok: true, removed };
 }
