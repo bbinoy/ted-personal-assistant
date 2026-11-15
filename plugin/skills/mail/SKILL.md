@@ -168,7 +168,7 @@ your head: take what decides the case and move on.
      reversible, journaled and listed in the brief. Doubt about a mail from a real
      person, money or an official deadline is different: keep that one.
    - **The owner's notes are the strongest context, weighed with the situation.**
-     A preference they stated in their own words (`triage-` notes: "mail from X is
+     A preference they stated in their own words (a page of theirs: "mail from X is
      always urgent") wins. A blanket rule or a lesson from one incident ("never
      archive onboarding mail") serves the need behind it (the mail whose link is
      still needed stays, the routine notices go) and lapses once that situation is
@@ -244,7 +244,7 @@ sign-offs per language, tone, habits). Draft in that voice. Match the
 correspondent's language and the thread's register first (read the existing
 messages and mirror them rather than defaulting to a generic reply style); the
 voice note is the default within that. Wording rules (for example "no em dashes")
-are in the owner's `style-` notes; follow those too.
+are on the owner's `style.md` page; follow those too.
 
 **If there is no `setup/voice-writing` note:** still draft (short, plain, polite, in the
 thread's language, signed with the owner's first name), and:

@@ -108,7 +108,7 @@ Find it yourself first here too.
    low-pressure, humour); habits and words they avoid; languages they switch
    between. Describe patterns only. Quote no mail text, no names, no addresses.
 4. Show the description and ask what to change. Save it only after they agree.
-   Wording rules such as "never use em dashes" are separate `style-` notes.
+   Wording rules such as "never use em dashes" go on the `style.md` page, a rule a line.
 
 ### 5. Optional
 
@@ -117,7 +117,7 @@ Find it yourself first here too.
 - **Brief topics** (`radar-topics.md`): ask which topics or places the daily
   brief's radar should follow; save them, or skip.
 - **Quiet preferences:** if they mention things like "no meetings before 10", save
-  those as `scheduling-` notes.
+  those as a page of their own.
 
 ### 6. What you can do, and the recurring routines
 
@@ -146,7 +146,7 @@ On a yes, save the routine note with the time they chose (the routine rules say 
 deliver the brief as it says." with the skill's name for the others; for stay prep the body is "Bring whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts."). The tool reply
 tells you how the schedule was read: tell them in a line. On a no, move on and do not
 ask again. Take edits as they come ("no pep talk", "shorter", "only on weekdays"):
-save a content wish as a `brief-` note as the daily brief skill describes, and a
+save a content wish as a page as the daily brief skill describes, and a
 change of time as an edit of the routine's note. Other routines they want ("every
 Monday at 9 summarise my week") are routine notes the same way.
 

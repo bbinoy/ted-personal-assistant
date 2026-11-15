@@ -41,10 +41,20 @@ test("plugin: every skill that needs setup names the note it reads, and setup sa
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));
 });
 
-test("skills and persona name no file of the old layout (people-x.md, setup-x.md, routine-x.md...): pages are named by the model, the folders are routines/, setup/ and status/", () => {
-  const OLD = /`?(people|context|scheduling|triage|brief|style|setup|status|routine)-(<|\*|[a-z]+(-[a-z]+)*\.md)/;
-  const texts = [...skills.map((s) => [`skill ${s}`, readFileSync(join(skillsDir, s, "SKILL.md"), "utf8")] as const), ...readdirSync(join(settings.pluginDir, "..", "assistants", "ted", "persona")).map((f) => [`persona ${f}`, readFileSync(join(settings.pluginDir, "..", "assistants", "ted", "persona", f), "utf8")] as const)];
-  for (const [name, text] of texts) assert.doesNotMatch(text.replace(/style-src/g, ""), OLD, name);
+test("skills, persona, docs and comments name no file or note kind of the old layout (people-x.md, setup-x.md, `style-` notes...): only the migration may", () => {
+  const KW = "(?:people|setup|routine|status|style|voice|context|triage|brief|scheduling)";
+  const BT = KW.replace("voice|", ""); // (a `voice-` temporary folder of the speech code is no note)
+  const OLD = new RegExp(`\`${BT}-(?:\\*|<|[a-z0-9-]*\`|[a-z0-9-]+\\.md)|(?<![\\w/-])${KW}-[a-z0-9<*-]*\\.md`);
+  const root = join(settings.pluginDir, "..");
+  const files: string[] = [];
+  const walk = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) { if (!/node_modules|\.git|audio|hillclimb/.test(e.name)) walk(p); } else if (/\.(md|ts)$/.test(e.name)) files.push(p); } };
+  for (const d of ["plugin", "assistants", "docs", "src"]) walk(join(root, d));
+  const allowed = /(migrate|restore-premigration)\.ts$/;
+  for (const f of files) {
+    if (allowed.test(f)) continue;
+    const text = readFileSync(f, "utf8").replace(/style-src/g, "");
+    assert.doesNotMatch(text, OLD, f);
+  }
 });
 
 test("setup: missing items are listed, in prompts as an offer in chat and a skip-and-say elsewhere", () => {

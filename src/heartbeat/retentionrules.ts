@@ -180,7 +180,7 @@ export function expiredNotesRule(L: () => Layout, deleteDays: () => number): Ret
           if (!o.dryRun) {
             if (expires >= deleteBefore) {
               mkdirSync(holding, { recursive: true, mode: 0o700 });
-              cpSync(path, join(holding, `${expires}-${f.replace(/\//g, "__")}`)); // (dated by its expiry: two days' status-brief.md do not collide, and the age is in the name)
+              cpSync(path, join(holding, `${expires}-${f.replace(/\//g, "__")}`)); // (dated by its expiry: two days' briefs do not collide, and the age is in the name)
               moved++;
             }
             forgetNote(f, p.notes, now); // the file, and the index made again without it, after the copy

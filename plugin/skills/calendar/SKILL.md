@@ -47,7 +47,7 @@ location - and hand it to `ted-personal-assistant:meeting-prep`, which decides w
 
 If an email asks to move a meeting, or two things clash, propose 2-3
 concrete alternative slots from the owner's actual free time (following the
-owner's `scheduling-` notes) in the brief. For an event with guests or other
+owner's meeting preferences in their pages) in the brief. For an event with guests or other
 people, do **not** call `update_event` on your own - the owner decides, then asks.
 A clash among the owner's own guest-less events or placeholders is fixed
 with `update_event`, in any run; say so in one line.
