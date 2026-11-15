@@ -5,12 +5,6 @@
     "heartbeat": { "everyMinutes": 5, "dayMinutes": 30 },
     "dream": { "hour": 4, "minNewLines": { "direct": 1, "group": 3 }, "maxGroupsPerNight": 5 }
   },
-  "notes": {
-    "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"],
-    "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
-    "others": ["people", "context", "scheduling", "style"],
-    "background": ["people", "context", "scheduling"]
-  },
   "limits": { "maxTurns": 40, "maxBudgetUsd": 2 },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {

@@ -73,7 +73,7 @@ export const mailbirdModule: ToolModule = {
     noFix: ["send", "unsubscribe"],
   },
   skills: [{ name: "mail", required: true }, { name: "mailbird", required: true }],
-  setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
+  setup: [{ file: "setup/voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
   hide: {
     prefix: MB,
     visible: [

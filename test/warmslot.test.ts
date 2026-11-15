@@ -109,7 +109,7 @@ const gid = () => `warm-${++n}-0123456789abcdef`;
 test("group warm: built from that group's own options only, exactly like a normal group run", () => {
   const was = settings.warm;
   (settings as { warm: boolean }).warm = true;
-  const note = join(convPaths(OWNER_CONV).notes, "style-warm-test.md"); // the owner's style notes are what a group's run is told of
+  const note = join(convPaths(OWNER_CONV).notes, "style.md"); // the owner's style page is what a group's run is told of
   mkdirSync(convPaths(OWNER_CONV).notes, { recursive: true });
   writeFileSync(note, "be warm");
   try {

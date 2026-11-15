@@ -4,19 +4,19 @@ import { MB, OWNER_EMAIL, check, sends } from "./checks.ts";
 import type { Case, Outcome, PerfectScript, Time } from "./case.ts";
 
 // ---- the seeded pages: names a model would not guess, invented ----
-const note = (description: string, text: string): string => `---\nname: x\ndescription: ${JSON.stringify(description)}\n---\n\n${text}\n`;
-const page = (kind: string, stem: string): string => `${kind}-${stem}.md`; // the file name of a page (the layout decides where it lives)
-const STYLE_PAGE = /^style-/; // the page that holds how replies are written
+const note = (description: string, text: string, person?: string): string => `---\nname: x\ndescription: ${JSON.stringify(description)}\n${person ? `person: ${JSON.stringify(person)}\n` : ""}---\n\n${text}\n`;
+const page = (_kind: string, stem: string): string => `${stem}.md`; // the file name of a page (the first argument says what kind of page it is: the layout has no kinds, the name is the subject)
+const STYLE_PAGE = /^style\.md$/; // the page that holds how replies are written
 
 // What the run left in the notes, apart from the index, the setup and Ted's own records: file name to text.
-const isMemory = (f: string): boolean => !/^(MEMORY\.md$|setup-|voice-|status-|routine-|(setup|status|routines)\/)/i.test(f);
+const isMemory = (f: string): boolean => !/^(setup|status|routines)\//i.test(f);
 const pages = (o: Outcome): Record<string, string> => Object.fromEntries(Object.entries(o.notes).filter(([f]) => isMemory(f)));
 const changed = (o: Outcome, seeded: Record<string, string>): string[] => Object.entries(pages(o)).filter(([f, text]) => seeded[f] !== text).map(([f]) => f);
 const said = (o: Outcome): string => o.turns.flatMap((t) => t.messages).join("\n");
 
 // ---- m1: a fact about someone who has a page updates the page, no second one ----
-const MARA_PAGE = page("people", "mara-silva");
-const m1Seed = { [MARA_PAGE]: note("Mara Silva, sister; lives in Lisbon; birthday 3 March", "Mara Silva is my sister. She lives in Lisbon and works at a bakery. Her birthday is 3 March."), [page("context", "whereabouts")]: note("Whereabouts: home; no change known", "At home.") };
+const MARA_PAGE = "people/mara-silva.md";
+const m1Seed = { [MARA_PAGE]: note("Mara Silva, sister; lives in Lisbon; birthday 3 March", "Mara Silva is my sister. She lives in Lisbon and works at a bakery. Her birthday is 3 March.", "Mara Silva"), [page("context", "whereabouts")]: note("Whereabouts: home; no change known", "At home.") };
 const m1: Case = {
   id: "m1",
   title: "a fact about Mara updates her page, no second Mara page",
@@ -37,7 +37,7 @@ const m1: Case = {
   reply: ["It confirms in a few words that it noted the move (or reacted), without a question or a list of choices."],
   perfect: async (s) => {
     s.turn(0);
-    s.note(MARA_PAGE, note("Mara Silva, sister; lives in Bern since last month; birthday 3 March", "Mara Silva is my sister. She moved from Lisbon to Bern last month and works at a bakery. Her birthday is 3 March."));
+    s.note(MARA_PAGE, note("Mara Silva, sister; lives in Bern since last month; birthday 3 March", "Mara Silva is my sister. She moved from Lisbon to Bern last month and works at a bakery. Her birthday is 3 March.", "Mara Silva"));
     s.say("Noted: Mara lives in Bern now.");
   },
 };
@@ -174,7 +174,7 @@ const m4: Case = {
   reply: ["It confirms in a few words, without a question."],
   perfect: async (s) => {
     s.turn(0);
-    s.note(page("style", "two-line-replies"), note("Keep replies to two lines", "Keep replies to two lines."));
+    s.note("style.md", note("How replies are written", "- Keep replies to two lines."));
     s.say("Got it: two lines from now on.");
   },
 };
@@ -186,10 +186,10 @@ const m5Seed = Object.fromEntries([
   flat("lisbon-hotel", "Hotel in Lisbon", "Booked near the river for four nights."),
   flat("lisbon-dinner", "Dinner in Lisbon", "Table for four on Saturday at 20:00."),
   flat("lisbon-packing", "Packing for Lisbon", "Light jacket, walking shoes."),
-  ["people-mara-silva.md", note("Mara Silva, sister", "Mara Silva is my sister.")],
-  ["people-mara-birthday.md", note("Mara's birthday", "Mara's birthday is 3 March.")],
-  ["people-mara-address.md", note("Where Mara lives", "Mara lives in Lisbon.")],
-  ["people-mara-present.md", note("Present for Mara", "A ceramic bowl from the pottery class.")],
+  ["mara-silva.md", note("Mara Silva, sister", "Mara Silva is my sister.")],
+  ["mara-birthday.md", note("Mara's birthday", "Mara's birthday is 3 March.")],
+  ["mara-address.md", note("Where Mara lives", "Mara lives in Lisbon.")],
+  ["mara-present.md", note("Present for Mara", "A ceramic bowl from the pottery class.")],
   flat("camper-van-insurance", "Camper van insurance", "Renews in the autumn."),
   flat("camper-van-service", "Camper van service", "Annual inspection in June."),
   flat("camper-van-tyres", "Camper van tyres", "Winter tyres in the garage."),

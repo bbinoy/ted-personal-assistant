@@ -9,15 +9,17 @@ function root(): string {
   return mkdtempSync(join(tmpdir(), "terms-"));
 }
 
-test("terms: slug words of 4+ letters from people-note file names, plus deny and allow lines; allow wins", () => {
+test("terms: words of 4+ letters from the person: fields of the pages (and legacy people-note file names), plus deny and allow lines; allow wins", () => {
   const r = root();
   try {
     mkdirSync(join(r, "conversations", "owner", "notes"), { recursive: true });
     mkdirSync(join(r, "plans"));
     for (const f of ["people-zorbel-quint.md", "people-bo.md", "context-trip.md"]) writeFileSync(join(r, "conversations", "owner", "notes", f), "x");
+    mkdirSync(join(r, "conversations", "owner", "notes", "people"));
+    writeFileSync(join(r, "conversations", "owner", "notes", "people", "ilka.md"), '---\nname: x\nperson: "Ilka Brandvold-Neri"\n---\nText that is not a name: Trollheim.\n');
     writeFileSync(join(r, "plans", "private-terms.txt"), "deny: Vlorp Street\nallow: Quint\nallow-file: ^docs/fiction\\.md$\n# a comment\n");
     const t = loadTerms(r)!;
-    assert.deepEqual([...t.deny].sort(), ["Vlorp Street", "Zorbel"]);
+    assert.deepEqual([...t.deny].sort(), ["Brandvold", "Ilka", "Neri", "Vlorp Street", "Zorbel"]);
     assert.equal(t.allowFiles[0]!.test("docs/fiction.md"), true);
     const re = termRegex(t)!;
     assert.equal(re.test("hello Zorbel!"), true);

@@ -7,7 +7,7 @@ import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES } from "./ledger.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { zoneOf } from "../tenants/tenants.ts";
-import { readNotes } from "../memory/notes.ts";
+import { readNotes, styleRules } from "../memory/notes.ts";
 import { isOneEmoji } from "../core/reaction.ts";
 import { GATE_DEFAULTS } from "../run/persona.ts";
 import { OWNER, settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
@@ -84,11 +84,11 @@ export type Gate = (input: GateInput) => Promise<GateOutput>;
 // ---- what the model is shown ----
 
 // What the gate is told of that personality: it decides whether and when to speak, not how, so a compact one-liner
-// (the first words of each note, a few notes) is enough. The run that writes the reply gets the full styleLines.
+// (the first words of each rule on the style page, a few rules) is enough. The run that writes the reply gets the full styleLines.
 const STYLE_NOTES = 6;
 const STYLE_CHARS = LIMITS.gist;
 export const styleSummary = (now: Date): string =>
-  readNotes(now).filter((n) => n.category === "style").slice(0, STYLE_NOTES).map((n) => n.text.replace(/\s+/g, " ").trim().slice(0, STYLE_CHARS)).join("; ");
+  styleRules(now).slice(0, STYLE_NOTES).map((l) => l.slice(0, STYLE_CHARS)).join("; ");
 
 // All of the conversation's own notes as data, bounded like every other prompt that includes notes.
 function notesText(conv: Conversation, now: Date): string {

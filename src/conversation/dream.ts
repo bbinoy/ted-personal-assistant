@@ -13,7 +13,7 @@ import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
-import { STATUS_PREFIX, walkNotes } from "../memory/notes.ts";
+import { classOf, walkNotes } from "../memory/notes.ts";
 import { isPaused } from "../core/pause.ts";
 import { dayIn, localTime } from "../core/timezone.ts";
 import { dreamSystem } from "../run/persona.ts";
@@ -30,7 +30,7 @@ import { LIMITS, oneLine } from "../core/sanitize.ts";
 //   - setup and voice notes are not the dream's to change;
 //   - a cap on changes per run, and a snapshot first so "undo the dream" puts everything back.
 // ONE dreamer for every conversation (createDreamer): the owner's chat, each group and each friend. What differs is data: whose notes (dreamScope), the
-// note categories they have (the preset), whose words count as evidence (a private chat's person, or a group's members), who pays (payer.ts mayRun) and the
+// whose words count as evidence (a private chat's person, or a group's members), who pays (payer.ts mayRun) and the
 // state in the conversation's own assistant.db. A conversation is dreamt when its capability set has `dream` (capabilities.ts), once it has enough new lines
 // (the preset's rhythm.dream) and its payer may run. It works silently: what it did is in the log (a friend's: counts only, in her audit row words stay out)
 // and the snapshot lets "undo the dream" put the notes back. Nothing it reads is mail: the person's messages are the only ground for a note, so a crafted
@@ -75,7 +75,7 @@ export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile
   const current = kept.join("\n\n");
   return [
     clockLine(now),
-    `The notes you keep about ${subject} right now (one file per fact; MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)", MAX_PROMPT_NOTES_CHARS)}`,
+    `The pages you keep about ${subject} right now (MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)", MAX_PROMPT_NOTES_CHARS)}`,
     `What ${subject} said and did since the last dream, oldest first:\n${fence("conversation", cut || "(nothing)")}`,
     ...(olderCut ? [`What ${subject} said and did in the days before the last dream (already seen; to check the notes against, oldest first):\n${fence("earlier_conversation", olderCut)}`] : []),
     `Propose the changes to the notes, if any.`,
@@ -99,6 +99,7 @@ const SCHEMA = {
             op: { type: "string", enum: ["write", "delete"] },
             file: { type: "string" },
             description: { type: "string" },
+            person: { type: "string" },
             text: { type: "string" },
             expires: { type: "string" },
             evidence: { type: "string" },
@@ -115,7 +116,7 @@ export type Runner = (prompt: string, system?: string) => Promise<unknown>;
 
 // The model that proposes the changes: no tools, one JSON answer, on whoever pays (payer.ts: the login for the owner's and a group's dream, the instance key and her
 // cost file for a friend's). A refusal of the API is thrown (errors.ts), any other failure too.
-export const runnerFor = (payer: Payer = LOGIN, onCost?: (usd: number) => void): Runner => async (prompt, system = dreamSystem({ subject: OWNER, kind: "owner", categories: preset().notes.dream })) => {
+export const runnerFor = (payer: Payer = LOGIN, onCost?: (usd: number) => void): Runner => async (prompt, system = dreamSystem({ subject: OWNER, kind: "owner" })) => {
   const r = await oneShot({ system, prompt, payer, schema: SCHEMA, model: settings.model, gate: "dream", options: { maxTurns: 3, maxBudgetUsd: 0.6 } });
   onCost?.(r.costUsd ?? 0); // (the eval adds it up)
   if (!r.ok) throw r.error ?? new Error("the dream run failed");
@@ -124,7 +125,7 @@ export const runnerFor = (payer: Payer = LOGIN, onCost?: (usd: number) => void):
 
 export const readNoteFiles = (dir: string): NoteFile[] => {
   try {
-    return walkNotes(dir).filter((f) => !f.split("/").pop()!.startsWith(STATUS_PREFIX)).map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
+    return walkNotes(dir).filter((f) => classOf(f) !== "status").map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
   } catch {
     return [];
   }
@@ -140,9 +141,10 @@ export async function dreamOver(scope: Scope, prompt: string, system: string, ev
   return { plan, snapshot: applyPlan(plan, now, scope, baseOf(notes)) }; // `notes`: as read before the model ran; a note edited meanwhile is not overwritten
 }
 
+// What a plan did, one line each, for the log of a conversation whose words may be logged (never a friend's): where a write came from is its quote, or "tidy" when it is a merge, split or other tidying.
 export const describePlan = (plan: Plan): string[] => {
   const icon = { add: "➕ saved", update: "✏️ updated", merge: "🔀 merged into" } as const;
-  return plan.actions.map((a) => (a.kind === "delete" ? `➖ forgot ${a.file} (${a.why})` : `${icon[a.kind]} ${a.file}: ${a.description}`));
+  return plan.actions.map((a) => (a.kind === "delete" ? `➖ forgot ${a.file} (${a.why})` : `${icon[a.kind]} ${a.file}: ${a.description} (${a.evidence ? `from: "${a.evidence.slice(0, 80)}"` : "tidy"})`));
 };
 
 // ---- the daily run ----
@@ -180,7 +182,7 @@ const subjectOf = (conv: Conversation): string => RULES[conv.kind].subject(conv)
 
 export interface DreamerDeps {
   conversations?: () => Conversation[]; // default: dreamConversations()
-  scopeOf?: (conv: Conversation) => Scope; // where its notes, snapshots and categories are (default dreamscope.ts)
+  scopeOf?: (conv: Conversation) => Scope; // where its notes and snapshots are (default dreamscope.ts)
   promptOf?: (conv: Conversation, now: Date, notes: readonly NoteFile[], lines: readonly string[], earlier: readonly string[]) => { prompt: string; system: string }; // default: the preset's one dream prompt
   payer?: (conv: Conversation, now: Date) => Payer | Refusal; // who pays and may it run (default payer.ts mayRun)
   key?: () => string | undefined; // where a friend's instance key comes from (default settings.tenantApiKey; tests)
@@ -195,7 +197,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
     deps.promptOf ??
     ((conv, now, notes, lines, earlier) => ({
       prompt: dreamPrompt(now, subjectOf(conv), notes, lines, earlier),
-      system: dreamSystem({ subject: subjectOf(conv), kind: conv.kind, categories: scopeOf(conv).categories }),
+      system: dreamSystem({ subject: subjectOf(conv), kind: conv.kind }),
     }));
   const payerOf = deps.payer ?? ((conv, now) => mayRun(conv, "dream", { key: deps.key, paused: () => isPaused(now) })); // paused, a usage limit, the day's budget, her cooldown or no key: no attempt, the day stays open
 

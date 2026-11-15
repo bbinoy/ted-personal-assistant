@@ -23,7 +23,7 @@ over from Notion again, read Notion and use `add_task` for each, like any other 
 
 ## Lists are not tasks
 
-Something the owner collects (a book or film recommendation, a restaurant to try, a present to buy) goes on the list they keep for that kind of thing (a Notion page or database, say), with who recommended it and when, not on the task list. A task is only for something to do: a recommendation becomes one only if they ask to be reminded to act on it. Where each list lives is a `setup-lists` note (kind: location); if it has none for this kind, search Notion for the list and save it there, and if no list exists, ask once whether to start one or keep it as a note.
+Something the owner collects (a book or film recommendation, a restaurant to try, a present to buy) goes on the list they keep for that kind of thing (a Notion page or database, say), with who recommended it and when, not on the task list. A task is only for something to do: a recommendation becomes one only if they ask to be reminded to act on it. Where each list lives is a `setup/lists` note (kind: location); if it has none for this kind, search Notion for the list and save it there, and if no list exists, ask once whether to start one or keep it as a note.
 
 ## Read before you add
 
@@ -79,9 +79,9 @@ change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
 ## Tasks that fit a place or a moment
 
-A wish tied to a place ("next time I'm in London, coffee with Sam") stays on the place: write the place first in the title ("When in London: coffee with Sam"), the person set when there is one, **no due date** and no reminder pinned to an event that happens during the stay (the last dinner of a two-week stay is too late to arrange a coffee). The same for "next time I see Sam: ..." (the person set; when that person is on the calendar, that is when it fits). Confirm in one line when the person is there, read at that moment from `context-whereabouts.md`, the plan notes and the calendar: now and until when if they are there already, else the first day of the next stretch (not an event in it); if none is known, say so. Note a stretch you found there that `context-whereabouts.md` lacks. Other fits (shopping when heading into town, things to buy before a trip, something to bring to a meeting): remind once, briefly, at a sensible moment.
+A wish tied to a place ("next time I'm in London, coffee with Sam") stays on the place: write the place first in the title ("When in London: coffee with Sam"), the person set when there is one, **no due date** and no reminder pinned to an event that happens during the stay (the last dinner of a two-week stay is too late to arrange a coffee). The same for "next time I see Sam: ..." (the person set; when that person is on the calendar, that is when it fits). Confirm in one line when the person is there, read at that moment from `whereabouts.md`, the plan notes and the calendar: now and until when if they are there already, else the first day of the next stretch (not an event in it); if none is known, say so. Note a stretch you found there that `whereabouts.md` lacks. Other fits (shopping when heading into town, things to buy before a trip, something to bring to a meeting): remind once, briefly, at a sensible moment.
 
-The stay-prep routine arranges the place wishes ahead of a stay ("Before a stay" in `ted-personal-assistant:stay-in-touch`, which also says how `context-whereabouts.md` is kept). No standing section in every brief, no message when nothing fits, and never state a location as certain: the calendar or the chat may say otherwise.
+The stay-prep routine arranges the place wishes ahead of a stay ("Before a stay" in `ted-personal-assistant:stay-in-touch`, which also says how `whereabouts.md` is kept). No standing section in every brief, no message when nothing fits, and never state a location as certain: the calendar or the chat may say otherwise.
 
 ## Do the task, not only the reminder
 

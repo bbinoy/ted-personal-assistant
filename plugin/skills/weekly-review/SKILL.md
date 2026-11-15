@@ -1,6 +1,6 @@
 ---
 name: weekly-review
-description: The owner's weekly review, a routine run by a routine note (`routine-weekly-review.md`) or on request ("weekly review"). A heavy skill, so a run delegates it to its expert (subagent expert-weekly-review). Wins of the week, what slipped, next week's priorities, and the people to follow up with. A phone-sized chat message.
+description: The owner's weekly review, a routine run by a routine note (`routines/weekly-review.md`) or on request ("weekly review"). A heavy skill, so a run delegates it to its expert (subagent expert-weekly-review). Wins of the week, what slipped, next week's priorities, and the people to follow up with. A phone-sized chat message.
 delegate: sonnet
 ---
 
@@ -18,7 +18,7 @@ Dates come from `CURRENT TIME` (the week is Monday to today; next week is the fo
 
 - `journal` once with `since` this Monday: what the assistant did on its own this week, for the highlights.
 - `list_tasks`: `status` `done` (this week's wins: keep what the lines show finished this week), `overdue` true, `status` `snoozed`, `due_from` / `due_to` for next week, `kind` `owed_to_me` and `kind` `i_owe` (open ones).
-- The calendar (`ted-personal-assistant:calendar`, read only): next week's events, from the owner's `setup-calendars` note, and this week's for the count of meetings held. A calendar that is not connected is one line, never invented data.
+- The calendar (`ted-personal-assistant:calendar`, read only): next week's events, from the owner's `setup/calendars` note, and this week's for the count of meetings held. A calendar that is not connected is one line, never invented data.
 
 ## Format
 

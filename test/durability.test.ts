@@ -49,7 +49,7 @@ test("state: a corrupt JSON file is moved aside (not lost) and the fallback retu
 
 // ---- notes ----
 
-const scopeIn = () => ({ notesDir: mkdtempSync(join(tmpdir(), "dn-")), backupsDir: mkdtempSync(join(tmpdir(), "db-")), categories: ["people"], maxNotes: 100 });
+const scopeIn = () => ({ notesDir: mkdtempSync(join(tmpdir(), "dn-")), backupsDir: mkdtempSync(join(tmpdir(), "db-")), maxNotes: 100 });
 const add = (file: string, content: string) => ({ kind: "add" as const, file, description: "d", content, merged: [] as string[] });
 
 test("notes: every note and index write is atomic, owner-only (index, forget)", () => {

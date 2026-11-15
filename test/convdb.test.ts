@@ -274,18 +274,18 @@ test("routine_runs: the rule removes the record of a routine whose note is gone;
   const db = convDb(c.convId);
   const root = dataRoot();
   const notes = layout(root).conv(c.convId).notes;
-  mkdirSync(notes, { recursive: true });
-  writeFileSync(join(notes, "routine-kept.md"), "---\nname: kept\ndescription: d\nwhen: every day at 08:00\n---\nSay hi.\n");
-  writeFileSync(join(notes, "routine-broken.md"), "---\nname: broken\ndescription: d\nwhen: whenever\n---\nSay hi.\n");
+  mkdirSync(join(notes, "routines"), { recursive: true });
+  writeFileSync(join(notes, "routines/kept.md"), "---\nname: kept\ndescription: d\nwhen: every day at 08:00\n---\nSay hi.\n");
+  writeFileSync(join(notes, "routines/broken.md"), "---\nname: broken\ndescription: d\nwhen: whenever\n---\nSay hi.\n");
   const now = Date.now();
-  for (const [name, status, at] of [["routine-kept", "delivered", now], ["routine-broken", "failed", now], ["routine-gone", "delivered", now], ["routine-gone-running", "started", now - 60_000], ["routine-gone-dead", "started", now - 2 * 3_600_000]] as const)
+  for (const [name, status, at] of [["kept", "delivered", now], ["broken", "failed", now], ["gone", "delivered", now], ["gone-running", "started", now - 60_000], ["gone-dead", "started", now - 2 * 3_600_000]] as const)
     db.run("INSERT INTO routine_runs (name, since, status, at) VALUES (?, ?, ?, ?)", name, now, status, at);
   const names = () => db.all<{ name: string }>("SELECT name FROM routine_runs ORDER BY name").map((r) => r.name);
   const rule = convDbRule(() => layout(root));
   assert.equal(rule.run(new Date(now), { dryRun: true }).removed >= 2, true);
   assert.equal(names().length, 5, "a dry run removes nothing");
   rule.run(new Date(now), { dryRun: false });
-  assert.deepEqual(names(), ["routine-broken", "routine-gone-running", "routine-kept"]);
+  assert.deepEqual(names(), ["broken", "gone-running", "kept"]);
   removeConvDir(c.convId);
 });
 

@@ -40,7 +40,7 @@ export const notionModule: ToolModule = {
   floor: NOTION_FLOOR,
   skills: [{ name: "tasks", required: true }],
   setup: [
-    { file: "setup-meetings.md", label: "meeting notes (where prep pages go)", needs: "notion" },
+    { file: "setup/meetings.md", label: "meeting notes (where prep pages go)", needs: "notion" },
   ],
   hide: {
     prefix: NOTION,

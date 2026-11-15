@@ -45,5 +45,5 @@ export const calendarModule: ToolModule = {
     editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event
   },
   skills: [{ name: "calendar", required: true }],
-  setup: [{ file: "setup-calendars.md", label: "calendars (which to check, time zone)", needs: "calendar" }],
+  setup: [{ file: "setup/calendars.md", label: "calendars (which to check, time zone)", needs: "calendar" }],
 };

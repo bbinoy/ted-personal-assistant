@@ -1,22 +1,20 @@
 import type { Conversation } from "../../conversation/conversationmodel.ts";
 import type { Scope } from "../../memory/dreamplan.ts";
 import { groupDir } from "../../conversation/groupstore.ts";
-import { identity } from "../../policy/identity.ts";
 import { settings } from "../../core/settings.ts";
 import { convIdOf, convPaths, type ConvId } from "../../core/convpaths.ts";
 import { convDb, peekConvDb } from "../../core/convdb.ts";
 import { tenantById } from "../../tenants/tenants.ts";
 
-// WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
-// notes.others) and the state of its last run (in its assistant.db), all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both
+// WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it and the state of its last run (in its assistant.db), all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both
 // ask this, so a conversation that is dreamt can always be undone, and nobody can name another conversation's folder.
 
 type Who = Pick<Conversation, "kind" | "tenantId" | "groupId">;
 
-// The same for every conversation: its folder's notes and snapshots (convpaths.ts); only the owner has the preset's longer category list.
+// The same for every conversation: its folder's notes and snapshots (convpaths.ts).
 export function dreamScope(conv: Who): Scope {
   const p = convPaths(dreamStateConv(conv));
-  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: identity(conv).dreamCategories, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: p.notes, backupsDir: p.notesBackup, maxNotes: settings.memoryMaxNotes };
 }
 
 // The conversation whose assistant.db holds its dream state (the `dream` row): checked first, so a name that is no conversation cannot make one.

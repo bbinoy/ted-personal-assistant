@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
@@ -62,16 +62,17 @@ test("the dream is not shown a status note, and its snapshot and undo leave it a
   const notes = mkdtempSync(join(tmpdir(), "dnotes-"));
   const backups = mkdtempSync(join(tmpdir(), "dback-"));
   writeFileSync(join(notes, "people-mara.md"), "Mara is my sister\n");
-  writeFileSync(join(notes, "status-brief.md"), "---\nexpires: 2026-10-15\n---\nstatus: started\n");
+  mkdirSync(join(notes, "status"));
+  writeFileSync(join(notes, "status", "brief.md"), "---\nexpires: 2026-10-15\n---\nstatus: started\n");
   assert.deepEqual(readNoteFiles(notes).map((n) => n.file), ["people-mara.md"], "not in the dream's prompt");
-  const scope = { notesDir: notes, backupsDir: backups, categories: ["people"], maxNotes: 100 };
+  const scope = { notesDir: notes, backupsDir: backups, maxNotes: 100 };
   const plan = { actions: [{ kind: "add" as const, file: "people-eve.md", content: "Eve is a friend\n", description: "eve" }], rejected: [] };
   const snap = applyPlan(plan as never, at(4), scope);
-  assert.ok(snap && !existsSync(join(snap, "status-brief.md")), "not in the snapshot");
+  assert.ok(snap && !existsSync(join(snap, "status")), "not in the snapshot");
   // the brief is delivered after the dream; an undo later must not bring yesterday's note back or remove today's
-  writeFileSync(join(notes, "status-brief.md"), "---\nexpires: 2026-10-16\n---\nstatus: delivered\n");
+  writeFileSync(join(notes, "status", "brief.md"), "---\nexpires: 2026-10-16\n---\nstatus: delivered\n");
   const undone = undoLatest(scope);
   assert.ok(undone.ok);
-  assert.deepEqual(readdirSync(notes).sort(), ["MEMORY.md", "people-mara.md", "status-brief.md"]);
-  assert.match(readFileSync(join(notes, "status-brief.md"), "utf8"), /delivered/);
+  assert.deepEqual(readdirSync(notes).sort(), ["MEMORY.md", "people-mara.md", "status"]);
+  assert.match(readFileSync(join(notes, "status", "brief.md"), "utf8"), /delivered/);
 });

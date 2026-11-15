@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { relative, resolve } from "node:path";
 import type { ConvRef } from "../../core/convpaths.ts";
-import { isNotePath, parseNote, readNotes } from "../../memory/notes.ts";
+import { classOf, isNotePath, parseNote, readNotes, stemOf } from "../../memory/notes.ts";
 import { parseRepeat } from "../../tasks/repeat.ts";
 import { nextText, routineLines, type Routine } from "../../tasks/routines.ts";
 
-// What is scheduled in a conversation: its routine notes, and only those (`routine-<slug>.md`: front matter `when:` = a repeat rule, body = what to do; tasks/routines.ts plans them, heartbeat/facts.ts hands the due one
+// What is scheduled in a conversation: its routine pages, and only those (`routines/<slug>.md`: front matter `when:` = a repeat rule, body = what to do; tasks/routines.ts plans them, heartbeat/facts.ts hands the due one
 // to the look). The daily brief, the evening wrap and the weekly review are such notes too (their body says to run the skill). A note whose `when:` cannot be read is not scheduled but listed in `broken`, so it is told
 // to the model instead of silently never firing.
 
@@ -13,15 +13,15 @@ const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must 
 const NO_WHEN = "has no `when:` line in its front matter";
 
 export interface Scheduled { routines: Routine[]; broken: { file: string; why: string }[] }
-/** A broken note as one line for the model or the doctor: "routine-x.md has a when: line that cannot be read (...)". */
+/** A broken note as one line for the model or the doctor: "routines/x.md has a when: line that cannot be read (...)". */
 export const brokenText = (b: { file: string; why: string }): string => `${b.file} ${b.why}`;
 
 export function scheduledIn(o: { notesDir: string; zone: string; now: Date }): Scheduled {
   const routines: Routine[] = [];
   const broken: Scheduled["broken"] = [];
-  for (const n of readNotes(o.now, o.notesDir, o.zone, "routine-").slice(0, MAX_NOTE_ROUTINES)) {
+  for (const n of readNotes(o.now, o.notesDir, o.zone, "routine").slice(0, MAX_NOTE_ROUTINES)) {
     const p = n.when ? parseRepeat(n.when) : undefined;
-    if (p?.ok) routines.push({ name: n.file.replace(/\.md$/, ""), rule: p.rule, instruction: n.text });
+    if (p?.ok) routines.push({ name: stemOf(n.file), rule: p.rule, instruction: n.text });
     else broken.push({ file: n.file, why: p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN });
   }
   return { routines, broken };
@@ -31,18 +31,18 @@ export function scheduledIn(o: { notesDir: string; zone: string; now: Date }): S
 // schedule was read and when it runs first. Undefined for anything else.
 export function routineNoteReply(tool: string, input: Record<string, unknown>, dir: string | undefined, zone: string | undefined, now: Date = new Date()): string | undefined {
   const path = input.file_path;
-  if ((tool !== "Write" && tool !== "Edit") || !dir || !zone || typeof path !== "string" || !isNotePath(path, dir) || !basename(path).startsWith("routine-")) return undefined;
+  if ((tool !== "Write" && tool !== "Edit") || !dir || !zone || typeof path !== "string" || !isNotePath(path, dir) || classOf(relative(resolve(dir), resolve(path))) !== "routine") return undefined;
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
   } catch {
     return undefined;
   }
-  const file = basename(path);
+  const file = relative(resolve(dir), resolve(path));
   const note = parseNote(file, raw);
   const p = note?.when ? parseRepeat(note.when) : undefined;
   if (!note || !p?.ok) return `This routine will NOT run: ${file} ${!note ? "has no text to do" : p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN}. Fix it (front matter \`when: every weekday at 18:30\`, then the instruction as the body) and tell the person what you set.`;
-  return `Routine saved: ${nextText({ name: file, rule: p.rule, instruction: note.text }, now, zone)} (${p.rule.zone ?? zone}). Tell the person this schedule and when it runs next, in your own words.`;
+  return `Routine saved: ${nextText({ name: stemOf(file), rule: p.rule, instruction: note.text }, now, zone)} (${p.rule.zone ?? zone}). Tell the person this schedule and when it runs next, in your own words.`;
 }
 
 // "/status" and the doctor: one line per routine note with its schedule, next and last run, and one per note that cannot run.

@@ -314,7 +314,7 @@ const e2: Case = {
   world: (t) => {
     const day = t.nextWeekday(4);
     return {
-      notes: { "context-signups.md": "For sign-ups and free registrations I use the name Alex Rowan and the email owner.ownmail@example.com." },
+      notes: { "signups.md": "For sign-ups and free registrations I use the name Alex Rowan and the email owner.ownmail@example.com." },
       fetch: {
         [EVENT_URL]: `<html><head><title>Harbour Lights Meetup</title></head><body><h1>Harbour Lights Meetup</h1><p>Date: ${day}. Time: 11:30 to 13:00 (London time).</p><p>Venue: The Boathouse, 4 Dock Road, London E1.</p><p>Free event. Registration is required: <a href="${REGISTER_URL}">register here</a> with your name and email.</p></body></html>`,
       },
@@ -359,7 +359,7 @@ const e10: Case = {
   turns: ["Vera Linden book recommended by Mara, 'The Quiet Orbit', add to reading recommendations"],
   world: () => ({
     notion: [MEDIA],
-    notes: { "context-media-recommendations.md": "Book and film recommendations go into my Notion Media database (the one called Media) as a new row: Name is the title, Author, Type, Status \"Ready to Start\", and Notes says who recommended it. They are never tasks." },
+    notes: { "media-recommendations.md": "Book and film recommendations go into my Notion Media database (the one called Media) as a new row: Name is the title, Author, Type, Status \"Ready to Start\", and Notes says who recommended it. They are never tasks." },
   }),
   maxQuestions: 0,
   state: (o) => {
@@ -481,7 +481,7 @@ const e13: Case = {
   state: (o) => {
     const task = o.tasks.find((x) => /dana/i.test(`${x.title} ${x.details ?? ""} ${x.person ?? ""}`) && x.status === "open");
     const said = o.turns.flatMap((t) => t.messages).join("\n");
-    const noted = Object.entries(o.notes).some(([f, text]) => !/^setup-|^voice-/.test(f) && text.toLowerCase().includes(DANA));
+    const noted = Object.entries(o.notes).some(([f, text]) => !/^setup\//.test(f) && text.toLowerCase().includes(DANA));
     return [
       check("a task for meeting Dana was saved", !!task, o.tasks.map((x) => x.title).join("; ")),
       check("Dana's address was found (a note or the reply has it)", noted || said.toLowerCase().includes(DANA), said.slice(0, 160)),
@@ -513,7 +513,7 @@ const e14: Case = {
   state: (o) => {
     const ev = o.calendar.find((e) => /tea|mira/i.test(e.summary));
     const turn2 = (o.turns[1]?.messages ?? []).join("\n");
-    const noted = Object.entries(o.notes).some(([f, text]) => /^people-/.test(f) && text.toLowerCase().includes(MIRA));
+    const noted = Object.entries(o.notes).some(([f, text]) => /^person:/m.test(text) && text.toLowerCase().includes(MIRA));
     return [
       check("one tea event, made in turn 1 with no question", created(o).filter((e) => /tea|mira/i.test(e.summary)).length === 1 && !o.asks.some((a) => a.turn === 0), `${created(o).length} created`),
       check("exactly one question, about the invite (an address found in this run is asked once)", o.asks.length === 1 && o.asks[0]!.turn === 1, o.asks.map((a) => a.question).join("; ")),
@@ -530,7 +530,7 @@ const e14: Case = {
     s.say("Tea with Mira is in your calendar tonight at 8pm, Example Bar.");
     s.turn(1);
     await s.tool(`${MB}search_conversations`, { query: "Mira" });
-    s.note("people-mira-keller.md", `Mira Keller, ${MIRA}`);
+    s.note("mira-keller.md", `---\nperson: Mira Keller\n---\nMira Keller, ${MIRA}\n`);
     s.ask(`${CAL}update_event`, "Invite Mira Keller (mira.keller@example.com) to Tea with Mira?", "yes");
     const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") })) as { events: { id: string; summary: string }[] };
     await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Tea/.test(e.summary))!.id, attendees: [{ email: MIRA }] });
@@ -543,7 +543,7 @@ const e14b: Case = {
   ...e14,
   id: "e14b",
   title: "tea tonight, then 'invite her': Mira is a known people note, so no question at all",
-  world: (t) => ({ ...e14.world(t), notes: { "people-mira-keller.md": `---\ndescription: Mira Keller\n---\nMira Keller, ${MIRA}\n` } }),
+  world: (t) => ({ ...e14.world(t), notes: { "mira-keller.md": `---\ndescription: Mira Keller\nperson: Mira Keller\n---\nMira Keller, ${MIRA}\n` } }),
   answers: [],
   maxQuestions: 0,
   state: (o) => e14.state(o).map((c) => (c.name.startsWith("exactly one question") ? check("no question at all (Mira is a known person)", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")) : c)),
@@ -720,13 +720,13 @@ const e20: Case = {
     ],
     tasks: [{ title: "When in London: meet Dana about the Example Labs intro" }, { title: "Renew library card", due: t.day(9) }],
     notes: {
-      "context-whereabouts.md": NOTE_ZURICH(t),
-      "people-dana-weiss.md": `---\nname: Dana Weiss\ndescription: Dana Weiss. Lives in: London, UK. Founder of Example Labs\n---\nDana Weiss. Lives in: London, UK. Founder of Example Labs; met at a conference, wants coffee when the owner is next in town.\n`,
+      "whereabouts.md": NOTE_ZURICH(t),
+      "dana-weiss.md": `---\nname: Dana Weiss\ndescription: Dana Weiss. Lives in: London, UK. Founder of Example Labs\n---\nDana Weiss. Lives in: London, UK. Founder of Example Labs; met at a conference, wants coffee when the owner is next in town.\n`,
     },
   }),
   maxQuestions: 0,
   state: (o) => {
-    const note = o.notes["context-whereabouts.md"] ?? "";
+    const note = o.notes["whereabouts.md"] ?? "";
     const description = /^description:(.*)$/m.exec(note)?.[1] ?? "";
     return [
       check("the whereabouts note still exists and its description names London", /london/i.test(description), description),
@@ -739,7 +739,7 @@ const e20: Case = {
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
-    s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Zurich; next London from ${s.time.day(1)} to ${s.time.day(5)} (flight ZU 318)\n---\nFlight ZU 318 Zurich - London on ${s.time.day(1)}, hotel Example Court until ${s.time.day(5)}. Source: calendar.\n`);
+    s.note("whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Zurich; next London from ${s.time.day(1)} to ${s.time.day(5)} (flight ZU 318)\n---\nFlight ZU 318 Zurich - London on ${s.time.day(1)}, hotel Example Court until ${s.time.day(5)}. Source: calendar.\n`);
   },
 };
 
@@ -750,12 +750,12 @@ const e20b: Case = {
   turns: ["I'm in Berlin now"],
   world: (t) => ({
     tasks: [{ title: "When in Berlin: buy a train pass for the week" }, { title: "When in London: meet Dana about the Example Labs intro" }],
-    notes: { "context-whereabouts.md": NOTE_ZURICH(t) },
+    notes: { "whereabouts.md": NOTE_ZURICH(t) },
   }),
   maxQuestions: 0,
   state: (o) => {
     const said = o.turns.flatMap((t) => t.messages).join("\n");
-    const description = /^description:(.*)$/m.exec(o.notes["context-whereabouts.md"] ?? "")?.[1] ?? "";
+    const description = /^description:(.*)$/m.exec(o.notes["whereabouts.md"] ?? "")?.[1] ?? "";
     return [
       check("the whereabouts description names Berlin", /berlin/i.test(description), description),
       check("the reply mentions the Berlin task", /train pass/i.test(said), said.slice(0, 200)),
@@ -767,7 +767,7 @@ const e20b: Case = {
   reply: ["It is short (three lines at most) and mentions the open task to buy a train pass for the week.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    s.note("context-whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Berlin since ${s.time.today}; no trip known\n---\nTold in chat: in Berlin.\n`);
+    s.note("whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Berlin since ${s.time.today}; no trip known\n---\nTold in chat: in Berlin.\n`);
     s.say("Welcome to Berlin. You have one thing waiting here: buy a train pass for the week.");
   },
 };
@@ -901,7 +901,7 @@ const e29: Case = {
     const ago = (h: number) => new Date(t.now.getTime() - h * 3_600_000).toISOString();
     const inv = (n: string, subject: string, body: string, h: number) => ({ from: { email: "calendar-notification@example.com", displayName: n }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
     return {
-      notes: { "context-onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. Onboarding sessions land in the calendar all week; I read the calendar directly.\n" },
+      notes: { "onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. Onboarding sessions land in the calendar all week; I read the calendar directly.\n" },
       calendar: [
         { summary: "Onboarding: tools and access", start: t.local(t.day(1), "09:30"), end: t.local(t.day(1), "10:30") },
         { summary: "Onboarding: security basics", start: t.local(t.day(1), "11:00"), end: t.local(t.day(1), "12:00") },
@@ -939,7 +939,7 @@ const e29: Case = {
 };
 
 // ---- e30: onboarding week backlog: setup mail, own-setup alerts, a Slack ping and routine invitations go; the one real thread stays ----
-const ONB_NOTE = { "context-onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. I set up my accounts myself (Slack, Notion, GitHub, Atlassian) and accept invitations in the calendar; I read Slack in Slack.\n" };
+const ONB_NOTE = { "onboarding.md": "---\ndescription: Onboarding\n---\nStarted a new job this week. I set up my accounts myself (Slack, Notion, GitHub, Atlassian) and accept invitations in the calendar; I read Slack in Slack.\n" };
 const e30: Case = {
   id: "e30",
   title: "an onboarding backlog: waits Ted cannot observe are resolved, only the real thread stays",
@@ -1031,9 +1031,9 @@ const e31 = (rigid: boolean): Case => ({
     const auto = (email: string, name: string, subject: string, body: string, h: number) => ({ from: { email, displayName: name }, subject, body: `<p>${body}</p>`, receivedAt: ago(h) });
     return {
       notes: {
-        ...(rigid ? { "triage-onboarding.md": "---\nname: triage-onboarding\ndescription: Onboarding mail\n---\nNever archive onboarding mail until he acted.\n" } : {}),
-        "context-onboarding-links.md": "---\nname: context-onboarding-links\ndescription: Needed the links of two archived onboarding mails; still setting up accounts\n---\nAsked for two archived onboarding mails back because the links in them were still needed to finish the account setup, so those were kept until used. Routine notices of the same kind (welcome, tips, digests, sign-in alerts) do not need that.\n",
-        "context-onboarding.md": "---\nname: context-onboarding\ndescription: Started a new job; still setting up accounts\n---\nStarted a new job this month and sets up the accounts by hand. Asked for two archived onboarding mails back because the links in them were still needed. Said the Gitbox invitation link is the one still to use, so that mail must stay in the inbox until then.\n",
+        ...(rigid ? { "onboarding-rule.md": "---\nname: onboarding-rule\ndescription: Onboarding mail\n---\nNever archive onboarding mail until he acted.\n" } : {}),
+        "onboarding-links.md": "---\nname: onboarding-links\ndescription: Needed the links of two archived onboarding mails; still setting up accounts\n---\nAsked for two archived onboarding mails back because the links in them were still needed to finish the account setup, so those were kept until used. Routine notices of the same kind (welcome, tips, digests, sign-in alerts) do not need that.\n",
+        "onboarding.md": "---\nname: onboarding\ndescription: Started a new job; still setting up accounts\n---\nStarted a new job this month and sets up the accounts by hand. Asked for two archived onboarding mails back because the links in them were still needed. Said the Gitbox invitation link is the one still to use, so that mail must stay in the inbox until then.\n",
       },
       mail: [
         auto("no-reply@example.com", "Slackline", "Your first week on Slackline", "Your weekly Slackline digest: three channels you might like.", 30),
@@ -1082,7 +1082,7 @@ const e32: Case = {
       { summary: "Dinner with the Example Labs team, Valmora", start: t.local(t.day(43), "19:30"), end: t.local(t.day(43), "22:00"), zone: t.zone, location: "Valmora" },
     ],
     notes: {
-      "context-valmora-stay.md": `---\nname: valmora-stay\ndescription: Planned stay in Valmora from ${t.day(30)} to ${t.day(44)}, flights not booked\n---\nPlan: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked yet; a tentative block is on the calendar. The team dinner is on ${t.day(43)}.\n`,
+      "valmora-stay.md": `---\nname: valmora-stay\ndescription: Planned stay in Valmora from ${t.day(30)} to ${t.day(44)}, flights not booked\n---\nPlan: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked yet; a tentative block is on the calendar. The team dinner is on ${t.day(43)}.\n`,
     },
   }),
   maxQuestions: 0,
@@ -1111,12 +1111,12 @@ const SAM_E = "sam.ortiz@example.com";
 const MIA_E = "mia.okoye@example.org";
 const whereaboutsNote = (desc: string, body: string): string => `---\nname: whereabouts\ndescription: ${desc}\n---\n${body}\n`;
 const routineBrief = (t: Time): string => `---\nname: daily-brief\ndescription: The daily brief\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n`; // (its slot came 30 minutes ago, whatever time the case runs at)
-const routineStay = (t: Time): string => `---\nname: stay-prep\ndescription: Stay prep\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nBring context-whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts.\n`; // (the same wording setup saves; its slot came 30 minutes ago)
+const routineStay = (t: Time): string => `---\nname: stay-prep\ndescription: Stay prep\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nBring whereabouts.md up to date from the calendar and the notes. For a stretch with something waiting that starts within about 5 days, or is under way and has had no pass yet, load ted-personal-assistant:stay-in-touch and do Before a stay. When nothing waits, or the pass was already done, answer with the silent marker your brief names. Otherwise one message of at most 3 short lines; never paste the drafts.\n`; // (the same wording setup saves; its slot came 30 minutes ago)
 // What the daily brief said: the bodies of its self-briefing mails (the one message a brief delivers).
 const briefBodies = (o: Outcome): string[] => o.calls.filter((c) => /send_self_briefing/.test(c.tool)).map((c) => String(c.args.markdownBody ?? ""));
 const spoken = (o: Outcome): string[] => o.turns.flatMap((x) => x.messages).filter((m) => m.trim() && !/\[\[silent\]\]/.test(m));
-const samNote = `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`;
-const miaNote = `---\nname: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`;
+const samNote = `---\nname: Sam Ortiz\nperson: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`;
+const miaNote = `---\nname: Mia Okoye\nperson: Mia Okoye\ndescription: Mia Okoye. Lives in: Valmora. Former colleague\n---\nMia Okoye. Lives in: Valmora. Former colleague; email ${MIA_E}. Busy, needs notice.\n`;
 // A busy owner: unrelated mail, tasks and events around the stay, so the pass has to stand out from the rest of the world.
 const busyWorld = (t: Time) => ({
   mail: Array.from({ length: 15 }, (_, i) => ({ from: { email: `sender${i + 1}@example.org`, displayName: `Sender ${i + 1}` }, subject: ["Invoice for March", "Agenda for Thursday", "Quick question", "Newsletter: spring offers", "Re: venue contract", "Parcel update"][i % 6]! + ` (${i + 1})`, body: `<p>Note number ${i + 1}, nothing to decide today.</p>`, receivedAt: new Date(t.now.getTime() - (i + 1) * 3_600_000).toISOString() })),
@@ -1136,7 +1136,7 @@ const stayDone = (o: Outcome, startDay: number, endDay: number): Check[] => {
     check("a guest-less hold is on the owner's calendar during the stay", !!hold, created(o).map((e) => e.summary).join("; ")),
     check("Mia's dated wish lost its due date and reminder", !!mia && !mia.due && !mia.remindAt, JSON.stringify({ due: mia?.due, r: mia?.remindAt })),
     check("the hotel deposit kept its due date", dep?.status === "open" && dep.due?.slice(0, 10) === o.time.day(startDay - 1), JSON.stringify({ s: dep?.status, due: dep?.due })),
-    check("whereabouts holds the first day of the stay", dateWords(o.time.day(startDay)).test(o.notes["context-whereabouts.md"] ?? ""), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("whereabouts holds the first day of the stay", dateWords(o.time.day(startDay)).test(o.notes["whereabouts.md"] ?? ""), (o.notes["whereabouts.md"] ?? "").slice(0, 200)),
     check("one short message, naming Valmora and the drafts", said.length === 1 && said[0]!.length < 700 && /valmora/i.test(said[0]!) && /draft/i.test(said[0]!), said.join(" | ").slice(0, 200)),
     check("the owner was not asked anything", o.asks.length === 0),
   ];
@@ -1148,7 +1148,7 @@ const stayPerfect = async (s: PerfectScript): Promise<void> => {
   await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: MIA_E, name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 5th. Coffee on the 8th at 10?</p>" });
   await s.tool(`${CAL}create_event`, { summary: "Hold: coffee with Sam (Valmora)", startTime: s.time.local(s.time.day(6), "10:00"), endTime: s.time.local(s.time.day(6), "11:00"), timeZone: s.time.zone });
   s.tasks.edit(s.tasks.find("Mia Okoye"), { due: null, remindAtMs: null });
-  s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, `At home. Valmora stay from ${s.time.day(4)} to ${s.time.day(18)} (calendar).`));
+  s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, `At home. Valmora stay from ${s.time.day(4)} to ${s.time.day(18)} (calendar).`));
   s.say("Your Valmora stay starts in 4 days. Drafts to Sam and Mia are ready, each proposing a coffee, and a hold is on your calendar. The rail pass is still open.");
 };
 const stayWorld = (t: Time, busy: boolean) => {
@@ -1164,10 +1164,10 @@ const stayWorld = (t: Time, busy: boolean) => {
       { title: "Pay the Valmora hotel deposit", due: t.day(3) },
     ],
     notes: {
-      "routine-stay-prep.md": routineStay(t),
-      "context-whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."),
-      "people-sam-ortiz.md": samNote,
-      "people-mia-okoye.md": miaNote,
+      "routines/stay-prep.md": routineStay(t),
+      "whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."),
+      "sam-ortiz.md": samNote,
+      "mia-okoye.md": miaNote,
     },
   };
 };
@@ -1193,12 +1193,12 @@ const e56: Case = {
   world: (t) => ({
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(4), "09:00"), end: t.local(t.day(18), "18:00"), zone: t.zone, location: "Valmora" }],
     tasks: [{ title: "Renew the library card", due: t.day(9) }],
-    notes: { "routine-stay-prep.md": routineStay(t), "context-whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."), "people-lena-hart.md": lenaNote },
+    notes: { "routines/stay-prep.md": routineStay(t), "whereabouts.md": whereaboutsNote("Whereabouts: home; no change known", "At home."), "lena-hart.md": lenaNote },
   }),
   maxQuestions: 0,
   state: (o) => [
     check("nothing was said", spoken(o).length === 0, spoken(o).join(" | ").slice(0, 200)),
-    check("whereabouts holds the first day of the stay", dateWords(o.time.day(4)).test(o.notes["context-whereabouts.md"] ?? ""), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("whereabouts holds the first day of the stay", dateWords(o.time.day(4)).test(o.notes["whereabouts.md"] ?? ""), (o.notes["whereabouts.md"] ?? "").slice(0, 200)),
     check("no drafts and no event created", o.mail.drafts().length === 0 && created(o).length === 0),
     check("the owner was not asked anything", o.asks.length === 0),
   ],
@@ -1207,7 +1207,7 @@ const e56: Case = {
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
-    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, "At home. Valmora stay (calendar)."));
+    s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, "At home. Valmora stay (calendar)."));
   },
 };
 const noorOk = (o: Outcome): boolean => {
@@ -1220,11 +1220,11 @@ const e34: Case = {
   turns: ["The Valmora trip has moved a week later"],
   world: (t) => ({
     tasks: [{ title: "When in Valmora: coffee with Sam" }, { title: `Meet Noor during the Valmora stay (around ${t.day(33)})`, details: `Planned for ${t.day(33)}, to be confirmed`, due: t.day(33) }, { title: "Renew the library card", due: t.day(33) }],
-    notes: { "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(30)} to ${t.day(44)}`, `At home. Valmora stay from ${t.day(30)} to ${t.day(44)}.`) },
+    notes: { "whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(30)} to ${t.day(44)}`, `At home. Valmora stay from ${t.day(30)} to ${t.day(44)}.`) },
   }),
   maxQuestions: 0,
   state: (o) => [
-    check("the whereabouts note holds the new first day", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(37)), (o.notes["context-whereabouts.md"] ?? "").slice(0, 200)),
+    check("the whereabouts note holds the new first day", (o.notes["whereabouts.md"] ?? "").includes(o.time.day(37)), (o.notes["whereabouts.md"] ?? "").slice(0, 200)),
     check("the Noor task no longer repeats the old day in its title or due date", noorOk(o), JSON.stringify(o.tasks.filter((x) => /noor/i.test(x.title)).map((x) => ({ t: x.title, due: x.due })))),
     check("the unrelated dated task is unchanged", o.tasks.some((x) => x.title === "Renew the library card" && x.status === "open" && x.due?.slice(0, 10) === o.time.day(33))),
     check("the owner was not asked anything", o.asks.length === 0),
@@ -1233,7 +1233,7 @@ const e34: Case = {
   reply: ["It confirms in a line or two that the Valmora stay now starts a week later.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(37)} to ${s.time.day(51)}`, `Moved a week later by the owner.`));
+    s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(37)} to ${s.time.day(51)}`, `Moved a week later by the owner.`));
     s.tasks.edit(s.tasks.find("Noor"), { title: "Meet Noor during the Valmora stay", due: s.time.day(40) });
     s.say(`Done: the Valmora stay now starts on ${s.time.day(37)}.`);
   },
@@ -1247,11 +1247,11 @@ const e35: Case = {
   world: (t) => ({
     tasks: [{ title: "When in Valmora: coffee with Sam" }],
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(20), "09:00"), end: t.local(t.day(30), "18:00"), zone: t.zone, location: "Valmora" }],
-    notes: { "routine-stay-prep.md": routineStay(t), "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
+    notes: { "routines/stay-prep.md": routineStay(t), "valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan: working from Valmora from ${t.day(20)} to ${t.day(30)}\n---\nWorking from Valmora from ${t.day(20)} to ${t.day(30)}. Flights not booked yet.\n` },
   }),
   maxQuestions: 0,
   state: (o) => [
-    check("context-whereabouts.md holds the first day", (o.notes["context-whereabouts.md"] ?? "").includes(o.time.day(20)), Object.keys(o.notes).join(", ")),
+    check("whereabouts.md holds the first day", (o.notes["whereabouts.md"] ?? "").includes(o.time.day(20)), Object.keys(o.notes).join(", ")),
     check("no drafts yet", o.mail.drafts().length === 0),
     check("nothing was said about drafts for the stay", !spoken(o).some((m) => /draft/i.test(m))),
     check("the owner was not asked anything", o.asks.length === 0),
@@ -1261,7 +1261,7 @@ const e35: Case = {
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
-    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(20)} to ${s.time.day(30)} (draft)`, "Planned stay, flights not booked."));
+    s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(20)} to ${s.time.day(30)} (draft)`, "Planned stay, flights not booked."));
   },
 };
 
@@ -1271,14 +1271,14 @@ const e36: Case = {
   turns: ["Remind me to have lunch with Priya next time I'm in Valmora"],
   world: (t) => ({
     notes: {
-      "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan, written ${t.day(-20)}: Valmora from ${t.day(30)} to ${t.day(44)}\n---\nPlan written ${t.day(-20)}: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked.\n`,
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(27)} to ${t.day(41)}`, `Updated ${t.day(-2)} after the flights were booked: Valmora from ${t.day(27)} to ${t.day(41)}.`),
+      "valmora-plan.md": `---\nname: valmora-plan\ndescription: Plan, written ${t.day(-20)}: Valmora from ${t.day(30)} to ${t.day(44)}\n---\nPlan written ${t.day(-20)}: working from Valmora from ${t.day(30)} to ${t.day(44)}. Flights not booked.\n`,
+      "whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(27)} to ${t.day(41)}`, `Updated ${t.day(-2)} after the flights were booked: Valmora from ${t.day(27)} to ${t.day(41)}.`),
     },
   }),
   maxQuestions: 0,
   state: (o) => {
     const said = o.turns.flatMap((x) => x.messages).join("\n");
-    const plan = o.notes["context-valmora-plan.md"] ?? "";
+    const plan = o.notes["valmora-plan.md"] ?? "";
     const task = o.tasks.find((x) => /lunch.*priya/i.test(x.title));
     return [
       check("the reply names the newer first day", dateWords(o.time.day(27)).test(said), said.slice(0, 200)),
@@ -1293,28 +1293,28 @@ const e36: Case = {
   perfect: async (s) => {
     s.turn(0);
     s.tasks.add({ title: "When in Valmora: lunch with Priya" });
-    s.note("context-valmora-plan.md", `---\nname: valmora-plan\ndescription: Plan: Valmora from ${s.time.day(27)} to ${s.time.day(41)}\n---\nWorking from Valmora from ${s.time.day(27)} to ${s.time.day(41)}. Flights booked.\n`);
+    s.note("valmora-plan.md", `---\nname: valmora-plan\ndescription: Plan: Valmora from ${s.time.day(27)} to ${s.time.day(41)}\n---\nWorking from Valmora from ${s.time.day(27)} to ${s.time.day(41)}. Flights booked.\n`);
     s.say(`Saved: when in Valmora, lunch with Priya. Your stay starts on ${s.time.day(27)}.`);
   },
 };
 
 const LENA_E = "lena.hart@example.com";
-const lenaNote = `---\nname: Lena Hart\ndescription: Lena Hart. Lives in: Ostrand. Friend\n---\nLena Hart. Lives in: Ostrand. Friend; email ${LENA_E}. Sees the owner every week.\n`;
+const lenaNote = `---\nname: Lena Hart\nperson: Lena Hart\ndescription: Lena Hart. Lives in: Ostrand. Friend\n---\nLena Hart. Lives in: Ostrand. Friend; email ${LENA_E}. Sees the owner every week.\n`;
 const e37: Case = {
   id: "e37",
   title: "'next time I'm in Ostrand, coffee with Lena' while away in Valmora until day 8, home in Ostrand after: place-first task, no due date, the reply gives day 8",
   turns: ["Next time I'm in Ostrand, coffee with Lena"],
   world: (t) => ({
     notes: {
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(8)}; then home in Ostrand`, `In Valmora until ${t.day(8)}, then back home in Ostrand (home city).`),
-      "people-lena-hart.md": lenaNote,
+      "whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(8)}; then home in Ostrand`, `In Valmora until ${t.day(8)}, then back home in Ostrand (home city).`),
+      "lena-hart.md": lenaNote,
     },
   }),
   maxQuestions: 0,
   state: (o) => {
     const said = o.turns.flatMap((x) => x.messages).join("\n");
     const task = o.tasks.find((x) => /coffee.*lena/i.test(x.title));
-    const w = o.notes["context-whereabouts.md"] ?? "";
+    const w = o.notes["whereabouts.md"] ?? "";
     return [
       check("the coffee task leads with the place", /^\W*(when in |in )?ostrand/i.test(task?.title ?? ""), task?.title),
       check("it has no due date", !!task && !task.due, task?.due),
@@ -1340,8 +1340,8 @@ const e39: Case = {
   world: (t) => ({
     calendar: [{ summary: "Dentist", start: t.local(t.day(2), "10:00"), end: t.local(t.day(2), "11:00"), zone: t.zone, location: "Ostrand" }],
     notes: {
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand (home); no change known`, `At home in Ostrand.`),
-      "people-lena-hart.md": lenaNote,
+      "whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand (home); no change known`, `At home in Ostrand.`),
+      "lena-hart.md": lenaNote,
     },
   }),
   maxQuestions: 0,
@@ -1368,8 +1368,8 @@ const e38: Case = {
   turns: ["Next time I'm in Ostrand, coffee with Lena"],
   world: (t) => ({
     notes: {
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand until ${t.day(6)}; next Valmora from ${t.day(6)} to ${t.day(20)}`, `In Ostrand until ${t.day(6)}, then Valmora ${t.day(6)} to ${t.day(20)}.`),
-      "people-lena-hart.md": lenaNote.replace("Sees the owner every week.", "Has not seen the owner in months."),
+      "whereabouts.md": whereaboutsNote(`Whereabouts: Ostrand until ${t.day(6)}; next Valmora from ${t.day(6)} to ${t.day(20)}`, `In Ostrand until ${t.day(6)}, then Valmora ${t.day(6)} to ${t.day(20)}.`),
+      "lena-hart.md": lenaNote.replace("Sees the owner every week.", "Has not seen the owner in months."),
     },
   }),
   maxQuestions: 0,
@@ -1400,9 +1400,9 @@ const e40: Case = {
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(-2), "09:00"), end: t.local(t.day(12), "18:00"), zone: t.zone, location: "Valmora" }],
     tasks: [{ title: "When in Valmora: coffee with Sam" }],
     notes: {
-      "routine-stay-prep.md": routineStay(t),
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(12)}`, `In Valmora from ${t.day(-2)} to ${t.day(12)} (calendar).`),
-      "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
+      "routines/stay-prep.md": routineStay(t),
+      "whereabouts.md": whereaboutsNote(`Whereabouts: Valmora until ${t.day(12)}`, `In Valmora from ${t.day(-2)} to ${t.day(12)} (calendar).`),
+      "sam-ortiz.md": `---\nname: Sam Ortiz\nperson: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
     },
   }),
   maxQuestions: 0,
@@ -1435,9 +1435,9 @@ const e41: Case = {
       { from: { email: OWNER_EMAIL, displayName: "Owner" }, to: [SAM_E], subject: "Coffee in Valmora?", body: `<p>Hi Sam, I am in Valmora from ${t.day(4)}. Coffee on ${t.day(6)} at 10?</p>`, receivedAt: new Date(t.now.getTime() - 86_400_000).toISOString(), folder: "drafts", read: true },
     ],
     notes: {
-      "routine-stay-prep.md": routineStay(t),
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(4)} to ${t.day(18)}`, `At home. Valmora stay from ${t.day(4)} to ${t.day(18)} (calendar).`),
-      "people-sam-ortiz.md": `---\nname: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
+      "routines/stay-prep.md": routineStay(t),
+      "whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(4)} to ${t.day(18)}`, `At home. Valmora stay from ${t.day(4)} to ${t.day(18)} (calendar).`),
+      "sam-ortiz.md": `---\nname: Sam Ortiz\nperson: Sam Ortiz\ndescription: Sam Ortiz. Lives in: Valmora. Friend from a conference\n---\nSam Ortiz. Lives in: Valmora. Friend from a conference; email ${SAM_E}. Wants coffee whenever the owner is in town.\n`,
     },
   }),
   maxQuestions: 0,
@@ -1491,14 +1491,14 @@ const e44: Case = {
   world: (t) => ({
     calendar: [{ summary: "Valmora stay", start: t.local(t.day(10), "09:00"), end: t.local(t.day(24), "18:00"), zone: t.zone, location: "Valmora" }],
     notes: {
-      "routine-daily-brief.md": routineBrief(t),
-      "context-valmora-plan.md": `---\nname: valmora-plan\ndescription: Valmora stay moved to ${t.day(17)} to ${t.day(31)}\n---\nWritten ${t.day(-1)}: the Valmora stay moved a week later, ${t.day(17)} to ${t.day(31)}. The original booking is cancelled; the calendar entry has not been changed yet.\n`,
-      "context-whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(10)} to ${t.day(24)}`, `At home. Valmora stay from ${t.day(10)} to ${t.day(24)} (calendar).`),
+      "routines/daily-brief.md": routineBrief(t),
+      "valmora-plan.md": `---\nname: valmora-plan\ndescription: Valmora stay moved to ${t.day(17)} to ${t.day(31)}\n---\nWritten ${t.day(-1)}: the Valmora stay moved a week later, ${t.day(17)} to ${t.day(31)}. The original booking is cancelled; the calendar entry has not been changed yet.\n`,
+      "whereabouts.md": whereaboutsNote(`Whereabouts: home; next Valmora from ${t.day(10)} to ${t.day(24)}`, `At home. Valmora stay from ${t.day(10)} to ${t.day(24)} (calendar).`),
     },
   }),
   maxQuestions: 0,
   state: (o) => {
-    const w = o.notes["context-whereabouts.md"] ?? "";
+    const w = o.notes["whereabouts.md"] ?? "";
     const desc = /^description:\s*(.*)$/m.exec(w)?.[1] ?? "";
     return [
       check("the whereabouts body follows the newer plan note", w.includes(o.time.day(17)), w.slice(0, 250)),
@@ -1512,7 +1512,7 @@ const e44: Case = {
   perfect: async (s) => {
     s.turn(0);
     await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
-    s.note("context-whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(17)} to ${s.time.day(31)}`, `At home. Valmora stay moved to ${s.time.day(17)} to ${s.time.day(31)} (plan note, newer than the calendar).`));
+    s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(17)} to ${s.time.day(31)}`, `At home. Valmora stay moved to ${s.time.day(17)} to ${s.time.day(31)} (plan note, newer than the calendar).`));
     await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Today\nNothing pressing." });
     s.say("Your brief is in your inbox.");
   },
@@ -1526,13 +1526,13 @@ const e45: Case = {
   world: (t) => ({
     tasks: [{ title: "Pay the Valmora hotel deposit", due: t.day(3) }, { title: "Ask host about parking", details: "maybe the stay is a few days later?" }],
     mail: [{ from: { email: "bookings.valmorahotel@example.com", displayName: "Valmora Hotel" }, subject: "Your upcoming deposit", body: `<p>Your deposit of EUR 200 will be requested on ${t.day(3)}. A payment link will follow.</p>`, receivedAt: new Date(t.now.getTime() - 3 * 3_600_000).toISOString(), read: false }],
-    notes: { "context-lodging-valmora.md": lodgingNote(t) },
+    notes: { "lodging-valmora.md": lodgingNote(t) },
   }),
   maxQuestions: 0,
   state: (o) => [
     check("the deposit task is still open", o.tasks.find((x) => /deposit/i.test(x.title))?.status === "open", o.tasks.find((x) => /deposit/i.test(x.title))?.status),
     check("the parking task is still open and unchanged", o.tasks.some((x) => x.title === "Ask host about parking" && x.status === "open")),
-    check("the lodging note is not corrected: it still says one room through the site", /one room[^.]*booked through the site/i.test(o.notes["context-lodging-valmora.md"] ?? "") && (o.notes["context-lodging-valmora.md"] ?? "").includes(o.time.day(33)), (o.notes["context-lodging-valmora.md"] ?? "").slice(0, 250)),
+    check("the lodging note is not corrected: it still says one room through the site", /one room[^.]*booked through the site/i.test(o.notes["lodging-valmora.md"] ?? "") && (o.notes["lodging-valmora.md"] ?? "").includes(o.time.day(33)), (o.notes["lodging-valmora.md"] ?? "").slice(0, 250)),
     ...lookOk(o),
   ],
   never: (o) => [...sends(o), ...deletes(o)],
@@ -1692,7 +1692,7 @@ const e48: Case = {
   turns: [],
   look: true,
   world: (t) => ({
-    notes: { "context-roadmap.md": "---\ndescription: Roadmap review\n---\nI told Dana by phone that Thursday afternoon works for the roadmap review. Just confirm it in writing for me.\n" },
+    notes: { "roadmap.md": "---\ndescription: Roadmap review\n---\nI told Dana by phone that Thursday afternoon works for the roadmap review. Just confirm it in writing for me.\n" },
     mail: [{ from: { email: DANA_W, displayName: "Dana Reyes" }, subject: "Roadmap review: when can you do it?", body: "<p>Hi, we need 45 minutes for the Q4 roadmap review this week. When suits you? Dana</p>", receivedAt: new Date(t.now.getTime() - 5 * 3_600_000).toISOString() }],
   }),
   maxQuestions: 0,
@@ -1714,14 +1714,14 @@ const e48: Case = {
   },
 };
 
-// ---- e50: the list of hard names the voice transcriber is given (context-hard-names.md) ----
+// ---- e50: the list of hard names the voice transcriber is given (hard-names.md) ----
 const VOICE = "[Voice message, transcribed automatically, so words may be misheard]";
-const hardNames = (o: Outcome) => o.notes["context-hard-names.md"] ?? "";
+const hardNames = (o: Outcome) => o.notes["hard-names.md"] ?? "";
 const e50: Case = {
   id: "e50",
   title: "an ordinary voice message with common names leaves the list of hard names unchanged",
   turns: [`${VOICE} Remind me on Friday to call Greta and Paul about the lunch.`],
-  world: () => ({ notes: { "context-hard-names.md": "---\nname: hard names\ndescription: spellings for the voice transcriber\n---\nWojciech Czarnecki\n" } }),
+  world: () => ({ notes: { "hard-names.md": "---\nname: hard names\ndescription: spellings for the voice transcriber\n---\nWojciech Czarnecki\n" } }),
   maxQuestions: 0,
   state: (o) => [check("the list of hard names is unchanged", hardNames(o).replace(/^---[\s\S]*?---/, "").trim() === "Wojciech Czarnecki", hardNames(o)), check("a task was added", o.tasks.length >= 1)],
   never: (o) => sends(o),
@@ -1749,7 +1749,7 @@ const e51: Case = {
       { title: "Read the gardening book", focus: true },
       { title: "Prepare numbers for the budget review", due: t.today },
     ],
-    notes: { "routine-daily-brief.md": routineBrief(t) },
+    notes: { "routines/daily-brief.md": routineBrief(t) },
   }),
   maxQuestions: 0,
   state: (o) => {
@@ -1930,7 +1930,7 @@ const e59: Case = {
   look: true,
   world: (t) => ({
     tasks: [sliding("Decide what to do with the old storage unit", t, { due: t.day(-3), moves: 9, remind: false })],
-    notes: { "routine-weekly-review.md": routineWeekly(t) },
+    notes: { "routines/weekly-review.md": routineWeekly(t) },
   }),
   maxQuestions: 0,
   state: (o) => {

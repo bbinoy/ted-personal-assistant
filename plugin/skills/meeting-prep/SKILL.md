@@ -40,14 +40,14 @@ If unsure, treat it as needs-prep but keep the draft short.
 
 ## Where prep pages live (from the owner's notes)
 
-The owner's `setup-meetings` note says where meeting pages go: a **database**
+The owner's `setup/meetings` note says where meeting pages go: a **database**
 (with its URL, data source id, property names, default template and an "all
 meetings" view) or a **parent page** whose sub-pages are the prep pages. Use
 exactly that; do not guess a location.
 
 **If the Notion tools (`notion-search`, `notion-fetch`) do not exist** (the connector is not connected in the owner's Claude account), say so plainly, never guess or invent meeting prep data, skip this part, and in the daily brief say it in one line: "🔌 <connector> isn't connected, so meeting prep was skipped." In chat, add how to fix it: connect it under Settings, Connectors in their Claude account, then message you again.
 
-**If there is no `setup-meetings` note** (a look cannot save notes):
+**If there is no `setup/meetings` note** (a look cannot save notes):
 - in chat, find it yourself and save it: load `ted-personal-assistant:setup` (it searches Notion
   for the meetings database or page, saves the note, and asks the owner only if it
   finds nothing or several candidates), then carry on with the owner's request;

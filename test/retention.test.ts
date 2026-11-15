@@ -334,7 +334,7 @@ test("dream undo ignores the expired/ holding folder (it sorts after every snaps
   put(join(notes, "people-a.md"), "changed");
   put(join(backups, "2026-06-01T00-00-00-000Z", "people-a.md"), "original");
   put(join(backups, "expired", "2026-01-01-people-b.md"), "set aside");
-  const r = undoLatest({ notesDir: notes, backupsDir: backups, categories: ["people"], maxNotes: 100 });
+  const r = undoLatest({ notesDir: notes, backupsDir: backups, maxNotes: 100 });
   assert.equal(r.ok, true);
   assert.equal(readFileSync(join(notes, "people-a.md"), "utf8"), "original");
   assert.ok(existsSync(join(backups, "expired", "2026-01-01-people-b.md")));

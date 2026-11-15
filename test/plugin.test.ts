@@ -35,17 +35,17 @@ test("plugin: skills hold no personal details, only references to the owner's no
 test("plugin: every skill that needs setup names the note it reads, and setup saves under those names", () => {
   const setup = readFileSync(join(skillsDir, "setup", "SKILL.md"), "utf8");
   for (const item of setupItems()) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
-  for (const [skill, note] of [["calendar", "setup-calendars"], ["meeting-prep", "setup-meetings"], ["mail", "voice-writing"]] as const) {
+  for (const [skill, note] of [["calendar", "setup/calendars"], ["meeting-prep", "setup/meetings"], ["mail", "setup/voice-writing"]] as const) {
     assert.ok(readFileSync(join(skillsDir, skill, "SKILL.md"), "utf8").includes(note), `${skill} reads ${note}`);
   }
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));
 });
 
 test("setup: missing items are listed, in prompts as an offer in chat and a skip-and-say elsewhere", () => {
-  const note = (file: string): Note => ({ file, category: file.startsWith("voice") ? "voice" : "setup", text: "x" });
+  const note = (file: string): Note => ({ file, class: "setup", text: "x" });
   assert.equal(missingSetup([]).length, setupItems().length);
   assert.deepEqual(missingSetup(setupItems().map((i) => note(i.file))), []);
-  assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
+  assert.equal(missingSetup([note("setup/calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(chatContext({ missing }, false)!, /You cannot ask anyone[\s\S]*message "set up"/);

@@ -37,7 +37,7 @@ test("walkNotes: relative paths, sorted; only .md, no index, no dot files, no de
   symlinkSync(join(outside, "o.md"), join(d, "l.md"));
   assert.deepEqual(walkNotes(d), ["a/x.md", "b.md"]);
   assert.deepEqual(walkNotes(join(d, "missing")), []);
-  assert.deepEqual(readNotes(new Date(), d).map((n) => n.file), []); // (no category in these names: invisible, as an unknown prefix always was)
+  assert.deepEqual(readNotes(new Date(), d).map((n) => n.file), ["a/x.md", "b.md"]);
 });
 
 test("note paths: one folder level, no dot, no traversal", () => {
@@ -66,18 +66,18 @@ test("caps: a new page in a folder counts toward the note cap", () => {
 
 test("dream: the notes it reads include folders, the plan may name one, the snapshot and undo bring folders back", () => {
   const d = tmp();
-  const scope = { notesDir: join(d, "notes"), backupsDir: join(d, "backups"), categories: ["people"], maxNotes: 100 };
+  const scope = { notesDir: join(d, "notes"), backupsDir: join(d, "backups"), maxNotes: 100 };
   put(scope.notesDir, "people-a.md", "old");
   put(scope.notesDir, "trips/lisbon.md", "kept");
-  put(scope.notesDir, "status-brief.md", "mine");
+  put(scope.notesDir, "status/brief.md", "mine");
   assert.deepEqual(readNoteFiles(scope.notesDir).map((n) => n.file), ["people-a.md", "trips/lisbon.md"], "status is not the dream's");
   const plan = planOps({ ops: [{ op: "write", file: "people-a.md", description: "d", text: "new" }, { op: "write", file: "trips/x.md", description: "d", text: "z" }, { op: "write", file: "a/b/c.md", description: "d", text: "z" }] }, { ownerText: "", notes: readNoteFiles(scope.notesDir), today: "2026-05-03", now: new Date("2026-05-03T10:00:00Z"), scope });
-  assert.deepEqual(plan.actions.map((a) => a.file), ["people-a.md"], "(a folder page is writable once classes land; a second folder level never)");
+  assert.deepEqual(plan.actions.map((a) => a.file), ["people-a.md", "trips/x.md"], "a page in a folder of the model's own is writable; a second folder level never");
   applyPlan(plan, new Date("2026-05-03T10:00:00Z"), scope);
   put(scope.notesDir, "trips/new.md", "made after");
   const r = undoLatest(scope);
   assert.equal(r.ok, true);
-  assert.deepEqual(walkNotes(scope.notesDir), ["people-a.md", "status-brief.md", "trips/lisbon.md"]);
+  assert.deepEqual(walkNotes(scope.notesDir), ["people-a.md", "status/brief.md", "trips/lisbon.md"]);
   assert.match(readFileSync(join(scope.notesDir, "people-a.md"), "utf8"), /old/);
   assert.ok(!existsSync(join(scope.notesDir, "trips", "new.md")));
 });

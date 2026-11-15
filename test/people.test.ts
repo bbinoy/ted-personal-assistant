@@ -27,11 +27,13 @@ const { GOOGLE_PREFIX, GOOGLE_TOOLS } = await import("../src/modules/google/modu
 // find_person (src/modules/people): the address book of ONE conversation. Ranking and dedupe by address, the notes-only path, sources that are down reported and never failing,
 // isolation (a group has its notes only; a friend never sees the owner's; each conversation its own), and approvals that do not care where an address came from.
 
-const note = (file: string, body: string) => parseNote(file, body)!;
+// A page about a person has `person: Full Name` in its front matter (here: the page's first words, for a file named people-*; any other page is none).
+const raw = (file: string, body: string, person?: string): string => { const who = person ?? (file.startsWith("people-") ? body.split(".")[0] : undefined); return who ? `---\nperson: ${JSON.stringify(who)}\n---\n${body}` : body; };
+const note = (file: string, body: string, person?: string) => parseNote(file, raw(file, body, person))!;
 const notesDir = (files: Record<string, string>): string => {
   const d = mkdtempSync(join(dir, "notes-"));
   mkdirSync(d, { recursive: true });
-  for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), t);
+  for (const [f, t] of Object.entries(files)) writeFileSync(join(d, f), raw(f, t));
   return d;
 };
 const CONTACTS = `Search Results for 'sam' (2 found):
@@ -53,9 +55,9 @@ test("people: addresses and phones are read out of a note's text, a date is no p
   assert.deepEqual(contactsIn("Lives in Lisbon. Birthday 14 March, due 2026-11-02."), { emails: [], phones: [] });
 });
 
-test("people: a note names the person by its first words, else by its file; only people notes are people", () => {
-  assert.equal(fromNote(note("people-mara-silva.md", "Mara Silva. Lives in: Lisbon. mara@silva.example"))?.name, "Mara Silva");
-  assert.equal(fromNote(note("people-rui.md", "Lives in Porto, close friend. rui@example.pt"))?.name, "Rui", "an opening that does not carry the file's name is not the name");
+test("people: a page with a person: field is a candidate named by it; any other page is no person", () => {
+  assert.equal(fromNote(note("mara-silva.md", "Mara Silva. Lives in: Lisbon. mara@silva.example", "Mara Silva"))?.name, "Mara Silva");
+  assert.equal(fromNote(note("rui.md", "Lives in Porto, close friend. rui@example.pt", "Rui Alves"))?.name, "Rui Alves", "the field is the name, whatever the page opens with");
   assert.equal(fromNote(note("style-short.md", "Keep it short. a@b.example")), undefined);
 });
 
@@ -87,7 +89,7 @@ test("people: ranking and dedupe by address, notes before contacts, a person in 
 test("people: the notes-only path says what it used and what it could not", async () => {
   const d = notesDir({ "people-sam-carter.md": "Sam Carter. Lives in Leeds. sam.carter@example.com", "people-sam-lee.md": "Sam Lee. sam.lee@example.net", "style-x.md": "Short. x@y.example" });
   const out = await findPerson("sam", { notesDir: d, contactsWhy: "a group has no contacts of its own" });
-  assert.match(out, /Sources used: people notes \(2\)\./);
+  assert.match(out, /Sources used: pages about people \(2\)\./);
   assert.match(out, /Not available: Google Contacts \(a group has no contacts of its own\)\./);
   assert.match(out, /Not available: recent correspondents in mail/);
   assert.match(out, /1\. Sam Carter: sam\.carter@example\.com\. From: people-sam-carter\.md\./);
@@ -104,7 +106,7 @@ test("people: a source that fails is reported unavailable, the others still answ
   assert.match(out, /Not available: Google Contacts \(she has not connected Google, or her permission expired\)\./);
   assert.match(out, /1\. Sam Carter: sam\.carter@example\.com/);
   const ok = await findPerson("sam", { notesDir: d, contactsWhy: "", contacts: async () => CONTACTS });
-  assert.match(ok, /Sources used: people notes \(1\), Google Contacts\./);
+  assert.match(ok, /Sources used: pages about people \(1\), Google Contacts\./);
   assert.match(ok, /1\. Sam Carter: sam\.carter@example\.com, sam@home\.example, tel \+44 7700 900123\. From: people-sam-carter\.md; Google Contacts\./);
   assert.match(ok, /Samantha Reyes: samantha@example\.org/);
 });

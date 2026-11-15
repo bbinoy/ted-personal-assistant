@@ -3,7 +3,7 @@
 // keeps the run away from every real account (guard.ts). A look goes through createHeartbeatLook, the code a heartbeat look uses.
 // Import it only AFTER HARNESS_DATA_DIR and TZ are set (scripts/e2e-case.ts does): the application reads them when it is loaded.
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { settings } from "../../src/core/settings.ts";
 import { OWNER_KEY } from "../../src/core/ownerkey.ts";
@@ -35,6 +35,7 @@ import { fireReminders } from "../../src/heartbeat/remindtick.ts";
 import { createHeartbeatLook } from "../../src/heartbeat/look.ts";
 import { LOGIN } from "../../src/tenants/payer.ts";
 import { dreamOver, dreamPrompt, readNoteFiles, runnerFor } from "../../src/conversation/dream.ts";
+import { walkNotes } from "../../src/memory/notes.ts";
 import { dreamScope } from "../../src/modules/memory/dreamscope.ts";
 import { dreamSystem } from "../../src/run/persona.ts";
 import { localTime } from "../../src/core/timezone.ts";
@@ -73,16 +74,16 @@ export interface PlayResult {
 
 // The setup notes the skills look for (modules' `setup`), so that no run starts by setting up; the content is fictional.
 const SETUP_TEXT: Record<string, string> = {
-  "setup-calendars.md": "Calendars to check: the primary calendar only. Time zone: {{zone}}. Travel bookings go on the primary calendar.",
-  "setup-meetings.md": "Meeting notes are not kept in Notion in this setup.",
-  "voice-writing.md": "Short, warm, plain. No exclamation marks. Sign off with just the first name.",
+  "setup/calendars.md": "Calendars to check: the primary calendar only. Time zone: {{zone}}. Travel bookings go on the primary calendar.",
+  "setup/meetings.md": "Meeting notes are not kept in Notion in this setup.",
+  "setup/voice-writing.md": "Short, warm, plain. No exclamation marks. Sign off with just the first name.",
 };
 
 function seedNotes(zone: string, extra: Record<string, string> = {}): void {
   const dir = owner().notesDir;
   rmSync(dir, { recursive: true, force: true }); // (a case starts from its own notes, not an earlier case's in the same data folder)
   mkdirSync(dir, { recursive: true });
-  for (const i of setupItems()) writeFileSync(join(dir, i.file), (SETUP_TEXT[i.file] ?? `Set up for the evaluation: ${i.label}.`).replace("{{zone}}", zone));
+  for (const i of setupItems()) mkdirSync(dirname(join(dir, i.file)), { recursive: true }), writeFileSync(join(dir, i.file), (SETUP_TEXT[i.file] ?? `Set up for the evaluation: ${i.label}.`).replace("{{zone}}", zone));
   for (const [file, text] of Object.entries(extra)) {
     mkdirSync(dirname(join(dir, file)), { recursive: true });
     writeFileSync(join(dir, file), text);
@@ -329,7 +330,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         const scope = dreamScope(conv);
         const lines = c.turns.map((t) => `[${localTime(o.now.toISOString())}] ${settings.owner}: ${t}`);
         const notes = readNoteFiles(scope.notesDir);
-        const system = dreamSystem({ subject: settings.owner, kind: "owner", categories: scope.categories });
+        const system = dreamSystem({ subject: settings.owner, kind: "owner" });
         await dreamOver(scope, dreamPrompt(o.now, settings.owner, notes, lines, []), system, c.turns.join("\n"), o.now, runnerFor(LOGIN, (usd) => void (dreamCost += usd)));
         snapshot("(a dream)");
       } else if (c.look) {
@@ -344,7 +345,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         };
         const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (cv, payer, build, extra) => runLook(cv, payer, build, approveIn(cv.key, { background: true }), extra, { now: o.now, io: { query: realQuery } }), may: () => LOGIN, why: () => "refused", notesChangedAt: () => 0 });
         recordMessage("owner", nowMs - 3_600_000, "morning", new Date(nowMs - 3_600_000)); // (a conversation with some history, as a look finds it)
-        for (const f of readdirSync(owner().notesDir).filter((x) => x.startsWith("routine-"))) liveConvDb(conv)?.run("INSERT OR IGNORE INTO routine_runs (name, since) VALUES (?, ?)", f.replace(/\.md$/, ""), nowMs - 86_400_000); // (a routine note seeded by the case has been known since yesterday, so today's slot is due)
+        for (const f of walkNotes(owner().notesDir).filter((x) => x.startsWith("routines/"))) liveConvDb(conv)?.run("INSERT OR IGNORE INTO routine_runs (name, since) VALUES (?, ?)", f.replace(/^.*\//, "").replace(/\.md$/, ""), nowMs - 86_400_000); // (a routine note seeded by the case has been known since yesterday, so today's slot is due)
         await fireReminders(pipeline as never, conv, o.now); // (the wake tick claims a reminder that came due, which is what wakes the look with its reason)
         const outcome = await hb.look(conv, lookState(ledgerEntries(conv.logFile)), o.now);
         if (outcome !== "silent" && outcome !== "posted") error = `the look ended ${outcome}`;
@@ -371,7 +372,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(readdirSync(owner().notesDir, { recursive: true }).map(String).filter((f) => f.endsWith(".md")).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(walkNotes(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
   if (!error && guard.inits === 0 && !o.perfect && !c.group && !c.dream) guard.violations.push("no start-up message was checked"); // (a group the gate leaves unanswered starts no run at all)
   await web?.close();
   return {

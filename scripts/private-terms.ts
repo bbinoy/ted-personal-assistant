@@ -1,6 +1,6 @@
 // The private-terms and prompt-date checks behind `npm run check:secrets` and the commit-msg hook.
 // Terms come from two ignored places in the MAIN checkout (a worktree finds it through git's common dir):
-//   conversations/owner/notes/people-<slug>.md  -> only the FILE NAMES are read: each slug word of 4+ letters
+//   conversations/owner/notes/**.md             -> only the NAMES are read: each word of 4+ letters of a page's front matter `person:` (and, until the pages are migrated, of a legacy people-<slug>.md file name)
 //   plans/private-terms.txt                      -> lines `deny: <term>`, `allow: <term>`, `allow-file: <path regex>`; allow always wins
 // Neither there (CI, a fresh clone): the check is skipped and passes. Findings print the rule name, never the term.
 import { execFileSync } from "node:child_process";
@@ -30,9 +30,16 @@ export function loadTerms(root: string | undefined): Terms | undefined {
   const notes = join(root, "conversations", "owner", "notes");
   if (existsSync(notes)) {
     any = true;
-    for (const f of readdirSync(notes)) {
-      const slug = f.normalize("NFC").match(/^people-(.+)\.md$/)?.[1];
-      for (const w of slug?.split("-") ?? []) if (/^[\p{L}\p{M}]{4,}$/u.test(w)) deny.add(w[0]!.toUpperCase() + w.slice(1).toLowerCase());
+    const add = (w: string) => { if (/^[\p{L}\p{M}]{4,}$/u.test(w)) deny.add(w[0]!.toUpperCase() + w.slice(1).toLowerCase()); };
+    const files = readdirSync(notes, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? readdirSync(join(notes, e.name)).map((f) => join(e.name, f)) : [e.name]));
+    for (const f of files) {
+      if (!f.endsWith(".md")) continue;
+      const slug = f.normalize("NFC").match(/^people-(.+)\.md$/)?.[1]; // (legacy name; gone once every conversation is migrated)
+      for (const w of slug?.split("-") ?? []) add(w);
+      let head = "";
+      try { head = readFileSync(join(notes, f), "utf8").slice(0, 600); } catch { /* unreadable: skip */ }
+      const name = /^---\n[\s\S]*?^\s*person:[ \t]*["']?([^"'\n]+)/m.exec(head)?.[1];
+      for (const w of name?.normalize("NFC").split(/[\s-]+/) ?? []) add(w);
     }
   }
   const list = join(root, "plans", "private-terms.txt");

@@ -60,11 +60,11 @@ test("gate prompt: a message look sees the latest exchange with long lines cut, 
 
 test("gate prompt: the style the gate is told of is one compact line; no style, no personality section", () => {
   assert.equal(typeof styleSummary(T0), "string");
-  // the owner's style notes (read from the notes folder, other categories left out) are what a group's gate and run are told of
-  const note = join(convPaths(OWNER_CONV).notes, "style-gate-test.md");
-  const other = join(convPaths(OWNER_CONV).notes, "people-gate-test.md");
+  // the owner's style notes (read from the notes folder, other pages left out) are what a group's gate and run are told of
+  const note = join(convPaths(OWNER_CONV).notes, "style.md");
+  const other = join(convPaths(OWNER_CONV).notes, "gate-test.md");
   mkdirSync(dirname(note), { recursive: true });
-  writeFileSync(note, "warm and folksy,\nfew emoji\n");
+  writeFileSync(note, "- warm and folksy, few emoji\n");
   writeFileSync(other, "Mara is the dentist\n");
   try {
     assert.match(styleLines(T0), /^- warm and folksy, few emoji$/m);
