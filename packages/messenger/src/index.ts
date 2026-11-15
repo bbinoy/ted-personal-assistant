@@ -4,7 +4,7 @@
 // to and from its own protocol; the app never sees an envelope, a phone number format or a platform call. Which one runs is
 // MESSENGER=<name> (default signal), loaded by name with loadMessenger.
 //
-// Four ideas carry the whole interface:
+// Four points carry the whole interface:
 //   conversation  a Target: an opaque string. undefined is the owner's own chat; a group id is a group; directTarget(id) is one other
 //                 person's private chat. The app never builds or parses anything else.
 //   sender        who wrote something: `from` (the address the platform shows, may be empty) and `fromUuid` (the stable account id, when

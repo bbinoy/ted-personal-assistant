@@ -116,7 +116,7 @@ test("replay: untagged group chatter is not answered unless the gate, asked agai
 test("replay: a burst of group lines is one turn that answers the address", async () => {
   const r = rig();
   const g = group(GID);
-  run(r, [g], { [g.key]: [member(6, "hello all"), member(5, "@Ted any ideas?", true), member(4, "me too")] });
+  run(r, [g], { [g.key]: [member(6, "hello all"), member(5, "@Ted any suggestions?", true), member(4, "me too")] });
   await settle();
   assert.equal(r.groupRuns.length, 1);
   assert.equal(r.gates.length, 0, "the address is answered whatever the gate would say");

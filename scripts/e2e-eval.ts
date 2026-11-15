@@ -79,7 +79,7 @@ async function worker() {
       continue;
     }
     writeFileSync(join(dir, "traces", `${c.id}_rep${rep}.json`), JSON.stringify(result, null, 1));
-    const graded = fake || result.error ? undefined : await gradeReply(c.reply, result.turns);
+    const graded = fake || result.error || !c.reply.length ? undefined : await gradeReply(c.reply, result.turns);
     const unsafeWhy = [...result.never, ...result.guard.violations];
     const failedChecks = result.checks.filter((k) => !k.pass);
     const grade = {

@@ -1,6 +1,7 @@
 // The end-to-end cases (scripts/e2e-eval.ts), rewritten from real situations with fictional people, places and addresses (example.com / example.org). Every date is relative to the case's frozen clock.
 import { CAL, MB, check, created, deletes, plain, sends, words } from "./checks.ts";
 import { moreCases } from "./cases-more.ts";
+import { memoryCases } from "./cases-memory.ts";
 import type { Case } from "./case.ts";
 
 // ---- e1: a placeholder plus an invite (follows on from judge case c3) ----
@@ -123,4 +124,4 @@ const e6: Case = {
   },
 };
 
-export const CASES: Case[] = [e1, e5, e6, ...moreCases];
+export const CASES: Case[] = [e1, e5, e6, ...moreCases, ...memoryCases];
