@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -45,6 +45,29 @@ export function noteSavedHint(tool: string, input: Record<string, unknown>, dir?
   return file.startsWith(STATUS_PREFIX) || file.startsWith("routine-") ? undefined : "Note saved. Mention what you saved or updated in your reply, in a few words, even if you only react.";
 }
 export const isIndex = (path: string, dir: string = NOTES_DIR) => resolve(path) === join(dir, "MEMORY.md");
+
+// A note's relative path: a file name, or `<folder>/<file>.md` (one folder level; neither part starts with a dot, so ".." can not pass).
+export const NOTE_PATH = /^(?:[a-z0-9][\w-]{0,40}\/)?[a-z0-9][\w.-]{0,80}\.md$/i;
+
+// Every note of a folder as a path relative to it ("people/mara.md"), sorted: the one place that lists notes. `.md` files only, MEMORY.md and dot files left out, symlinks not followed, one folder level deep.
+export function walkNotes(dir: string = NOTES_DIR): string[] {
+  const out: string[] = [];
+  const visit = (sub: string, depth: number): void => {
+    let entries;
+    try {
+      entries = readdirSync(join(dir, sub), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      if (e.isDirectory() && depth < 1) visit(`${sub}${e.name}/`, depth + 1);
+      else if (e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md") out.push(`${sub}${e.name}`);
+    }
+  };
+  visit("", 0);
+  return out.sort();
+}
 
 export interface Note {
   file: string;
@@ -95,12 +118,7 @@ export const styleLines = (now: Date): string =>
 
 // `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's.
 export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string, prefix = ""): Note[] {
-  let files: string[] = [];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && f.startsWith(prefix)).sort();
-  } catch {
-    return [];
-  }
+  const files = walkNotes(dir).filter((f) => f.startsWith(prefix));
   const today = dayIn(now, zone);
   const out: Note[] = [];
   for (const f of files) {
@@ -150,11 +168,7 @@ export function withinCaps(tool: string, input: Record<string, unknown>, dir: st
   if (tool !== "Write" && tool !== "Edit") return true;
   if (String((tool === "Write" ? input.content : input.new_string) ?? "").length > MAX_NOTE_CHARS) return false;
   if (tool !== "Write" || typeof input.file_path !== "string" || existsSync(input.file_path)) return true;
-  try {
-    return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").length < MAX_NOTES_SHOWN;
-  } catch {
-    return true;
-  }
+  return walkNotes(dir).length < MAX_NOTES_SHOWN;
 }
 
 // The index as data for a prompt that is not a run of its own (the expert a look hands work to): one line per note, and where to read one in full. Empty when there are no notes.
@@ -169,11 +183,12 @@ export function readIndex(dir: string = NOTES_DIR): string {
 
 // Deletes one note and regenerates the index. Only a plain file name inside the notes folder.
 export function forgetNote(file: string, dir: string = NOTES_DIR, now = new Date()): { ok: true; removed: Note | undefined } | { ok: false; error: string } {
-  if (!/^[\w.-]+\.md$/.test(file) || file === "MEMORY.md") return { ok: false, error: "give the note's file name, like style-no-em-dashes.md" };
+  if (!NOTE_PATH.test(file) || file === "MEMORY.md") return { ok: false, error: "give the note's file name, like style-no-em-dashes.md, or folder/name.md" };
   const path = join(dir, file);
   if (!existsSync(path)) return { ok: false, error: `no note named ${file}. Read MEMORY.md for the list.` };
   const removed = parseNote(file, readFileSync(path, "utf8"));
   rmSync(path);
+  if (file.includes("/")) try { rmdirSync(dirname(path)); } catch { /* not empty */ } // (the folder of a last page goes with it)
   writeIndex(dir, now);
   return { ok: true, removed };
 }

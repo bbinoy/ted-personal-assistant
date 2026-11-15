@@ -56,7 +56,7 @@ export interface NoteFile {
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 const NOT_SOURCE = [STATUS_PREFIX, "setup-", "voice-"]; // may hold text from mail: never a source
-const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
+const FILE = /^(?:[a-z0-9][a-z0-9-]{0,40}\/)?[a-z0-9][a-z0-9-]{0,70}\.md$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Pure: the note file the dream writes (same shape the chat's notes have).
@@ -120,8 +120,8 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     }
 
     if (o.op !== "write") { reject(file, "unknown operation"); continue; }
-    // Source names are tidied (no directory, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
-    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().split(/[\\/]/).pop()!.trim()).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
+    // Source names are tidied (a leading "./" or "notes/" dropped, ".md" added); any existing note may be a source (reading adds nothing new), the target itself is not one. A missing source is dropped, naming it if the write then fails.
+    const named = [...new Set((Array.isArray(o.consolidates) ? o.consolidates : []).filter((s): s is string => typeof s === "string").map((s) => s.trim().replace(/^(?:\.?\/+|notes\/)/, "")).filter(Boolean).map((s) => (s.endsWith(".md") ? s : `${s}.md`)))];
     const selfNamed = named.includes(file);
     // Notes that may hold text from mail (status, setup, voice) are no source: dropped like a missing one. Reasons name a file, capped.
     const notMemory = (s: string) => NOT_SOURCE.some((p) => s.startsWith(p));

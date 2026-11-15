@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { emit } from "../core/events.ts";
 import { allows } from "../policy/capabilities.ts";
@@ -13,7 +13,7 @@ import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
-import { STATUS_PREFIX } from "../memory/notes.ts";
+import { STATUS_PREFIX, walkNotes } from "../memory/notes.ts";
 import { isPaused } from "../core/pause.ts";
 import { dayIn, localTime } from "../core/timezone.ts";
 import { dreamSystem } from "../run/persona.ts";
@@ -124,7 +124,7 @@ export const runnerFor = (payer: Payer = LOGIN, onCost?: (usd: number) => void):
 
 export const readNoteFiles = (dir: string): NoteFile[] => {
   try {
-    return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && !f.startsWith(STATUS_PREFIX)).sort().map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
+    return walkNotes(dir).filter((f) => !f.split("/").pop()!.startsWith(STATUS_PREFIX)).map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
   } catch {
     return [];
   }

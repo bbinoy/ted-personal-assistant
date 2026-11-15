@@ -1,11 +1,11 @@
 import { fileStamp } from "../core/timezone.ts";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import type { Plan, Scope } from "./dreamplan.ts";
-import { forgetNote, STATUS_PREFIX, writeIndex } from "./notes.ts";
+import { forgetNote, STATUS_PREFIX, walkNotes, writeIndex } from "./notes.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
@@ -64,11 +64,16 @@ export function undoLatest(scope: Scope): { ok: true; restored: number; from: st
   const latest = snaps.at(-1);
   if (!latest) return { ok: false, error: "there is no dream to undo" };
   const dir = join(scope.backupsDir, latest);
-  for (const f of readdirSync(scope.notesDir)) if (f.endsWith(".md") && !f.startsWith(STATUS_PREFIX)) rmSync(join(scope.notesDir, f));
+  for (const f of walkNotes(scope.notesDir)) {
+    if (basename(f).startsWith(STATUS_PREFIX)) continue;
+    rmSync(join(scope.notesDir, f));
+    if (f.includes("/")) try { rmdirSync(dirname(join(scope.notesDir, f))); } catch { /* not empty */ } // (the dream's folders go too, the ones it made)
+  }
   let restored = 0;
-  for (const f of readdirSync(dir)) {
+  for (const f of walkNotes(dir)) {
+    mkdirSync(dirname(join(scope.notesDir, f)), { recursive: true, mode: 0o700 });
     cpSync(join(dir, f), join(scope.notesDir, f));
-    if (f !== "MEMORY.md") restored++;
+    restored++;
   }
   rmSync(dir, { recursive: true, force: true });
   writeIndex(scope.notesDir);
