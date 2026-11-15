@@ -67,6 +67,7 @@ export interface PlayResult {
   turns: { message: string; messages: string[] }[];
   calls: Outcome["calls"];
   audit: { tool: string; decision: string; meta?: Record<string, unknown> }[]; // the run's audit rows (the judge's verdicts and reasons, the questions): the first place to look when a case fails
+  notes?: Outcome["notes"]; // a dream case: the notes it left (to see what the dream wrote when a check fails)
   costUsd: number;
   latencyS: number;
   error?: string;
@@ -384,6 +385,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
     turns,
     calls: outcome.calls,
     audit: readAudit(() => true).map((e) => ({ tool: e.tool, decision: e.decision, ...(e.meta ? { meta: e.meta } : {}) })),
+    ...(c.dream ? { notes: outcome.notes } : {}),
     costUsd: o.perfect ? 0 : spentToday() + dreamCost,
     latencyS: (Date.now() - started) / 1000,
     ...(error ? { error } : {}),

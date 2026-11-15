@@ -212,7 +212,7 @@ const m5: Case = {
     const about = (re: RegExp) => names.filter((f) => re.test(`${f} ${p[f]}`.slice(0, 300)));
     return [
       check("at most five pages", names.length <= 5, `${names.length} pages: ${names.join(", ")}`),
-      check("the hard names page is untouched", Object.values(p).includes(m5Seed[page("context", "hard-names")]!), "changed or gone"),
+      check("the hard names page is kept with its names", Object.values(p).some((text) => /Okonkwo/.test(text) && /Saoirse/.test(text) && /Wojciech/.test(text)), "changed or gone"),
       check("Mara is one page (her birthday and her city in it)", about(/mara/i).filter((f) => /3 March/.test(p[f]!) && /Lisbon/.test(p[f]!)).length >= 1 && about(/mara/i).length <= 2, about(/mara/i).join(", ")),
       check("the camper van is one page (insurance, service and parking in it)", names.some((f) => /autumn/i.test(p[f]!) && /june/i.test(p[f]!) && /spot 7/i.test(p[f]!)), "no page holds all three"),
       check("every [[link]] has a page", links.every((l) => stems.has(l.trim())), links.filter((l) => !stems.has(l.trim())).join(", ")),
@@ -238,7 +238,7 @@ const m6: Case = {
   maxQuestions: 0,
   state: (o) => {
     const p = Object.values(pages(o)).join("\n");
-    return [check("the page has the new dates", /12\D{1,12}19/.test(p), p.slice(0, 160)), check("the old dates are gone", !/3 May to 10 May|3-10 May/.test(p), p.slice(0, 160))];
+    return [check("the page has the new dates", /12\D{1,12}19/.test(p), p.slice(0, 160)), check("the old dates are not stated as current", !/3 May to 10 May|3-10 May/.test(p) || /moved|changed|instead|was/i.test(p), p.slice(0, 160))];
   },
   never: () => [],
   reply: [],

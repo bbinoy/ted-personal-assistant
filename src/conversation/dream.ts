@@ -13,7 +13,8 @@ import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
-import { classOf, walkNotes } from "../memory/notes.ts";
+import { classOf, parseNote, walkNotes, type Note } from "../memory/notes.ts";
+import { pageFacts } from "../memory/links.ts";
 import { isPaused } from "../core/pause.ts";
 import { dayIn, localTime } from "../core/timezone.ts";
 import { dreamSystem } from "../run/persona.ts";
@@ -73,9 +74,11 @@ export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile
   const kept = blocks.filter((b) => (used += b.length + 2) <= MAX_PROMPT_NOTES_CHARS);
   if (kept.length < blocks.length) console.log(`dream: ${blocks.length - kept.length} of ${blocks.length} note(s) left out of the prompt (too long)`);
   const current = kept.join("\n\n");
+  const facts = pageFacts(notes.flatMap((n) => parseNote(n.file, n.raw) ?? []) as Note[]);
   return [
     clockLine(now),
     `The pages you keep about ${subject} right now (MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)", MAX_PROMPT_NOTES_CHARS)}`,
+    ...(facts.length ? [`Facts about these pages, worked out by code (you decide what to do about them: repair a link, link a page, write a missing page, merge):\n${fence("page_facts", facts.map((f) => `- ${f}`).join("\n"))}`] : []),
     `What ${subject} said and did since the last dream, oldest first:\n${fence("conversation", cut || "(nothing)")}`,
     ...(olderCut ? [`What ${subject} said and did in the days before the last dream (already seen; to check the notes against, oldest first):\n${fence("earlier_conversation", olderCut)}`] : []),
     `Propose the changes to the notes, if any.`,

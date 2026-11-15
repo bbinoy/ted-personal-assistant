@@ -655,6 +655,7 @@ Notes, search, the dream's planner, the journal reader.
 
 ```
 src/memory/dreamapply.ts  snapshots, applying a plan, undo
+src/memory/links.ts  facts about the pages: broken links, orphans, the same person twice, a full index (for the dream and the doctor)
 src/memory/migrate.ts  the one-time move of the flat notes to pages (temporary)
 src/memory/dreamplan.ts  which dream proposals may apply (pure)
 src/memory/journalread.ts  reads journal lines; `/today`; archive list

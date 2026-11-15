@@ -150,7 +150,7 @@ test("dreamPrompt: every whole note reaches the dream; over the bound only whole
   const p = dreamPrompt(NOW, "Mia", many, []);
   const bodies = p.split("### n-").slice(1);
   assert.ok(bodies.length > 0 && bodies.length < 40);
-  assert.equal((p.match(/fact/g) ?? []).length, bodies.length * 1999, "every kept note is whole");
+  assert.equal((p.match(/\bfact\b/g) ?? []).length, bodies.length * 1999, "every kept note is whole");
   assert.ok(p.includes("n-00.md") && !p.includes("n-39.md"));
 });
 
