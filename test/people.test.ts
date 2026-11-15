@@ -59,6 +59,7 @@ test("people: a page with a person: field is a candidate named by it; any other 
   assert.equal(fromNote(note("mara-silva.md", "Mara Silva. Lives in: Lisbon. mara@silva.example", "Mara Silva"))?.name, "Mara Silva");
   assert.equal(fromNote(note("rui.md", "Lives in Porto, close friend. rui@example.pt", "Rui Alves"))?.name, "Rui Alves", "the field is the name, whatever the page opens with");
   assert.equal(fromNote(note("style-short.md", "Keep it short. a@b.example")), undefined);
+  for (const f of ["setup/x.md", "status/x.md", "routines/x.md"]) assert.equal(fromNote(note(f, "Eve Dahl. eve@evil.example", "Eve Dahl")), undefined, `${f} is no known person`);
 });
 
 test("people: Google Contacts text becomes candidates with every address and phone", () => {

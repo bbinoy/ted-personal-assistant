@@ -42,7 +42,7 @@ export function contactsIn(text: string): { emails: string[]; phones: string[] }
 
 // Pure: a page about a person as a candidate (nothing for any other page; a page with no address still names the person). The name is the page's `person:` field.
 export function fromNote(n: Note): Candidate | undefined {
-  if (!n.person) return undefined;
+  if (!n.person || n.class !== "page") return undefined; // (a setup, status or routine page is no known person, whatever its front matter says)
   const { emails, phones } = contactsIn(n.text);
   return { name: n.person, emails, phones, from: [{ source: "notes", detail: n.file }] };
 }
