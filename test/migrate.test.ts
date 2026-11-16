@@ -10,7 +10,7 @@ import { readAudit } from "../src/core/audit.ts";
 import { snapshotsOf, undoLatest } from "../src/memory/dreamapply.ts";
 import { MARKER, migrateAll, PREMIGRATION, unmigrated } from "../src/memory/migrate.ts";
 import { makeNotesDir } from "../src/core/state.ts";
-import { classOf, readNotes, walkNotes } from "../src/memory/notes.ts";
+import { classOf, parseNote, readNotes, walkNotes } from "../src/memory/notes.ts";
 import { readNoteFiles } from "../src/conversation/dream.ts";
 import { fromNote } from "../src/modules/people/people.ts";
 import { scheduledIn } from "../src/modules/tasks/routinelist.ts";
@@ -59,7 +59,7 @@ test("migration: every old prefix moves to its folder or name, style notes becom
   assert.match(style, /- Warm and informal, first names\./, "a body on one line, nothing reworded");
   assert.match(style, /- No exclamation marks\./, "a prefix in capitals counts too");
   const people = readNotes(new Date(), notes).filter((n) => n.person);
-  assert.deepEqual(people.map((n) => n.person).sort(), ["Mara Silva", "Rui"], "the name as the people module read it: the opening words when they carry the file's name, else the file's");
+  assert.deepEqual(people.map((n) => n.person).sort(), ["Mara Silva"], "the name as the people module read it (the opening words when they carry the file name); Rui comes out again: his page never says the name");
   assert.equal(fromNote(people.find((n) => n.person === "Mara Silva")!)?.emails[0], "mara@silva.example");
   assert.equal(readFileSync(join(notes, "routines", "pep-talk.md"), "utf8").includes("when: every day at 08:00"), true);
   assert.deepEqual(scheduledIn({ notesDir: notes, zone: "UTC", now: new Date("2026-05-03T12:00:00Z") }).routines.map((x) => x.name), ["pep-talk"]);
@@ -231,5 +231,67 @@ test("restore: the script puts the copy and the old snapshots back, removes the 
   assert.throws(() => execFileSync(process.execPath, ["--conditions=workspace-source", "scripts/restore-premigration.ts", "owner"], { env: { ...process.env, HARNESS_DATA_DIR: r }, stdio: "pipe" }), /status 1|Command failed/);
   migrateAll(r); // the restored folder is migrated again, from a fresh copy
   assert.equal(existsSync(join(layout(r).conv("owner").dir, PREMIGRATION)), true);
+  rmSync(r, { recursive: true, force: true });
+});
+
+// ---- the repair of links, person: and name: ----
+
+const rawOf = (notes: string, f: string) => readFileSync(join(notes, f), "utf8");
+
+test("repair: a conversation migrated now has its links, invented person: and legacy name: fixed in the same go", () => {
+  const r = root();
+  const notes = seed(r, "owner", {
+    "people-mara.md": `---\nname: people-mara\ndescription: "sister"\n---\n\nMara Quist. See [[people-rui|Rui]] and [[routine-pep-talk]], [[context-trip]], [[Context-Gone]], [[triage-gone]] and [[style-short]].`,
+    "people-rui-research.md": note("A page about research Mara does.", ""),
+    "people-rui.md": `---\nperson: "Rui Alves"\n---\n\nRui Alves, friend.`,
+    "people-zed.md": "Lives in Oslo.\n",
+    "context-trip.md": note("Trip."),
+    "routine-pep-talk.md": note("Send a pep talk.", "when: every day at 08:00\n"),
+  });
+  migrateAll(r);
+  const mara = rawOf(notes, "mara.md");
+  assert.match(mara, /\[\[rui\|Rui\]\] and \[\[pep-talk\]\], \[\[trip\]\], \[\[Context-Gone\]\], \[\[triage-gone\]\] and \[\[style-short\]\]/, "found pages rewritten, label kept, unknown targets left");
+  assert.doesNotMatch(mara, /^name:/m);
+  assert.match(mara, /person: "Mara Quist"/, "a name that the page body carries stays");
+  const research = rawOf(notes, "rui-research.md");
+  assert.doesNotMatch(research, /person:/, "the invented person: goes");
+  assert.equal(parseNote("rui-research.md", research)?.text, "A page about research Mara does.");
+  assert.match(rawOf(notes, "rui.md"), /person: "Rui Alves"/, "the original had person:");
+  assert.equal(rawOf(notes, "zed.md"), "Lives in Oslo.\n", "a front matter made only for person: goes with it");
+  assert.equal(readFileSync(join(notes, MARKER), "utf8"), "3\n");
+  rmSync(r, { recursive: true, force: true });
+});
+
+test("repair: a conversation already on pages (marker 2) is repaired once, from a backup, idempotently; a new folder is already done", () => {
+  const r = root();
+  const notes = seed(r, "owner", { "mara.md": `---\nname: people-mara\nperson: "Mara Zinn"\ndescription: "x"\n---\n\nSee [[people-rui]], [[people-nobody]].`, "rui.md": note("Rui.") });
+  writeFileSync(join(notes, MARKER), "2\n");
+  const keep = join(layout(r).conv("owner").dir, PREMIGRATION);
+  mkdirSync(keep, { recursive: true });
+  writeFileSync(join(keep, "people-mara.md"), "Mara.\n"); // the original had no person:
+  const friend = seed(r, "group-0123456789abcdef", { "a.md": note("See [[context-b]]."), "b.md": note("B.") });
+  writeFileSync(join(friend, MARKER), "2\n");
+  const lines = quiet(() => migrateAll(r));
+  assert.match(rawOf(notes, "mara.md"), /\[\[rui\]\], \[\[people-nobody\]\]/);
+  assert.doesNotMatch(rawOf(notes, "mara.md"), /person:|name:/, "Mara Zinn is not in the body");
+  assert.match(rawOf(friend, "a.md"), /\[\[b\]\]/);
+  assert.match(readFileSync(join(layout(r).conv("owner").dir, "notes-prerepair", "mara.md"), "utf8"), /people-rui/, "the backup holds the pages as they were");
+  assert.doesNotMatch(lines, /mara|rui|nobody/i, "ids and counts only");
+  assert.equal(readFileSync(join(notes, MARKER), "utf8"), "3\n");
+  const before = walkNotes(notes).map((f) => rawOf(notes, f));
+  migrateAll(r);
+  assert.deepEqual(walkNotes(notes).map((f) => rawOf(notes, f)), before);
+  const born = layout(r).conv("group-fedcba9876543210").notes;
+  makeNotesDir(born);
+  assert.equal(readFileSync(join(born, MARKER), "utf8"), "3\n");
+  rmSync(r, { recursive: true, force: true });
+});
+
+test("repair: a link whose new name belongs to two pages is left for the dream", () => {
+  const r = root();
+  const notes = seed(r, "owner", { "a.md": note("See [[people-x]]."), "x.md": note("X."), "trips/x.md": note("Other X.") });
+  writeFileSync(join(notes, MARKER), "2\n");
+  migrateAll(r);
+  assert.match(rawOf(notes, "a.md"), /\[\[people-x\]\]/);
   rmSync(r, { recursive: true, force: true });
 });

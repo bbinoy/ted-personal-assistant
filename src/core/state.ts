@@ -42,7 +42,7 @@ export const NOTES_MARKER = ".layout";
 export function makeNotesDir(dir: string): void {
   const fresh = !existsSync(dir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  if (fresh) writeFileAtomic(join(dir, NOTES_MARKER), "2\n");
+  if (fresh) writeFileAtomic(join(dir, NOTES_MARKER), "3\n");
 }
 
 export function writeFileAtomic(path: string, text: string, mode = 0o600): void {
