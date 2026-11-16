@@ -102,7 +102,6 @@ export function shotCaptions(structured: unknown): Record<string, string> {
   return out;
 }
 
-// Pure. The one-line captions the worker gave its PDFs, by the worker's id (pdf1...).
 // The file names the worker gave, cleaned: a plain label, no path, always ending in .pdf; none when it gave nothing usable.
 export function fileNames(structured: unknown): Record<string, string> {
   const list = (structured as { files?: unknown } | null)?.files;
@@ -117,6 +116,7 @@ export function fileNames(structured: unknown): Record<string, string> {
   return out;
 }
 
+// Pure. The one-line captions the worker gave its PDFs, by the worker's id (pdf1...).
 export function fileCaptions(structured: unknown): Record<string, string> {
   const list = (structured as { files?: unknown } | null)?.files;
   const out: Record<string, string> = {};
