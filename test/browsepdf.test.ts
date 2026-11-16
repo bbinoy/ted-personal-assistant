@@ -4,10 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
-import { fileCaptions } from "../src/modules/browse/browse.ts";
+import { fileCaptions, fileNames } from "../src/modules/browse/browse.ts";
 import { browserServer } from "../src/modules/browse/browseserver.ts";
 import { HIDDEN_BROWSER_TOOLS, isAllowedBrowserTool } from "../src/modules/browse/browserules.ts";
-import { adoptFile, dropShots, heldPath, MAX_FILES } from "../src/modules/send/shots.ts";
+import { adoptFile, dropShots, heldPath, HELD_TTL_MS, MAX_FILES, sweepShots } from "../src/modules/send/shots.ts";
 
 // The worker saves a page as a PDF (browser_pdf_save) and keeps a PDF a site downloads; code chooses the name, reads the bytes back, keeps real PDFs only.
 
@@ -81,7 +81,37 @@ test("adoption: kept PDFs become file ids of the conversation's turn, listed one
     assert.equal(heldPath("g-other", "file1"), undefined, "another conversation's turn has no such file");
     assert.equal(heldPath(key, "file9"), undefined);
     dropShots(key);
-    assert.equal(existsSync(path), false, "gone with the turn");
+    assert.equal(existsSync(path), true, "the mail client reads it after the turn: it outlives the turn");
+    assert.deepEqual(readFileSync(path), PDF);
+    sweepShots(Date.now() + HELD_TTL_MS - 60_000);
+    assert.equal(existsSync(path), true, "kept until the TTL");
+    sweepShots(Date.now() + HELD_TTL_MS + 60_000);
+    assert.equal(existsSync(path), false, "swept after the TTL");
+  } finally {
+    dropShots(key);
+  }
+});
+
+test("two files of a turn never share a name; a worker's name is cleaned and ends in .pdf", () => {
+  const key = "g-pdf-names";
+  try {
+    assert.equal(adoptFile(key, PDF, "page.pdf")!.name, "page.pdf");
+    assert.equal(adoptFile(key, PDF, "page.pdf")!.name, "page-2.pdf");
+    assert.equal(adoptFile(key, PDF, "page.pdf")!.name, "page-3.pdf");
+    assert.equal(adoptFile(key, PDF, "notes")!.name, "notes");
+    assert.equal(adoptFile(key, PDF, "notes")!.name, "notes-2");
+    const n = fileNames({ files: [
+      { id: "pdf1", caption: "a", name: "Train-receipt-AB12CD.pdf" },
+      { id: "pdf2", caption: "b", name: "../../etc/passwd" },
+      { id: "pdf3", caption: "c", name: "..\\x/..y..pdf.exe" },
+      { id: "pdf4", caption: "d", name: "" },
+      { id: "pdf5", caption: "e" },
+    ] });
+    assert.equal(n.pdf1, "Train-receipt-AB12CD.pdf");
+    assert.equal(n.pdf2, "passwd.pdf");
+    assert.equal(n.pdf4, undefined);
+    assert.equal(n.pdf5, undefined);
+    for (const v of Object.values(n)) assert.match(v, /^[^/\\]+\.pdf$/), assert.ok(!v.includes(".."), v);
   } finally {
     dropShots(key);
   }
