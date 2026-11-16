@@ -34,7 +34,7 @@ export interface ToolDef {
   description: string;
   shape: Shape;
   delayMs?: number; // the service is slow: the call takes this long before it answers
-  run: (args: Record<string, any>) => unknown; // a string is returned as it is, anything else as JSON; a throw is an error result the model reads
+  run: (args: Record<string, any>) => unknown; // (may be async) a string is returned as it is, anything else as JSON; a throw is an error result the model reads
 }
 
 export interface FakeService {
@@ -53,7 +53,7 @@ export function fakeService(server: string, rec: Recorder, defs: Record<string, 
       rec.onStart?.(full);
       if (d.delayMs) await new Promise<void>((r) => setTimeout(r, d.delayMs));
       try {
-        const out = d.run(args);
+        const out = await d.run(args);
         const text = typeof out === "string" ? out : JSON.stringify(out);
         rec.add(full, args, true, text);
         return { text, isError: false };

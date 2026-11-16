@@ -2241,7 +2241,7 @@ const RECEIPT_URL = "https://rail.example.org/booking/BK-7731/receipt";
 const e69: Case = {
   id: "e69",
   title: "a receipt page with only a print button: the PDF is saved by the browser worker and attached to a draft, not a screenshot and not a refusal",
-  turns: [`Open my booking receipt at ${RECEIPT_URL} and draft a mail to Dana Ortiz (dana.ortiz@example.com) with the receipt attached as a PDF, subject "Receipt BK-7731"`],
+  turns: [`Use the browser to open my booking receipt at ${RECEIPT_URL} and draft a mail to Dana Ortiz (dana.ortiz@example.com) with the receipt attached as a PDF, subject "Receipt BK-7731"`],
   world: () => ({
     web: { [RECEIPT_URL]: { url: RECEIPT_URL, heading: "Booking BK-7731", text: ["Receipt: Zurich HB to Basel SBB, 1 adult, total CHF 38.00, paid."], buttons: [{ name: "Print receipt" }] } },
   }),

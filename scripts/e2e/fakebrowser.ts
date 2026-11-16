@@ -2,6 +2,7 @@
 // shape @playwright/mcp prints them, so the REAL browse worker, the REAL browse guard (browseguard.ts: commit steps, the card flow, the typed YES) and the REAL ledger run against it. The "pay" button of a fake
 // checkout is the fake pay endpoint: money can only move through it, and it is recorded with what was typed. No network, no real shop, no real card (the card is the public test number).
 import { writeFileSync } from "node:fs";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import { z } from "zod";
 import { fakeService, type FakeService, type Recorder } from "./fakeserver.ts";
 
@@ -81,11 +82,14 @@ export class FakeBrowser {
       browser_pdf_save: {
         description: "Save page as PDF",
         shape: { filename: z.string().optional() },
-        run: (a) => {
+        run: async (a) => {
           const p = this.current;
           if (!p || !a.filename) throw new Error("No page to save.");
-          const text = [p.heading, ...(p.text ?? [])].join(" / ").replace(/[()\\]/g, "");
-          writeFileSync(String(a.filename), `%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n% ${text}\ntrailer<</Root 1 0 R>>\n%%EOF\n`);
+          const doc = await PDFDocument.create(); // a real one-page PDF with the page's text, so open_file can read it
+          const font = await doc.embedFont(StandardFonts.Helvetica);
+          const page = doc.addPage();
+          [p.heading, ...(p.text ?? [])].forEach((line, i) => page.drawText(line.replace(/[^\x20-\x7e]/g, "?"), { x: 40, y: 780 - i * 16, size: 11, font }));
+          writeFileSync(String(a.filename), await doc.save());
           return `### Result\n- [Page as pdf](${a.filename})`;
         },
       },
