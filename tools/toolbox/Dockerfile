@@ -12,7 +12,7 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --break-system-packages pdfplumber pillow-heif \
+RUN pip install --break-system-packages pdfplumber==0.11.10 pillow-heif==1.8.1 \
  && rm -rf /root/.cache
 
 # No setuid binary and no sudo: a command that runs here is an ordinary user in a throwaway VM.

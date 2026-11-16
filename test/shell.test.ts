@@ -141,6 +141,22 @@ test("run: the held files go in, a command runs, new files come out as file ids 
   assert.ok(!JSON.stringify(rows).includes(secret), "the command text is never audited");
 });
 
+test("run: output files are held under the turn's one cap (10 files, 20 MB each); past it the result says so plainly", async () => {
+  const key = "shell-cap";
+  const vm = fakeVm();
+  vm.out.set("big.bin", Buffer.alloc(20_000_001));
+  vm.out.set("ok.txt", Buffer.from("x"));
+  await withSend(key, async () => "ok", async () => {
+    for (let i = 0; i < 9; i++) adoptFile(key, Buffer.from(`f${i}`), `f${i}.txt`);
+    const t = ((await runNow(key, { command: "true" }, vm.runner)).content.at(-1) as { text: string }).text;
+    assert.match(t, /big\.bin: not kept \(.*over the 20\.0 MB/);
+    assert.match(t, /file10: ok\.txt/);
+    vm.out.set("late.txt", Buffer.from("y"));
+    const full = ((await runNow(key, { command: "true" }, vm.runner)).content.at(-1) as { text: string }).text;
+    assert.match(full, /late\.txt: not kept, this turn already holds 10 files .*another turn/);
+  });
+});
+
 test("run: a box that cannot start gives a plain message, nothing of the cause", async () => {
   const vm = fakeVm({ nets: "lo\neth0\n" });
   const r = await runNow("shell-b", { command: "ls" }, vm.runner);

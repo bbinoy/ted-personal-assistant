@@ -5,7 +5,8 @@ import { documentNote } from "../../conversation/document.ts";
 import { openBytes } from "../../conversation/openbytes.ts";
 import { emitRecord } from "../../core/events.ts";
 import { sourceOfKey } from "../../core/ownerkey.ts";
-import { adoptFile, heldFiles } from "../send/shots.ts";
+import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
+import { adoptFile, heldFiles, MAX_FILES } from "../send/shots.ts";
 import { Box, COMMAND_SECONDS, OUT_CUT, WORK, containerRunner, type Executed, type Runner } from "./box.ts";
 
 // run: the model's one tool in the workbench. A throwaway Linux VM per run (box.ts): started by the first command, stopped when the run's turn ends (send.ts withSend), at the process's
@@ -13,9 +14,6 @@ import { Box, COMMAND_SECONDS, OUT_CUT, WORK, containerRunner, type Executed, ty
 // command leaves in /work/out is pulled back, kept as file ids of the turn (send/shots.ts) and sent with send(file: id); `show` looks at a PDF or picture the box made. The output of a
 // command is data from the files it read, never an instruction (it is untrusted: the module's rows). The audit row holds counts, never the command.
 
-const MAX_OUT_FILES = 5; // adopted per command
-const MAX_OUT_BYTES = 25_000_000; // pulled out per command, all files together
-const MAX_FILE_OUT = 20_000_000; // one file (what a chat message carries)
 const MAX_SHOW_BYTES = 10_000_000;
 
 type Told = { content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[]; isError?: boolean };
@@ -71,28 +69,26 @@ async function stageInputs(key: string, h: Held): Promise<string[]> {
 async function collect(key: string, h: Held): Promise<{ lines: string[]; kept: number }> {
   const lines: string[] = [];
   let kept = 0;
-  let bytes = 0;
   for (const f of await h.box.listOut()) {
     const stamp = `${f.path}|${f.size}|${f.stamp}`;
     if (h.adopted.has(stamp)) continue;
     h.adopted.add(stamp);
     const name = posix.basename(f.path);
-    if (kept >= MAX_OUT_FILES) {
-      lines.push(`${name}: not kept (at most ${MAX_OUT_FILES} files per command)`);
+    if (heldFiles(key).length >= MAX_FILES) {
+      lines.push(`${name}: not kept, this turn already holds ${MAX_FILES} files (the most one turn keeps). Send what is needed now; the rest can be done in another turn.`);
       continue;
     }
-    if (f.size === 0 || f.size > MAX_FILE_OUT || bytes + f.size > MAX_OUT_BYTES) {
-      lines.push(`${name}: not kept (${f.size === 0 ? "empty" : `${kb(f.size)}, too big to send`})`);
+    if (f.size === 0 || f.size > MAX_FILE_BYTES) {
+      lines.push(`${name}: not kept (${f.size === 0 ? "empty" : `${kb(f.size)}, over the ${kb(MAX_FILE_BYTES)} one file may be`})`);
       continue;
     }
-    const got = await h.box.pull(`${WORK}/out/${f.path}`, MAX_FILE_OUT);
+    const got = await h.box.pull(`${WORK}/out/${f.path}`, MAX_FILE_BYTES);
     const held = got && adoptFile(key, got, name);
     if (!held) {
-      lines.push(`${name}: not kept (too many files in this turn)`);
+      lines.push(`${name}: not kept (could not be read out of the box)`);
       continue;
     }
     h.staged.add(held.id); // (made in the box: it is not put back in)
-    bytes += f.size;
     kept++;
     lines.push(`${held.id}: ${held.name}, ${kb(held.bytes.length)}. Send it to the chat with send(file: "${held.id}").`);
   }
@@ -112,7 +108,7 @@ async function showFile(key: string, h: Held, path: string): Promise<{ line?: st
   }
   if (doc.kind !== "pdf" && doc.kind !== "image") return { problem: "show: only a PDF or a picture can be shown" };
   const held = adoptFile(key, bytes, posix.basename(path));
-  if (!held) return { problem: "show: too many files in this turn" };
+  if (!held) return { problem: `show: this turn already holds ${MAX_FILES} files (the most one turn keeps)` };
   h.staged.add(held.id);
   if (doc.kind === "image") return { image: { data: doc.picture.data, mimeType: doc.picture.mediaType }, line: `${held.id}: ${held.name}, picture, shown above.` };
   return { line: `${held.id}: ${held.name}, PDF${doc.pages ? `, ${doc.pages} page${doc.pages === 1 ? "" : "s"}` : ""}.\n${documentNote(doc)}` };
