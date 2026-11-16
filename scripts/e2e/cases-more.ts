@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CAL, MB, OWNER_EMAIL, check, created, deletes, plain, sends } from "./checks.ts";
+import { CAL, MB, OWNER_EMAIL, check, created, deletes, pdfInside, plain, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
 import type { Case, Check, Outcome, PerfectScript, Time } from "./case.ts";
 
@@ -2269,4 +2269,80 @@ const e69: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69];
+// ---- e71, e72: the workbench (src/modules/shell). A file task no ready tool does: Ted tries it there instead of saying it cannot. The box is the real one (a throwaway VM with no network): it needs `container` and the image. ----
+const e71: Case = {
+  id: "e71",
+  title: "workbench: one page of a PDF as its own file, no ready tool: Ted tries the workbench instead of declining",
+  turns: ["Priya mailed the staff handbook as a PDF. Send me just page 3 of it as its own PDF file."],
+  world: (t) => ({
+    mail: [
+      {
+        from: { email: "priya.nair@example.org", displayName: "Priya Nair" },
+        subject: "Staff handbook",
+        body: "<p>Hi, the staff handbook is attached. Priya</p>",
+        receivedAt: new Date(t.now.getTime() - 3_600_000).toISOString(),
+        attachments: [{ name: "staff-handbook.pdf", text: "", pages: ["Page 1 of the handbook: welcome and who we are.", "Page 2 of the handbook: working hours and holidays.", "Page 3 of the handbook: the expenses policy, claims are due within 30 days.", "Page 4 of the handbook: contacts and the office map."] }],
+      },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const pdf = o.files.find((f) => f.bytes.subarray(0, 5).toString("latin1") === "%PDF-");
+    const raw = pdf ? pdfInside(pdf.bytes) : "";
+    const pageObjects = (raw.match(/\/Type\s*\/Page(?![a-z])/g) ?? []).length;
+    return [
+      check("the workbench ran", o.shellRuns >= 1, `${o.shellRuns} commands`),
+      check("a PDF was sent to the chat", !!pdf, o.files.map((f) => f.name).join(", ") || "no file sent"),
+      check("it holds page 3 and no other page", raw.includes("Page 3 of the handbook") && !/Page [124] of the handbook/.test(raw), raw.slice(0, 80)),
+      check("it is one page", pageObjects === 1, `${pageObjects} page objects`),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It says page 3 of the handbook is attached as its own file.", "It does not say it cannot do this, and does not ask the owner anything.", "It is short: two lines at most."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.ranShell();
+    s.sendFile("handbook-page-3.pdf", Buffer.from("%PDF-1.4\n/Type /Page\nPage 3 of the handbook: the expenses policy, claims are due within 30 days.\n", "latin1"));
+    s.say("Page 3 of the handbook (the expenses policy) is in the chat as its own PDF.");
+  },
+};
+
+const e72: Case = {
+  id: "e72",
+  title: "workbench: totals of an expenses CSV by category, sent back as an Excel file",
+  turns: ["Lars sent the March expenses as a CSV. Total it by category, send me the totals as an Excel file and tell me the grand total."],
+  world: (t) => ({
+    mail: [
+      {
+        from: { email: "lars.holm@example.org", displayName: "Lars Holm" },
+        subject: "March expenses",
+        body: "<p>March expenses attached. Lars</p>",
+        receivedAt: new Date(t.now.getTime() - 3_600_000).toISOString(),
+        attachments: [{ name: "march-expenses.csv", text: "date,category,amount\n2026-03-02,Travel,120.40\n2026-03-05,Meals,45.00\n2026-03-09,Software,99.00\n2026-03-12,Travel,86.10\n2026-03-18,Meals,32.50\n2026-03-25,Meals,18.75\n" }],
+      },
+    ],
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const xlsx = o.files.find((f) => /\.xlsx$/i.test(f.name) && f.bytes.subarray(0, 2).toString("latin1") === "PK");
+    return [
+      check("the workbench ran", o.shellRuns >= 1, `${o.shellRuns} commands`),
+      check("an Excel file was sent to the chat", !!xlsx, o.files.map((f) => f.name).join(", ") || "no file sent"),
+      check("the reply gives the grand total, 401.75", /401[.,]75/.test(said), said.slice(0, 200)),
+      check("the owner was not asked anything", o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => sends(o),
+  reply: ["It gives the grand total of 401.75 (and may give the category totals: travel 206.50, meals 96.25, software 99.00).", "It says the Excel file with the totals is attached.", "It asks no question and is short."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.ranShell();
+    s.sendFile("march-totals.xlsx", Buffer.from("PK\u0003\u0004 fake workbook", "latin1"));
+    s.say("March comes to 401.75 in all: travel 206.50, meals 96.25, software 99.00. The totals are in the Excel file I just sent.");
+  },
+};
+
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72];

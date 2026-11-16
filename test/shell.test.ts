@@ -40,7 +40,6 @@ function fakeVm(over: Partial<Pick<Vm, "nets" | "say">> = {}): Vm {
       if (verb === "list") return text("buildkit\nted-box-aaaa\nted-box-bbbb\nother\n");
       if (verb === "system" || verb === "image") return text("");
       if (verb === "exec") {
-        const script = String(args.at(-1));
         if (args.includes("-i")) return (vm.files.set(String(args.at(-1)), o?.input ?? Buffer.alloc(0)), text(""));
         if (args.some((a) => a.includes("mkdir -p"))) return text(vm.nets);
         if (args.some((a) => a.includes("find "))) return text([...vm.out].map(([p, b]) => `${b.length}\t1700000000.5\t${p}\0`).join(""));
@@ -159,7 +158,7 @@ test("the tool is free and untrusted: its output taints a later send, it is no j
 test("only the workbench expert may call the tool: the main run and the other experts are refused", async () => {
   const set = expertSetup(["ted-personal-assistant:workbench"], "P", (n) => (n === "workbench" ? { delegate: "sonnet", tools: ["mcp__shell__run"] } : {}));
   assert.ok(set.agents["expert-workbench"]);
-  const h = delegationHook(set, "owner");
+  const h = delegationHook(set, "chat");
   const call = (who: object) => h.hook({ hook_event_name: "PreToolUse", tool_name: "mcp__shell__run", tool_input: { command: "ls" }, tool_use_id: "t", ...who } as never, "t", { signal: new AbortController().signal }) as Promise<{ hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }>;
   assert.equal((await call({})).hookSpecificOutput?.permissionDecision, "deny", "the main run");
   assert.match((await call({})).hookSpecificOutput?.permissionDecisionReason ?? "", /expert-workbench/);

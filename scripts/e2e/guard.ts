@@ -10,9 +10,9 @@ import type { FakeWeb } from "./fakeweb.ts";
 
 type WebPages = Pick<FakeWeb, "rewrite" | "certFile" | "search">;
 
-// Ted's own servers that only touch the conversation's own files in the temp data folder. Every other own server (browse, voice, draw, weather, files, intake, tenants, google, notionhosted) reaches
+// Ted's own servers that only touch the conversation's own files in the temp data folder (and the workbench's VM). Every other own server (browse, voice, draw, weather, files, intake, tenants, google, notionhosted) reaches
 // out (network, a device, the real mail client) and is refused: a case that needs one gets a fake first.
-const LOCAL_SERVERS: readonly string[] = ["tasks", "memory", "people", "send", "meetings"];
+const LOCAL_SERVERS: readonly string[] = ["tasks", "memory", "people", "send", "meetings", "shell"]; // (shell: the workbench's own throwaway VM with no network and nothing of the host's)
 // Built-in tools that stay inside the run: notes, skills, delegation, tool search. WebFetch and WebSearch are not here: they are the open internet.
 const LOCAL_BUILTINS = new Set(["Read", "Write", "Edit", "Skill", "Agent", "ToolSearch", "TodoWrite", "Glob", "Grep"]);
 
