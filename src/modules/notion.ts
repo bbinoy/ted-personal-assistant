@@ -28,7 +28,7 @@ const sizeNote = (input: Record<string, unknown>): string => {
   if (ups.length) return `\nReplaces: about ${ups.reduce((n, u) => n + len(u.old_str), 0)} characters with ${ups.reduce((n, u) => n + len(u.new_str), 0)}`;
   return "";
 };
-export const NOTION_FLOOR: ModuleFloor = { judgeNote: { "page-write": sizeNote }, judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] }, creates: (name) => name === "notion-create-pages" };
+export const NOTION_FLOOR: ModuleFloor = { judgeNote: { "page-write": sizeNote }, judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] }, creates: (name) => name === "notion-create-pages", deleteToBin: true };
 export const NOTION_UPDATE_TITLE = { icon: "📝", title: "Change Notion page", whenDeleting: "Move Notion page to the bin", labels: { page_id: "Page", in_trash: "In the bin", archived: "Archived" } } as const;
 
 export const notionModule: ToolModule = {

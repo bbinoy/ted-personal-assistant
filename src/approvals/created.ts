@@ -1,5 +1,4 @@
-// What the assistant itself made in a conversation (a draft, a calendar event, a Notion page), by id, so that the approval judge can be told whether a delete is of
-// something the assistant just created (probably a mistake or an obsolete draft) or of something that was the person's. In memory only, per conversation (the key is
+// What the assistant itself made in a conversation (a draft, a calendar event, a Notion page), by id, so that an approval question and the journal can name it by the title it was given. In memory only, per conversation (the key is
 // Conversation.key like the other per-conversation state: one conversation's ids tell nothing about another's), kept 24 hours and pruned as new ones come in.
 // Code writes it from the results of the tools a module lists as creating something (modules/types.ts ModuleFloor.creates); a model, a mail or a page never does.
 
@@ -68,14 +67,6 @@ export function noteCreated(conversation: string, ids: readonly string[], now = 
   const m = seen.get(conversation) ?? seen.set(conversation, new Map()).get(conversation)!;
   for (const id of ids) m.set(id, { at: now, ...(label ? { label } : {}) });
   while (m.size > MAX_PER_CONVERSATION) m.delete(m.keys().next().value!);
-}
-
-// yes: the call's id came back from the assistant's own create in this conversation within 24 hours. no: it names ids and none did. unknown: it names no id we can read.
-export function createdFact(conversation: string, input: Record<string, unknown>, now = Date.now()): "yes" | "no" | "unknown" {
-  const ids = idsInCall(input);
-  if (!ids.length) return "unknown";
-  const m = seen.get(conversation);
-  return ids.some((id) => m && now - (m.get(id)?.at ?? -Infinity) < TTL_MS) ? "yes" : "no";
 }
 
 // The title (and time) the creating call gave the thing this call names, if the assistant made it here within 24 hours.

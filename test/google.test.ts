@@ -379,8 +379,8 @@ test("google: a calendar write is judged, guests included; every answer to an in
   assert.equal(r.asked.length, 0, "the judge said auto");
   r = rig(ctx, "ask");
   await r.run("manage_event", { action: "delete", event_id: "e1", summary: "Dentist" });
-  assert.equal(r.judged.length, 1, "a delete is judged, with care: told it was not created by the assistant");
-  assert.match(r.judged[0]!.description, /Created by the assistant in this conversation: no/);
+  assert.equal(r.judged.length, 1, "a delete is judged, with care: told it is permanent");
+  assert.match(r.judged[0]!.description, /\nDelete: permanent/);
   assert.equal(r.asked.length, 1, "the judge sent it on: it asks HER, in her chat, naming what is deleted");
   assert.match(r.asked[0]!, /Delete calendar event[\s\S]*Dentist[\s\S]*e1/);
   r = rig(ctx, "auto");

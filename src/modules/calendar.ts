@@ -39,7 +39,7 @@ export const calendarModule: ToolModule = {
   },
   floor: {
     judgeVeto: { [DELETE_CONFIRM]: namesNoGuests }, // a delete that names guests would email a cancellation: the owner's call
-    creates: (name) => name === "create_event", // (its result's event id is "created by the assistant", for the judge's care with a delete)
+    creates: (name) => name === "create_event", // (its result's event id names it in a later question and the journal)
     noFix: ["calendar-respond"], // answering an invite is the owner's call, not a matter of wrong arguments
     judgeNote: { "calendar-write": notifyLine, [DELETE_CONFIRM]: notifyLine },
     editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event

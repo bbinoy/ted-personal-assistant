@@ -8,7 +8,7 @@
 export const NEVER_ACTIONS: ReadonlySet<string> = new Set(["trash", "delete", "spam", "block", "trade"]);
 
 // Destructive but allowed, with care: deleting a draft, a calendar event, a Notion page or a Drive file to the bin. NOT in NEVER_ACTIONS. The call is never free and never
-// fixed, goes to the judge (whose default for a delete is ask, told by code whether the assistant made the thing here: created.ts) and otherwise asks on the phone of the
+// fixed, goes to the judge (which judges a delete by bin or permanent and by reach, told by code: autojudge.ts notifyNote) and otherwise asks on the phone of the
 // conversation that made it; a module's floor may veto judging it (a calendar delete that names guests). A tool that only does it through an argument (Notion's
 // in_trash, a friend's manage_event with action delete) is declared by its module's floor (`confirmDelete`, ConfirmDelete below), for its own tools only.
 export const DELETE_CONFIRM = "delete-confirm";
