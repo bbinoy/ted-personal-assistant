@@ -136,7 +136,7 @@ test("one prompt: the same template for the owner, a friend and a group", () => 
   for (const p of [owned, friend, group]) {
     assert.match(p, /one page per subject/);
     assert.doesNotMatch(p, /categor|<category>|one fact per note/);
-    assert.match(p, /Every write says where it comes from/);
+    assert.match(p, /When a write rests on something said, give "evidence"/);
   }
   assert.match(dreamPrompt(NOW, "Mia", [], ["[10-13 20:00] Mia: hi"]), /The pages you keep about Mia right now/);
 });
