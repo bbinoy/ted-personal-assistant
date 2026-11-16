@@ -1,4 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
+import { MAX_FILES } from "../send/shots.ts";
 import { join, resolve, sep } from "node:path";
 import { addressProblem, BROWSER_PREFIX, classifyClick, dnsResolver, findTotal, hostOf, isAllowedBrowserTool, isRef, parseSnapshot, resolvesPublic, sensitiveKind, type Node, type Resolver } from "./browserules.ts";
 import { hostMatches, registeredDomain } from "../../core/domains.ts";
@@ -81,6 +83,13 @@ export const FAST_NAVIGATIONS = 30;
 const PAYISH = /\b(pay(ment|ing)?|buy|purchase|check\s*out|checkout|place\s+(the\s+)?order|donate|kaufen|bezahlen|zahlungspflichtig|kostenpflichtig|acheter|payer|comprar|pagar)\b/i;
 const short = (tool: string) => tool.slice(BROWSER_PREFIX.length);
 
+export interface HeldPdf {
+  id: string;
+  path: string;
+  name: string;
+  bytes: Buffer;
+}
+
 export class BrowseGuard {
   readonly mode: BrowseMode;
   private readonly tenant: boolean;
@@ -99,6 +108,8 @@ export class BrowseGuard {
   private readonly probe?: Probe;
   private shots = 0;
   readonly shotsDir?: string;
+  pdfs: HeldPdf[] = []; // the PDFs kept for the chat (a saved page, a download), real PDF bytes only
+  private pdfsAsked = 0;
   kept: { id: string; file: string; size: number }[] = []; // the screenshots kept for the chat, in order
   private pointClicks = 0;
   private approvedPlan?: CarriedApproval; // the owner's last approved browser question of this run (memory only; cleared when the site changes or the run ends)
@@ -236,6 +247,30 @@ export class BrowseGuard {
     }
     this.kept.push({ id, file, size: bytes.length });
     return id;
+  }
+
+  // After a call: a PDF the server wrote into the run's folder (the link of pdf_save, or a "Downloaded file" line) is read back and kept as bytes
+  // (only real PDF bytes, inside the folder, a size limit, MAX_FILES). Returns the note for the model, or undefined.
+  private keepPdfs(text: string): string | undefined {
+    const found = [...text.matchAll(/^- \[Page as pdf\]\(([^)\n]+)\)/gm)].map((m) => ({ path: m[1]!, name: "page.pdf" }));
+    for (const m of text.matchAll(/^- Downloaded file (.+) to "([^"\n]+)"/gm)) found.push({ path: m[2]!, name: m[1]! });
+    const notes: string[] = [];
+    for (const f of found) {
+      const path = resolve(this.outDir, f.path);
+      if (!path.startsWith(resolve(this.outDir) + sep) || this.pdfs.some((p) => p.path === path)) continue;
+      try {
+        if (lstatSync(path).isSymbolicLink() || statSync(path).size > MAX_FILE_BYTES) continue;
+        const bytes = readFileSync(path);
+        if (this.pdfs.length >= MAX_FILES || bytes.subarray(0, 5).toString("latin1") !== "%PDF-") continue;
+        const id = `pdf${this.pdfs.length + 1}`;
+        this.pdfs.push({ id, path, name: f.name, bytes });
+        notes.push(`(This is ${id}, a PDF of ${bytes.length} bytes. If the task asked for it, list it in the result's files with a one-line caption.)`);
+      } catch {
+        // not there: nothing kept
+      }
+    }
+    if (notes.length) this.record("browse_view", "pdf", "browse", { n: notes.length, bytes: this.pdfs.reduce((a, p) => a + p.bytes.length, 0) });
+    return notes.length ? notes.join("\n") : undefined;
   }
 
   // Every audit row of the guard goes through here: a tenant's carry no words (the audit log is the admin's).
@@ -619,7 +654,7 @@ export class BrowseGuard {
   // which is the repository: the name is cut to its last part and made an absolute path inside outDir, whatever the tool.
   async decide(toolName: string, input: Record<string, unknown>): Promise<Decision> {
     const d = await this.decideCall(toolName, input);
-    if (d.kind === "deny" || input.filename === undefined) return d;
+    if (d.kind === "deny" || { ...input, ...d.input }.filename === undefined) return d;
     const { filename, ...rest } = { ...input, ...d.input };
     const base = String(filename).split(/[\\/]/).pop()!.replace(/^\.+$/, "");
     return { ...d, input: base ? { ...rest, filename: join(this.outDir, base) } : rest };
@@ -773,6 +808,12 @@ export class BrowseGuard {
         if (c.commit) return this.commit(toolName, input, n, c.why, `Button: “${clip(n.name || "(no label)", 120)}” (${n.role})`);
         return { kind: "defer", description: `🖱️ Browser: click “${clip(n.name || n.ref, 80)}” (${n.role})` };
       }
+      case "pdf_save": {
+        // The page as a PDF, under a name code chooses (decide() puts it in outDir); kept for the chat by keepPdfs once it ran.
+        if (this.pdfsAsked >= MAX_FILES) return this.deny(toolName, input, `This run already holds ${MAX_FILES} PDFs, the most a turn can keep. Stop and report; the rest can be fetched in a later request.`);
+        this.log(toolName, "pdf", input);
+        return { kind: "defer", input: { filename: `page${++this.pdfsAsked}.pdf` } };
+      }
       case "take_screenshot": {
         if (this.shots >= MAX_SHOTS) return this.deny(toolName, input, `This run already took ${MAX_SHOTS} screenshots. Work from the page views, or stop and report.`);
         const r = screenshotInput(input);
@@ -841,6 +882,7 @@ export class BrowseGuard {
   // Returns the new text, or undefined to leave the result as it is.
   shape(toolName: string, input: Record<string, unknown>, text: string): string | undefined {
     let out = text;
+    const pdfNote = this.keepPdfs(text);
     const link = /^- \[Snapshot\]\(([^)]+)\)\s*$/m.exec(out);
     if (link) {
       const path = resolve(link[1]!);
@@ -879,6 +921,7 @@ export class BrowseGuard {
     if (out.length > SNAPSHOT_CAP) out = `${out.slice(0, SNAPSHOT_CAP)}\n[... ${out.length - SNAPSHOT_CAP} characters of the page view cut: use browser_find for what you need, or browser_snapshot with target set to the ref of the part you need (a frame that shows nothing under it may be cut)]`;
     if (/\[ref=|### Snapshot|Page URL/.test(out)) this.record("browse_view", "page", "browse", { tool: short(toolName), chars: out.length, cut: out.length > SNAPSHOT_CAP, fromFile: !!link });
     if (short(toolName) === "take_screenshot") this.record("browse_view", "screenshot", "browse", { tool: short(toolName), chars: out.length });
+    if (pdfNote) out = `${out}\n${pdfNote}`;
     this.remember(toolName, input, out, seen);
     if (cardDone.length) this.pay.lastFillSeq = this.fullSeq; // a whole page view (browser_snapshot) taken after this fill is needed before the click
     if (this.pay.attempted && !this.pay.settled && this.pay.approval) this.afterClick(out);

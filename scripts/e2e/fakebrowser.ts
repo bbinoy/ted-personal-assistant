@@ -1,6 +1,7 @@
 // The fake web of the end-to-end eval: a browser server under the real name (`browser`, tools browser_navigate, browser_snapshot, browser_click, browser_type, ...) that serves a few made-up pages in the
 // shape @playwright/mcp prints them, so the REAL browse worker, the REAL browse guard (browseguard.ts: commit steps, the card flow, the typed YES) and the REAL ledger run against it. The "pay" button of a fake
 // checkout is the fake pay endpoint: money can only move through it, and it is recorded with what was typed. No network, no real shop, no real card (the card is the public test number).
+import { writeFileSync } from "node:fs";
 import { z } from "zod";
 import { fakeService, type FakeService, type Recorder } from "./fakeserver.ts";
 
@@ -77,6 +78,17 @@ export class FakeBrowser {
       browser_navigate: { description: "Open a page by its address.", shape: { url: z.string() }, run: (a) => (open(a.url), view()) },
       browser_snapshot: { description: "A snapshot of the current page.", shape: {}, run: () => view() },
       browser_wait_for: { description: "Wait for a moment or for text to appear; returns the page.", shape: { time: z.number().optional(), text: z.string().optional() }, run: () => view() },
+      browser_pdf_save: {
+        description: "Save page as PDF",
+        shape: { filename: z.string().optional() },
+        run: (a) => {
+          const p = this.current;
+          if (!p || !a.filename) throw new Error("No page to save.");
+          const text = [p.heading, ...(p.text ?? [])].join(" / ").replace(/[()\\]/g, "");
+          writeFileSync(String(a.filename), `%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n% ${text}\ntrailer<</Root 1 0 R>>\n%%EOF\n`);
+          return `### Result\n- [Page as pdf](${a.filename})`;
+        },
+      },
       browser_navigate_back: { description: "Go back (the fake web has no history: the same page).", shape: {}, run: () => view() },
       browser_click: {
         description: "Click an element of the page by its ref.",

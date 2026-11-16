@@ -92,7 +92,7 @@ test("vision: the tools, the server (point tools and a loopback debugging port) 
   }
   const dir = mkdtempSync(join(tmpdir(), "bv-"));
   const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { cdpPort: 41234, unproxiedForTest: true }) as { args: string[] };
-  assert.equal(cfg.args[cfg.args.indexOf("--caps") + 1], "vision");
+  assert.equal(cfg.args[cfg.args.indexOf("--caps") + 1], "vision,pdf");
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "allow");
   for (const f of ["--headless", "--isolated", "--block-service-workers", "--blocked-origins"]) assert.ok(cfg.args.includes(f), f);
   assert.deepEqual(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions.args.filter((a: string) => a.startsWith("--remote-debugging-port")), ["--remote-debugging-port=41234"]);
