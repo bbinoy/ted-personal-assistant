@@ -57,7 +57,9 @@ export async function startFakeWeb(pages: Record<string, string>): Promise<FakeW
     open: (url) => (pages[url] === undefined ? undefined : (hits.push(url), pages[url])),
     rewrite: (url) => {
       const bare = url.split("#")[0]!;
-      const i = urls.indexOf(bare) >= 0 ? urls.indexOf(bare) : urls.indexOf(bare.split("?")[0]!); // a page keyed without a query answers any query (an API the model builds the address of)
+      const noQuery = bare.split("?")[0]!;
+      const origin = /^https?:\/\/[^/]+/.exec(bare)?.[0] ?? "";
+      const i = [bare, noQuery, origin].map((u) => urls.indexOf(u)).find((n) => n >= 0) ?? -1; // a page keyed without a query answers any query (an API the model builds the address of); one keyed by an origin answers any address on that site
       return i < 0 ? undefined : `https://127.0.0.1:${port}/p${i}`;
     },
     close: () => new Promise<void>((resolve) => (server.close(() => (rmSync(dir, { recursive: true, force: true }), resolve())), server.closeAllConnections())),
