@@ -114,9 +114,12 @@ export interface ModuleFloor {
   // neverallowed.ts ConfirmDelete: tools of this module that delete only through an argument (Notion's in_trash, a friend's manage_event with action delete). The call is then
   // a delete to confirm like a row of action delete-confirm, not a denied one; the same arguments on any other tool stay denied.
   confirmDelete?: ConfirmDelete;
-  // created.ts: the calls (by the name after the server's, and their arguments) whose result holds the id of something the assistant just made (a draft, an event, a page).
-  // A later delete of exactly that id is told to the judge as "created by the assistant in this conversation".
+  // created.ts: the calls (by the name after the server's, and their arguments) whose result holds the id of something the assistant just made (a draft, an event, a page);
+  // a later question or journal line about that id names it by the title it was given.
   creates?: (name: string, input: Record<string, unknown>) => boolean;
+  // autojudge.ts notifyNote, journalrender.ts: this module's deletes go to a bin the person can restore from (about 30 days), not gone for good. Only what the connector is known
+  // to do: unset means permanent, as far as the judge is told.
+  deleteToBin?: boolean;
   // policy.ts isModifiable: actions where "yes, but make it 16:00" may edit the call.
   editable?: readonly string[];
 }

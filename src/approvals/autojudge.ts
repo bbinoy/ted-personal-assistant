@@ -1,7 +1,6 @@
 import { runJudge } from "./approvaljudge.ts";
 import { fence } from "../core/fence.ts";
 import { judgeContext } from "./judgecontext.ts";
-import { createdFact } from "./created.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { OWNER } from "../core/settings.ts";
 import { addrs, type MailView } from "../policy/mailview.ts";
@@ -88,16 +87,11 @@ export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean
 }
 
 // Pure: one line for the judge (not the owner) that a module may add about its own call: for a calendar write, whether the call names guests or asks for
-// notifications. It only reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
+// notifications; for a delete, whether it goes to a bin (restorable) or is permanent (the module's `deleteToBin`). It only reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
 export function notifyNote(tool: string, input: Record<string, unknown>): string {
-  return moduleOf(tool)?.floor?.judgeNote?.[actionOf(tool)]?.(input) ?? "";
-}
-
-// Pure: the code-built fact line for a destructive call (a draft, an event, a page or a file to the bin): did the assistant make this very thing in THIS conversation
-// (created.ts: its id came back in the assistant's own create result within 24 hours)? Empty for any other call. `unknown` when the call names no id to compare.
-export function createdNote(tool: string, input: Record<string, unknown>, conversation: string, now = Date.now()): string {
-  if (!confirmsDelete(tool, input)) return "";
-  return `\nCreated by the assistant in this conversation: ${createdFact(conversation, input, now)} (the id is compared with the ids that came back in the assistant's own create results in this conversation within the last 24 hours)`;
+  const floor = moduleOf(tool)?.floor;
+  const del = confirmsDelete(tool, input) ? `\nDelete: ${floor?.deleteToBin ? "goes to the bin, restorable for about 30 days" : "permanent, not known to go to a bin"}` : "";
+  return (floor?.judgeNote?.[actionOf(tool)]?.(input) ?? "") + del;
 }
 
 // PROVENANCE: whose words or which text led to the call. Written by code (the code that starts the run says it: RunOptions.provenance), never by the model and never

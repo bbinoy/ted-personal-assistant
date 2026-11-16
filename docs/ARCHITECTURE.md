@@ -585,7 +585,7 @@ src/approvals/handoff.ts  a question that does not hold its turn: grant, continu
 src/approvals/pendingstore.ts  the stored question and single-use grant (pending_actions)
 src/approvals/auditargs.ts  a call's arguments for the audit, capped
 src/approvals/autojudge.ts  the judge's input and the vetoes before it
-src/approvals/created.ts  what the assistant itself made (24 hours)
+src/approvals/created.ts  what the assistant itself made (24 hours), to name it in a question or the journal
 src/approvals/declined.ts  declines stay final for 30 minutes
 src/approvals/describe.ts  names an object known only by id
 src/approvals/seennames.ts  id to title (and time), address to name, from the run's own read results

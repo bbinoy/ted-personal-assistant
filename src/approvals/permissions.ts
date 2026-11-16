@@ -2,7 +2,7 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import type { Source } from "../core/audit.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emit, type Why } from "../core/events.ts";
-import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines, UNNAMED } from "./describe.ts";
@@ -323,7 +323,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     const outside = reached && isUntrusted() ? recipientsOutside(reached, input, provenance, knownAtStart) : [];
     if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
     if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
         judged = { decision: "ask", reason: judged.reason };

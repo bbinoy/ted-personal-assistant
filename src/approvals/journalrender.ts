@@ -4,7 +4,7 @@ import { isTenantKey, OWNER_KEY } from "../core/ownerkey.ts";
 import { clip } from "../core/sanitize.ts";
 import { systemZone, timeIn } from "../core/timezone.ts";
 import { archivedBy } from "../modules/archivecap.ts";
-import { entryFor, isReadTool, mailView, titleOf } from "../policy/toolmanifest.ts";
+import { confirmsDelete, entryFor, isReadTool, mailView, moduleOf, titleOf } from "../policy/toolmanifest.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { callLabel, createdLabel, idsInCall, idsInResult } from "./created.ts";
@@ -148,7 +148,8 @@ function render(conv: string, tool: string, input: Record<string, unknown>, resp
   const ids = idsInCall(input);
   const what = `${doneVerb(tool, input)}${label ? `: ${label}` : ids.length ? ` (${list(ids, 2)})` : ""}`;
   const made = e?.action === "calendar-write" && /create/.test(tool) ? idsInResult(response)[0] : undefined;
-  return { what, cat, ...(made ? { undo: `delete that event (event id ${made})` } : {}) };
+  const undo = made ? `delete that event (event id ${made})` : confirmsDelete(tool, input) && moduleOf(tool)?.floor?.deleteToBin ? "restorable from the bin for about 30 days" : undefined;
+  return { what, cat, ...(undo ? { undo } : {}) };
 }
 
 // ---- why ----
