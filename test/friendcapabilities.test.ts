@@ -28,6 +28,7 @@ const friend = () => T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).p
 const registryFile = T.REGISTRY;
 const her = (id: string) => capabilitiesOf({ kind: "tenant", tenantId: id });
 const ownerOnly = new Set<string>(T.OWNER_ONLY);
+const grantOnly = new Set<string>(["shell"]); // the workbench: a friend has it only when her tenant.json says shell: true (capabilityset.ts), so it is no part of the set she gets by herself
 
 test("owner-only is exactly what the login alone gives: admin, profile, card, drive, login", () => {
   assert.deepEqual([...T.OWNER_ONLY].sort(), ["admin", "card", "drive", "login", "profile"]);
@@ -37,8 +38,10 @@ test("owner-only is exactly what the login alone gives: admin, profile, card, dr
 
 test("every capability that is not owner-only is in a friend's effective set (a new capability reaches friends by itself)", () => {
   const set = her(friend().id);
-  for (const c of T.CAPABILITIES) if (!ownerOnly.has(c)) assert.ok(set.has(c), `${c} reaches a friend`);
-  assert.deepEqual([...set].sort(), T.CAPABILITIES.filter((c) => !ownerOnly.has(c)).sort());
+  for (const c of T.CAPABILITIES) if (!ownerOnly.has(c) && !grantOnly.has(c)) assert.ok(set.has(c), `${c} reaches a friend`);
+  assert.deepEqual([...set].sort(), T.CAPABILITIES.filter((c) => !ownerOnly.has(c) && !grantOnly.has(c)).sort());
+  assert.ok(!set.has("shell"), "the workbench is granted, not given");
+  assert.ok(resolveCapabilities(T.FRIEND_CAPABILITIES, { own: { shell: true } }).has("shell"));
 });
 
 test("the owner-only capabilities are never in a friend's set, however the set is built, and the owner has all of hers", () => {
@@ -112,5 +115,5 @@ test("the real data is covered: a record written by the older version with a sho
   const stored = reg.tenants.find((t: { id: string }) => t.id === rec.id);
   stored.capabilities = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"];
   writeFileSync(registryFile, JSON.stringify(reg));
-  for (const c of T.FRIEND_CAPABILITIES) assert.ok(her(rec.id).has(c), c);
+  for (const c of T.FRIEND_CAPABILITIES) if (!grantOnly.has(c)) assert.ok(her(rec.id).has(c), c);
 });

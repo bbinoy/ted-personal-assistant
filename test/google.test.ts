@@ -131,8 +131,8 @@ test("google: the start-up sweep removes only stale folders this app made (prefi
   assert.equal(sweepStaleCredentialDirs(join(root, "missing")), 0, "a missing temp root is nothing to do");
 });
 
-test("google: the module lifecycle: Google and Notion have stop and drop, and stop and drop of idle hubs are harmless", () => {
-  assert.deepEqual(Object.entries(RUNTIME).filter(([, r]) => r.lifecycle).map(([name]) => name).sort(), ["google", "notionhosted"]);
+test("google: the module lifecycle: Google and Notion (and the workbench's VMs) have stop and drop, and stop and drop of idle hubs are harmless", () => {
+  assert.deepEqual(Object.entries(RUNTIME).filter(([, r]) => r.lifecycle).map(([name]) => name).sort(), ["google", "notionhosted", "shell"]);
   assert.equal(typeof RUNTIME.google!.lifecycle!.start, "function", "google sweeps at start-up");
   dropAll("nobody");
   stopAll();

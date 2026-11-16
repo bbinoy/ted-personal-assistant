@@ -3,6 +3,7 @@ import { type Source } from "../core/audit.ts";
 import { emitRecord } from "../core/events.ts";
 import { PLUGIN, preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
+import { SHELL_TOOL } from "../modules/shell/module.ts";
 import { skillHint, type SkillHint } from "../modules/skills.ts";
 
 // Delegation, in EVERY run (a chat turn of the owner, a group or a friend, and a look alike): the run decides, a stronger model (an SDK subagent, the "expert") does the heavy work.
@@ -84,6 +85,7 @@ export interface Delegation {
 // The PreToolUse hook of a run (every run has experts). Called for every tool (the SDK's `matcher` is left out on purpose: it also learns the type of each subagent here).
 //   Agent / Task   from the main run only (a subagent carries an `agent_id`), only `expert` or a variant of this run, at most MAX_DELEGATIONS; its brief is kept
 //                  (`briefs`) for the approval judge, which reads it as derived data next to the run's provenance; it always runs in the foreground (foreground())
+//   mcp__shell__run  only from the workbench expert (`expert-workbench`, the one with the workbench skill): the main run and every other expert are refused, so only that expert pays for what the tool is
 //   Skill          a `delegate:` skill is denied to the main run: it must go through its expert; the expert may load it
 export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: number; onDelegate?: (d: Delegation) => void; context?: () => string | undefined } = {}) {
   const max = o.max ?? MAX_DELEGATIONS;
@@ -107,6 +109,7 @@ export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: nu
       const context = o.context?.(); // code adds the conversation's context (facts, recent chat) to what the expert is told: the judge still reads only the look's own brief
       return allowForeground(context ? { ...args, prompt: `${brief}\n\n${context}` } : args); // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
     }
+    if (input.tool_name === SHELL_TOOL && input.agent_type !== variantOf("workbench")) return (emitRecord("shell", "deny-caller", source, { agent_type: input.agent_type }), deny(`The workbench is run by its own expert: call the Agent tool with subagent_type "${variantOf("workbench")}" and a self-contained brief (what to do, which files); it has the box and sends the result itself.`));
     if (input.tool_name === "Skill" && !input.agent_id) {
       const skill = String(args.skill ?? args.name ?? "").replace(`${PLUGIN}:`, "");
       const agent = setup.delegated.get(skill);

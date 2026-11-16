@@ -2,6 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { emitRecord } from "../../core/events.ts";
 import { isOneEmoji } from "../../core/reaction.ts";
+import { stopBox } from "../shell/shelltool.ts";
 import { dropShots, loadFile, loadShot, type HeldFile } from "./shots.ts";
 import { setAsking, type Asking } from "../voice/voicenote.ts";
 import { sourceOfKey } from "../../core/ownerkey.ts";
@@ -47,6 +48,7 @@ export async function withSend<T>(key: string, sink: SendSink | undefined, run: 
     return await run();
   } finally {
     if (sink && sinks.get(key) === sink) (before ? sinks.set(key, before) : sinks.delete(key));
+    await stopBox(key); // (the workbench's box, if the turn used one; its output files already went to the turn's held files)
     dropShots(key);
     if (asking) setAsking(key, undefined);
   }

@@ -112,6 +112,7 @@ function rules(s: Subject, timed: boolean): string {
     browse: caps.has("browse"),
     weather: caps.has("weather"),
     draw: caps.has("draw"),
+    shell: caps.has("shell"),
     ownerDir: own ? convPaths(OWNER_CONV).dir : "",
     logsDir: own ? logPaths().dir : "",
   });

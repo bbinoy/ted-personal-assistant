@@ -16,6 +16,8 @@ import { createMemoryServer } from "./memory/memory-tools.ts";
 import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
+import { createShellServer, stopBoxesSync } from "./shell/shelltool.ts";
+import { sweepBoxes } from "./shell/box.ts";
 import { auditSource } from "../core/runkind.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
@@ -94,6 +96,11 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   },
   // note_upcoming_meetings: any run with the calendar, writing that conversation's own meetings table (meetingtools.ts).
   meetings: { server: (ctx) => createMeetingsServer({ key: ctx.key!, source: auditSource(ctx.kind) }) },
+  // The workbench: a throwaway VM per run, made by its first command and stopped when the turn ends (send.ts), at exit (here) or, after a crash, by the sweep at the next start (box.ts).
+  shell: {
+    server: (ctx) => createShellServer(ctx.key!),
+    lifecycle: { start: () => void sweepBoxes().then((n) => n && console.log(`shell: removed ${n} workbench container(s) a stopped process left behind`), () => undefined), stop: stopBoxesSync, drop: () => undefined },
+  },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, attended: ctx.kind.attended, tenant: !!(ctx.tenant ?? ctx.sponsor), run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: {

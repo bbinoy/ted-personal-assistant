@@ -19,7 +19,7 @@ import { BROWSE_RUN, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "shell", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -65,11 +65,11 @@ test("modules: every module that names a server has its server in runtime.ts (RU
   for (const m of withServer) assert.equal(typeof RUNTIME[m.name]?.server, "function", `module ${m.name} has no server factory`);
   assert.deepEqual(withServer.map((m) => m.name).sort(), Object.entries(RUNTIME).filter(([, r]) => r.server).map(([name]) => name).sort(), "a server factory for no module");
   assert.deepEqual(Object.keys(RUNTIME).filter((name) => !registered().some((m) => m.name === name)), [], "a runtime entry for no module");
-  for (const m of registered().filter((m) => RUNTIME[m.name]?.lifecycle)) assert.ok(m.connection.kind === "external", `${m.name}: only a separate server or connection outlives a run`);
+  for (const m of registered().filter((m) => RUNTIME[m.name]?.lifecycle)) assert.ok(m.connection.kind === "external" || m.name === "shell", `${m.name}: only a separate server or connection (or the workbench's VM) outlives a run`);
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "shell", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 // What a run offers: its conversation's capabilities, less what attendance removes (capabilities.ts toolsFor), as buildOptions hands it to the modules.
@@ -132,14 +132,14 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review"].map(P);
+  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review", "workbench"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("mail"), P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));
   assert.deepEqual(ownerSkills(false, "mailbird").filter((s) => /mail/.test(s)), []);
   assert.deepEqual(ownerSkills(true, "none").filter((s) => /mail/.test(s)), []);
   assert.deepEqual(ownerSkills(true, "mailbird", { required: true }), ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "setup"]);
-  assert.deepEqual(sharedSkills(), { "web-research": ["chat"], "how-ted-works": ["chat"], "research-booking": ["browse"], "surf-conditions": ["weather"], draw: ["draw"] });
+  assert.deepEqual(sharedSkills(), { "web-research": ["chat"], "how-ted-works": ["chat"], "research-booking": ["browse"], "surf-conditions": ["weather"], draw: ["draw"], workbench: ["shell"] });
   assert.deepEqual(skillsFor(new Set(["browse", "draw"] as const)), [P("research-booking"), P("draw")]);
   assert.deepEqual(skillsFor(new Set(["mail", "calendar", "notion", "chat"] as const)), [P("web-research"), P("how-ted-works")]);
   for (const s of [...Object.keys(sharedSkills()), ...privateSkills()]) assert.ok(existsSync(`${settings.pluginDir}/skills/${s}/SKILL.md`), s);

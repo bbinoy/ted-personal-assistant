@@ -554,6 +554,9 @@ src/modules/send/connectorback.ts  a connector that came back pulls the owner's 
 src/modules/send/module.ts  send
 src/modules/send/send.ts  the send tool: speak mid-turn
 src/modules/send/shots.ts  pictures of a turn, delivered via send
+src/modules/shell/box.ts  the workbench box: one throwaway Apple `container` VM, no network, bytes in and out
+src/modules/shell/module.ts  shell
+src/modules/shell/shelltool.ts  the run tool of the workbench: files in, command, files out
 src/modules/tasks/module.ts  task tool rows
 src/modules/tasks/routinelist.ts  the routine notes of a conversation; the reply to a routine note write
 src/modules/tasks/taskfacts.ts  code facts about the list for the judge and chat
