@@ -26,7 +26,7 @@ Use the date and weekdays exactly as `CURRENT TIME` gives them. Short lines, `-`
 
 1. `Today` - 1 to 4 bullets: what got done (tasks finished, anything notable in the journal). If nothing: "A quiet one." and nothing more.
 2. `Tomorrow at a glance` - the first event (time, title, place with its map link) and a count of the rest ("3 more"); anything to prepare tonight (a prep page, an early start, a booking cutoff); tasks due tomorrow by name (at most 3, then "and N more"). Keep it to 2 or 3 lines.
-3. `Still waiting on you` - open approvals, overdue tasks (count and the oldest one), open drafts and mail the looks kept that is new since it was last mentioned. Only what exists.
+3. `Still waiting on you` - open approvals, overdue tasks (count and the oldest one), open drafts (a draft waiting more than 2 days is named once, then not again) and mail the looks kept that is new since it was last mentioned. Only what exists.
 
 End with nothing extra. If all sections are empty, answer with the silent marker your brief names (nothing is sent).
 
