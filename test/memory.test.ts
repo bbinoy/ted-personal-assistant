@@ -87,7 +87,7 @@ test("notes: over the budget the biggest folder collapses to one line, then the 
   assert.doesNotMatch(tight, /z-top/, "the tail goes first, in path order");
   const routines = indexOf([{ file: "routines/a.md", class: "routine", text: "x", when: "every day at 07:30" }, ...notes], 400);
   assert.match(routines, /## routines\n- \[routines\/a\]/, "routines are always shown");
-  assert.ok(INDEX_MAX_CHARS >= 16_000);
+  assert.ok(INDEX_MAX_CHARS >= 64_000, "a runaway guard: every page of a real conversation is in the index");
 });
 
 test("notes: a nested front matter (the SDK's writer puts fields under metadata:) still gives its description, expiry and routine rule", () => {
