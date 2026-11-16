@@ -15,6 +15,7 @@ import { isPaused } from "../../core/pause.ts";
 import { loadProfile, type Profile } from "./profile.ts";
 import { OWNER_KEY } from "../../core/ownerkey.ts";
 import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
+import { safeName } from "../../conversation/document.ts";
 import { adoptFile, adoptShots, MAX_FILES, newShotsDir } from "../send/shots.ts";
 import { OWNER, settings } from "../../core/settings.ts";
 import { instancePaths } from "../../core/convpaths.ts";
@@ -38,7 +39,7 @@ export const BROWSE_SCHEMA = {
       answer: { type: "string" }, // what was found or done, in a few sentences
       sources: { type: "array", items: { type: "string" } }, // addresses of the pages the answer comes from
       handoffUrl: { type: "string" }, // when it stopped before a commit: the page address where the owner can finish
-      files: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "caption"], properties: { id: { type: "string" }, caption: { type: "string" } } } }, // the PDFs worth handing over (ids as the pdf_save or download results gave them), one line each
+      files: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "caption"], properties: { id: { type: "string" }, caption: { type: "string" }, name: { type: "string" } } } }, // the PDFs worth handing over (ids as the pdf_save or download results gave them), one line each
       shots: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "caption"], properties: { id: { type: "string" }, caption: { type: "string" } } } }, // the screenshots worth showing the person (ids as the screenshot results gave them), one line each
     },
   },
@@ -57,7 +58,7 @@ export function browseSystem(who: string = OWNER, keys: readonly { key: string; 
     ...(keys.length ? [`${who}'s saved details (you never see the values). To fill a field with one, call browser_type with the field's ref and text exactly {{profile:KEY}} (or that as a value in browser_fill_form), nothing else in the text and no submit. Code checks that the field fits the key and the site is allowed; if it refuses, do not try another way: stop with needs_owner. This is the only way to enter an ID or passport number. Keys: ${keys.map((k) => `${k.key} (${k.kind})`).join(", ")}. Use one only when the task needs it; the final submit is always shown to ${who} first.`] : []),
     ...(card ? [`${who}'s payment card is saved (${maskCard(card)}, ${card.currency}); you never see its numbers. Pay with it ONLY when the task tells you to pay, and only at the final payment step of the checkout: (1) take a browser_snapshot of the payment page (card fields often sit in frames inside frames; if a frame shows nothing under it, take browser_snapshot with target set to the frame's ref, never type into the frame itself); (2) browser_type into the card number field with text exactly {{card:number}}, which asks ${who} to approve the payment with a typed YES (wait: if it is declined or refused, stop with status needs_owner and give handoffUrl); then the expiry field with {{card:expiry}} (one field that takes MM/YY) and the security code field with {{card:cvc}}: one call per field, nothing else in the text, no submit; (3) take a new browser_snapshot, then click the page's pay button once. After that touch nothing: look at the page (browser_snapshot, browser_wait_for for a few seconds at a time, at most about three minutes) and report exactly what it says. The payment is also confirmed by ${who} in the card's own app, so say so. Never write that it was paid unless the page shows a confirmation; otherwise say it is unconfirmed. Code checks the shop, the payment page, the total, the cart and the currency; if it refuses (a frame it cannot check, no clear total, a total above the cap, a ticked box that saves the card), do not look for another way: stop with status needs_owner and give handoffUrl. One payment per task.`] : []),
     VISION_PROMPT,
-    `A "Print" or "Download receipt/ticket" button that only opens a print dialog: use browser_pdf_save on that page instead; a PDF the site downloads is kept too. List each PDF the task asked for in files (id, one-line caption).`,
+    `A "Print" or "Download receipt/ticket" button that only opens a print dialog: use browser_pdf_save on that page instead; a PDF the site downloads is kept too. List each PDF the task asked for in files (id, one-line caption, and name: a short file name a recipient would understand, like Eurostar-receipt-DP4JCW.pdf).`,
     `Answer with the JSON object only: status (done, needs_owner or failed), answer (a few plain sentences: what you found or did, with prices, times and names exactly as shown), sources (page addresses), shots (the screenshots that show what the task asked about, each with its id and a one-line caption; none if no picture helps) and handoffUrl when you stopped before a step.`,
   ].join("\n\n");
 }
@@ -97,6 +98,20 @@ export function shotCaptions(structured: unknown): Record<string, string> {
   for (const x of Array.isArray(list) ? list.slice(0, MAX_SHOTS) : []) {
     const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
     if (typeof o.id === "string" && /^shot\d{1,3}$/.test(o.id)) out[o.id] = clean1(o.caption, 120);
+  }
+  return out;
+}
+
+// The file names the worker gave, cleaned: a plain label, no path, always ending in .pdf; none when it gave nothing usable.
+export function fileNames(structured: unknown): Record<string, string> {
+  const list = (structured as { files?: unknown } | null)?.files;
+  const out: Record<string, string> = {};
+  for (const x of Array.isArray(list) ? list.slice(0, MAX_FILES) : []) {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    if (typeof o.id !== "string" || !/^pdf\d{1,3}$/.test(o.id) || typeof o.name !== "string") continue;
+    const plain = o.name.replace(/^.*[\\/]/, "");
+    const base = !plain.trim() ? "" : safeName(plain).replace(/\.pdf$/i, "").replace(/\.{2,}/g, "_").replace(/[. ]+$/, "");
+    if (base) out[o.id] = `${base}.pdf`;
   }
   return out;
 }
@@ -284,7 +299,8 @@ async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, d
     if (shots.length) result.shots = shots.map((s) => ({ id: s.id, caption: s.caption }));
     // The PDFs the worker kept (and listed with a caption) move in as files of the turn (file1...), like a mail attachment opened with open_file.
     const captions = fileCaptions(r.structured);
-    const files = ctx.key ? guard.pdfs.flatMap((p) => { const h = p.id in captions ? adoptFile(ctx.key!, p.bytes, p.name) : undefined; return h ? [{ id: h.id, caption: captions[p.id]!, name: h.name }] : []; }) : [];
+    const names = fileNames(r.structured);
+    const files = ctx.key ? guard.pdfs.flatMap((p) => { const h = p.id in captions ? adoptFile(ctx.key!, p.bytes, names[p.id] ?? p.name) : undefined; return h ? [{ id: h.id, caption: captions[p.id]!, name: h.name }] : []; }) : [];
     if (files.length) result.files = files;
     const dropped = Object.keys(captions).filter((id) => guard.pdfs.some((p) => p.id === id)).length - files.length;
     if (dropped > 0) result.answer = clean1(`${result.answer} (${dropped} more PDF${dropped === 1 ? "" : "s"} could not be kept: a turn holds at most ${MAX_FILES} files. Send or attach these, then ask again for the rest.)`, ANSWER_MAX);

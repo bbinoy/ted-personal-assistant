@@ -15,6 +15,10 @@ import { instancePaths } from "../../core/convpaths.ts";
 
 export const MAX_PICTURE_BYTES = 3_000_000;
 export const SHOT_TTL_MS = 60 * 60_000;
+// A file attached to a mail draft is read by the mail client later (when it syncs or sends the draft), long after the turn ended, so its copy lives in
+// its own folder that dropShots leaves alone; it is swept by age. 30 days: a draft can sit that long before it is sent.
+export const HELD_TTL_MS = 30 * 24 * 60 * 60_000;
+const heldRoot = () => join(instancePaths().browse, "held");
 export const MAX_DRAWINGS = 20; // per turn
 const ID = /^(shot|img)[1-9]\d{0,2}$/;
 export const MAX_FILES = 10; // per turn, the one cap for every file (open_file, PDFs a browse run kept); each at most MAX_FILE_BYTES (20 MB); the browse run's own runaway guard uses it too
@@ -32,17 +36,19 @@ export function newShotsDir(now = Date.now()): string {
 
 // Folders older than the TTL (a turn that never ended, a crash) go.
 export function sweepShots(now = Date.now()): void {
-  try {
-    for (const n of readdirSync(shotsRoot())) {
-      const p = join(shotsRoot(), n);
-      try {
-        if (now - statSync(p).mtimeMs > SHOT_TTL_MS) rmSync(p, { recursive: true, force: true });
-      } catch {
-        // gone already
+  for (const [root, ttl] of [[shotsRoot(), SHOT_TTL_MS], [heldRoot(), HELD_TTL_MS]] as const) {
+    try {
+      for (const n of readdirSync(root)) {
+        const p = join(root, n);
+        try {
+          if (now - statSync(p).mtimeMs > ttl) rmSync(p, { recursive: true, force: true });
+        } catch {
+          // gone already
+        }
       }
+    } catch {
+      // no folder yet
     }
-  } catch {
-    // no folder yet
   }
 }
 
@@ -111,7 +117,11 @@ export function adoptShots(key: string, from: { id: string; file: string; size: 
 export function adoptFile(key: string, bytes: Buffer, name: string): HeldFile | undefined {
   const t = turnOf(key);
   if (t.files.size >= MAX_FILES || bytes.length === 0 || bytes.length > MAX_FILE_BYTES) return undefined;
-  const file = { id: `file${t.files.size + 1}`, name: safeName(name), bytes };
+  const taken = new Set([...t.files.values()].map((f) => f.name));
+  const base = safeName(name);
+  let unique = base;
+  for (let n = 2; taken.has(unique); n++) unique = base.replace(/(\.[^.]*)?$/, (ext) => `-${n}${ext}`); // two files of a turn never share a name: a.pdf, a-2.pdf
+  const file = { id: `file${t.files.size + 1}`, name: unique, bytes };
   t.files.set(file.id, file);
   return file;
 }
@@ -122,15 +132,15 @@ export function loadFile(key: string, id: string): { file: HeldFile } | { proble
   return file ? { file } : { problem: `No file "${id}" in this conversation. The ids are the ones open_file returned in this turn.` };
 }
 
-// A held file as a real file in the turn's own folder (gone with the turn), for the one case a path is needed: a mail draft's attachment (permissions.ts swaps "file1" for it,
-// after the checks; the model never names a path). Undefined for an id that is not this turn's.
+// A held file as a real file, for the one case a path is needed: a mail draft's attachment (permissions.ts swaps "file1" for it, after the checks; the model never
+// names a path). It goes in a fresh unguessable folder outside the turn's (see HELD_TTL_MS), so it outlives the turn. Undefined for an id that is not this turn's.
 export function heldPath(key: string, id: string): string | undefined {
-  const t = turns.get(key);
-  const f = t?.files.get(id);
-  if (!t || !f) return undefined;
-  const dir = join(t.dir, `held-${id}`);
+  const f = turns.get(key)?.files.get(id);
+  if (!f) return undefined;
+  mkdirSync(heldRoot(), { recursive: true, mode: 0o700 });
+  sweepShots();
+  const dir = mkdtempSync(join(heldRoot(), "held-"));
   const path = join(dir, safeName(f.name));
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileSync(path, f.bytes, { mode: 0o600 });
   return path;
 }
