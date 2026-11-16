@@ -34,6 +34,7 @@
 {"tool":"mcp__browser__browser_mouse_click_xy","provider":"browse","action":"browser-read","cap":"browse","attended":null,"who":["browse"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__browser__browser_mouse_move_xy","provider":"browse","action":"browser-read","cap":"browse","attended":null,"who":["browse"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__browser__browser_mouse_wheel","provider":"browse","action":"browser-read","cap":"browse","attended":null,"who":["browse"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__browser__browser_pdf_save","provider":"browse","action":"browser-read","cap":"browse","attended":null,"who":["browse"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__browser__browser_navigate","provider":"browse","action":"browser-nav","cap":"browse","attended":null,"who":["browse"],"view":null,"free":false,"untrusted":true},
 {"tool":"mcp__browser__browser_type","provider":"browse","action":"browser-input","cap":"browse","attended":null,"who":["browse"],"view":null,"free":false,"untrusted":true},
 {"tool":"mcp__browser__browser_fill_form","provider":"browse","action":"browser-input","cap":"browse","attended":null,"who":["browse"],"view":null,"free":false,"untrusted":true},

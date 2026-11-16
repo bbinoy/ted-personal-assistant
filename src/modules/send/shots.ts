@@ -17,7 +17,7 @@ export const MAX_PICTURE_BYTES = 3_000_000;
 export const SHOT_TTL_MS = 60 * 60_000;
 export const MAX_DRAWINGS = 20; // per turn
 const ID = /^(shot|img)[1-9]\d{0,2}$/;
-export const MAX_FILES = 10; // per turn
+export const MAX_FILES = 10; // per turn, the one cap for every file (open_file, PDFs a browse run kept); each at most MAX_FILE_BYTES (20 MB); the browse run's own runaway guard uses it too
 const shotsRoot = () => join(instancePaths().browse, "shots");
 
 export const isJpeg = (b: Uint8Array): boolean => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
@@ -120,6 +120,19 @@ export function adoptFile(key: string, bytes: Buffer, name: string): HeldFile | 
 export function loadFile(key: string, id: string): { file: HeldFile } | { problem: string } {
   const file = turns.get(key)?.files.get(id);
   return file ? { file } : { problem: `No file "${id}" in this conversation. The ids are the ones open_file returned in this turn.` };
+}
+
+// A held file as a real file in the turn's own folder (gone with the turn), for the one case a path is needed: a mail draft's attachment (permissions.ts swaps "file1" for it,
+// after the checks; the model never names a path). Undefined for an id that is not this turn's.
+export function heldPath(key: string, id: string): string | undefined {
+  const t = turns.get(key);
+  const f = t?.files.get(id);
+  if (!t || !f) return undefined;
+  const dir = join(t.dir, `held-${id}`);
+  const path = join(dir, safeName(f.name));
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(path, f.bytes, { mode: 0o600 });
+  return path;
 }
 
 // The bytes as a short-lived file in a private folder, for the one call that needs a path (signal-cli attaching it); gone when `use` ends, however it ends.

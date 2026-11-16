@@ -1,5 +1,6 @@
 // The fake Mailbird of the end-to-end eval: the `mailbird` server with the tool names, arguments and result shapes of the real one (copied from tool results, never content). It keeps conversations, drafts and
 // what was sent; the draft reader the approval of a send uses (setDraftReader) is answered from it too, so no real Mailbird client is needed.
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { fakeService, type FakeService, type Recorder, type ToolDef } from "./fakeserver.ts";
 
@@ -182,6 +183,12 @@ export class FakeMail {
         run: (a) => {
           const m = draft(undefined, (a.to ?? []).map(personOf), a.subject ?? "", a.body ?? "", (a.cc ?? []).map(personOf), a.accountId ?? 1);
           m.bcc = (a.bcc ?? []).map(personOf);
+          // The real client reads each attachment path when the draft is saved (the file may be gone after the turn), so the bytes are read here: an id the permission step did not swap stays a name with no bytes.
+          for (const [i, p] of (a.attachments ?? []).entries()) {
+            let bytes: Buffer | undefined;
+            try { bytes = readFileSync(p); } catch { /* not a file */ }
+            m.attachments.push({ id: i + 1, fileName: p.split("/").pop() ?? p, mimeType: "application/pdf", size: bytes?.length ?? 0, isInline: false, text: "", ...(bytes ? { bytes } : {}) });
+          }
           return { messageId: m.id, status: "draft_created", note: "Draft saved." };
         },
       },

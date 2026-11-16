@@ -22,6 +22,7 @@ import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
 import { isAsked, renderHash, takeGrant } from "./pendingstore.ts";
 import { OPEN_TOOL } from "../modules/files/module.ts";
+import { heldPath } from "../modules/send/shots.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -91,6 +92,12 @@ const failed = (key: string) => {
   for (const [k, f] of failures) if (now - f.at >= DONE_WINDOW_MS) failures.delete(k);
   failures.set(key, { n: (failures.get(key)?.n ?? 0) + 1, at: now });
 };
+// A mail draft's `attachments: ["file1"]` names a file of THIS turn (open_file, a browse run's PDF), never a path (paths stay never-allowed). Only after every check, the id becomes the
+// turn folder's copy of that file, which the mail client reads; an id that is not this turn's is left as it is (the client refuses it).
+const withHeldFiles = (conversation: string, input: Record<string, unknown>): Record<string, unknown> =>
+  Array.isArray(input.attachments) && input.attachments.some((a) => typeof a === "string" && /^file[1-9]\d*$/.test(a))
+    ? { ...input, attachments: input.attachments.map((a) => (typeof a === "string" && /^file[1-9]\d*$/.test(a) ? (heldPath(conversation, a) ?? a) : a)) }
+    : input;
 // A call the person approved WITH an edit: what changed, kept until the call's result is handed to the run (editedNote), so the run says it in its own words. Code never writes that chat text.
 const edited = new Map<string, string>();
 export const editedNote = (conversation: string, tool: string, input: Record<string, unknown>): string | undefined => {
@@ -209,7 +216,8 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
     try {
-      return await decide(tool, input, o);
+      const r = await decide(tool, input, o);
+      return r.behavior === "allow" && r.updatedInput ? { ...r, updatedInput: withHeldFiles(conversation, r.updatedInput) } : r;
     } catch (e) {
       console.error(`permissions: ${tool}: the check failed (${(e as Error)?.name ?? "error"}), denied`);
       try {

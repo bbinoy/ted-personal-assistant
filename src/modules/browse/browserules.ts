@@ -276,7 +276,7 @@ export function classifyClick(node: Node | undefined): ClickClass {
 export const BROWSER_PREFIX = "mcp__browser__browser_";
 // The worker sees the page's text and screenshots, and clicks by ref or, when no ref reaches the thing, at a point (browsevision.ts: code looks up what is under the
 // point and decides it like a ref click). Everything else the server offers (evaluate, run_code_unsafe, file_upload, network_*, drop, drag, emulate, resize, close,
-// press-and-hold, release, pdf, devtools...) is denied outright and hidden from the model.
-export const ALLOWED_BROWSER_TOOLS = ["snapshot", "find", "navigate", "navigate_back", "click", "type", "fill_form", "select_option", "press_key", "hover", "handle_dialog", "wait_for", "tabs", "take_screenshot", "mouse_click_xy", "mouse_move_xy", "mouse_wheel"] as const;
-export const HIDDEN_BROWSER_TOOLS = ["close", "resize", "console_messages", "emulate_media", "evaluate", "file_upload", "drop", "network_requests", "network_request", "run_code_unsafe", "drag", "install", "pdf_save", "start_tracing", "stop_tracing", "mouse_down", "mouse_up", "mouse_drag_xy"].map((n) => BROWSER_PREFIX + n);
+// press-and-hold, release, devtools...) is denied outright and hidden from the model.
+export const ALLOWED_BROWSER_TOOLS = ["snapshot", "find", "navigate", "navigate_back", "click", "type", "fill_form", "select_option", "press_key", "hover", "handle_dialog", "wait_for", "tabs", "take_screenshot", "mouse_click_xy", "mouse_move_xy", "mouse_wheel", "pdf_save"] as const;
+export const HIDDEN_BROWSER_TOOLS = ["close", "resize", "console_messages", "emulate_media", "evaluate", "file_upload", "drop", "network_requests", "network_request", "run_code_unsafe", "drag", "install", "start_tracing", "stop_tracing", "mouse_down", "mouse_up", "mouse_drag_xy"].map((n) => BROWSER_PREFIX + n);
 export const isAllowedBrowserTool = (tool: string): boolean => tool.startsWith(BROWSER_PREFIX) && (ALLOWED_BROWSER_TOOLS as readonly string[]).includes(tool.slice(BROWSER_PREFIX.length));

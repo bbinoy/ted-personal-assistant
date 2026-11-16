@@ -24,7 +24,7 @@ export const browserModule: ToolModule = {
   name: "browser",
   connection: { kind: "external", name: "browser", forBrowse: true, when: (ctx) => ctx.browsing && !!ctx.guard },
   rows: [
-    ...browser("browser-read", "snapshot find wait_for tabs hover navigate_back click press_key take_screenshot mouse_click_xy mouse_move_xy mouse_wheel", { who: ["browse"] }),
+    ...browser("browser-read", "snapshot find wait_for tabs hover navigate_back click press_key take_screenshot mouse_click_xy mouse_move_xy mouse_wheel pdf_save", { who: ["browse"] }),
     ...browser("browser-nav", "navigate", { who: ["browse"] }),
     ...browser("browser-input", "type fill_form select_option", { who: ["browse"] }),
     ...browser("browser-dialog", "handle_dialog", { who: ["browse"] }),

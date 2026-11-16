@@ -61,7 +61,8 @@ function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, st
       const r = await inner(tool, input, opts);
       return r?.behavior === "allow" ? { behavior: "deny", message: web.search(String(input.query ?? "")) } : r;
     }
-    if (!isAnswered(tool, fakeTools)) {
+    const heldFileOnly = tool === "mcp__files__open_file" && typeof input.file === "string" && input.url === undefined && input.messageId === undefined; // (re-reading a file of the turn reaches nothing outside)
+    if (!heldFileOnly && !isAnswered(tool, fakeTools)) {
       state.violations.push(`un-faked tool call: ${tool}`);
       abort();
       return { behavior: "deny", message: "This tool is not available in this environment." };
