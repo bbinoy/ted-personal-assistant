@@ -8,8 +8,8 @@ import { LIMITS } from "../core/sanitize.ts";
 // integrity and made-up provenance, not source trust: `evidence`, when given, must be a verbatim quote of the person's own words (a made-up one rejects the write); a write with none is a tidy (merge, split,
 // link repair, reformat) and is shown as one. A page grants no permission whatever it says: the code floor and the judge gate every action.
 
-const MAX_OPS = 30;
-const MAX_WRITES = 20; // a merge night touches many pages
+const MAX_OPS = 60; // room for MAX_WRITES writes and MAX_DELETES deletes
+const MAX_WRITES = 40; // a merge night touches many pages
 const MAX_DELETES = 12;
 const MIN_EVIDENCE = 12; // characters of the person's own words a delete may rest on
 const MAX_REASONED_DELETES = 3; // deletes a night that rest on the model's reason alone (not an expiry, a quote or a rewrite of the note's content)
