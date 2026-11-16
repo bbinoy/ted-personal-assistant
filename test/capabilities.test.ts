@@ -65,6 +65,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     weather: { tools: WEATHER, skills: [P("surf-conditions")] },
     draw: { tools: ["mcp__draw__draw"], skills: [P("draw")] },
     tasks: { tools: TASKS, skills: [] }, // the conversation's own list: on for the owner, every friend and every group
+    shell: { tools: [], skills: [] }, // the workbench: only where her tenant.json grants it (the next test), never by the record alone
     notes: { tools: [], skills: [] },
     intake: { tools: [], skills: [] }, // its tools also need INTAKE_BASE_URL and a purpose (below)
     // the owner's login and the admin's powers: never a tool or a skill of an isolated conversation, whatever a record lists
@@ -89,6 +90,25 @@ test("capabilities: adding one capability to a record changes exactly its tools 
   // everything at once is still only the sum of the free ones
   assert.deepEqual(sorted(toolsFor(caps(...CAPABILITIES))), sorted(toolsFor(groupCapabilities())));
   assert.deepEqual(skillsFor(caps(...CAPABILITIES)), skillsFor(groupCapabilities()));
+});
+
+test("capabilities: the workbench is the owner's, a friend's only when her tenant.json says shell: true, never a group's, and the instance can switch it off", () => {
+  const tools = (...a: Parameters<typeof resolveCapabilities>) => toolsFor(resolveCapabilities(...a));
+  const SHELL = "mcp__shell__run";
+  assert.ok(tools(CAPABILITIES, { login: true }).has(SHELL) && skillsFor(resolveCapabilities(CAPABILITIES, { login: true })).includes(P("workbench")), "the owner has it");
+  assert.ok(!tools(["chat", "shell"]).has(SHELL), "a friend without the grant");
+  assert.ok(!tools(["chat", "shell"], { own: { shell: false } }).has(SHELL));
+  assert.ok(tools(["chat", "shell"], { own: { shell: true } }).has(SHELL), "with the grant");
+  assert.deepEqual(skillsFor(resolveCapabilities(["chat", "shell"], { own: { shell: true } })).filter((s) => s === P("workbench")), [P("workbench")]);
+  assert.ok(!toolsFor(groupCapabilities()).has(SHELL), "a group never has it");
+  const f = settings as unknown as { workbench: boolean };
+  const was = f.workbench;
+  try {
+    f.workbench = false;
+    assert.ok(!tools(CAPABILITIES, { login: true }).has(SHELL) && !skillsFor(resolveCapabilities(CAPABILITIES, { login: true })).includes(P("workbench")), "switched off for everybody");
+  } finally {
+    f.workbench = was;
+  }
 });
 
 test("capabilities: the intake tools need the capability, a purpose and a usable INTAKE_BASE_URL; nothing else changes", () => {
@@ -173,7 +193,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
 });
 
 test("capabilities: no private skill and no tool of the owner's login is ever offered, by any set or any name", () => {
-  const everything = resolveCapabilities([...CAPABILITIES]);
+  const everything = resolveCapabilities([...CAPABILITIES], { own: { shell: true } }); // (the workbench is a shared skill once granted)
   for (const set of [everything, groupCapabilities(), caps("chat")]) {
     const skills = skillsFor(set).map((s) => s.slice(s.indexOf(":") + 1));
     assert.deepEqual(skills.filter((s) => PRIVATE_SKILLS.includes(s)), []);

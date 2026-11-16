@@ -65,7 +65,7 @@ test("a run built by the production builder sees only the fakes and Ted's own se
   await runConversation(owner(), { now: NOW }, chatTurn(owner(), { prompt: "hi" }), undefined, { query: q });
   const o = seen.options!;
   assert.ok(Object.keys(fakes).every((n) => n in o.mcpServers), "the fakes are in the run's servers");
-  assert.ok(Object.keys(o.mcpServers).every((n) => n in fakes || ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "browse", "tenants"].includes(n)), `only Ted's own servers besides: ${Object.keys(o.mcpServers)}`);
+  assert.ok(Object.keys(o.mcpServers).every((n) => n in fakes || ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "shell", "browse", "tenants"].includes(n)), `only Ted's own servers besides: ${Object.keys(o.mcpServers)}`);
   assert.equal(o.strictMcpConfig, true);
   assert.deepEqual(o.settingSources, [], "no user or project settings (the owner's real Mailbird and connectors are user scope)");
   assert.equal(o.env.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
@@ -155,7 +155,7 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
     const cc = new FakeCalendar(r, ZONE, OWNER_EMAIL, w.calendar, () => NOW.getTime());
     const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail);
     await act(cc, mm);
-    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], asks: [], web: { fetched: [], searches: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
+    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], files: [], shellRuns: 0, asks: [], web: { fetched: [], searches: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
   };
   const e1 = await outcome("e1", async (c) => {
     for (let i = 0; i < 2; i++) await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.nextWeekday(4), "12:00"), endTime: t.local(t.nextWeekday(4), "13:00") });

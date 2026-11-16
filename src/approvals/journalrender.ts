@@ -19,7 +19,7 @@ import { scopeOf } from "./turnscope.ts";
 // ---- which calls are actions ----
 
 // Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a write of a status page is the brief's own record (isStatusWrite), a drawing or a voice is sent as a message.
-const NOT_ACTIONS = new Set(["send", "draw", "voice", "weather"]);
+const NOT_ACTIONS = new Set(["send", "draw", "voice", "weather", "shell"]);
 const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]) }; // (the rest of this server reads: search_logs, journal)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
 // The SDK's own tools that are no action: a delegation is the expert's actions (each its own line), not an action itself; StructuredOutput is how a run hands in its answer; the to-do

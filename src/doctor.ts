@@ -18,6 +18,7 @@ import { isPaused, pauseText } from "./core/pause.ts";
 import { errorLinesSince, stampedSince } from "./core/logwindow.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
+import { toolboxCheck } from "./modules/shell/box.ts";
 import { macKeychain, type Keychain } from "./secrets/keychain.ts";
 import { baseUrlProblem, connectionState } from "./intake/intakelinks.ts";
 import { clientRegistered } from "./intake/notionoauth.ts";
@@ -464,6 +465,7 @@ export async function doctor() {
   line(r.ok, "retention", r.detail);
 
   browseCheck(line, settings.browse, browseStatus());
+  await toolboxCheck(line, settings.workbench);
   await openbaoCheck(line);
   if (dbOk) {
     await intakeCheck(line);

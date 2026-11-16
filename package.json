@@ -23,6 +23,8 @@
     "heartbeat-report": "node --conditions=workspace-source --env-file-if-exists=.env scripts/heartbeat-report.ts",
     "signal:hello": "node --conditions=workspace-source --env-file=.env scripts/signal-hello.ts",
     "setup:tts-qwen": "bash scripts/setup-tts-qwen.sh",
+    "toolbox:build": "container build -t ted-toolbox:1 -f tools/toolbox/Dockerfile tools/toolbox",
+    "test:shell": "HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source --import ./test/setup.ts --test scripts/shell-live.ts",
     "setup:browse": "node scripts/setup-browse.ts",
     "postinstall": "node scripts/setup-browse.ts --quiet",
     "profile": "node --conditions=workspace-source --env-file-if-exists=.env scripts/profile.ts",

@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "2c468446ec17456f"
+        "sha": "a8a12984741dc24d"
       },
       "kind": {
         "who": "owner",
@@ -111,6 +111,7 @@
         "mcp__people__find_person",
         "mcp__send__check_again",
         "mcp__send__send",
+        "mcp__shell__run",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
@@ -145,7 +146,8 @@
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
         "ted-personal-assistant:evening-wrap",
-        "ted-personal-assistant:weekly-review"
+        "ted-personal-assistant:weekly-review",
+        "ted-personal-assistant:workbench"
       ],
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -157,7 +159,8 @@
         "expert-evening-wrap",
         "expert-meeting-prep",
         "expert-opus",
-        "expert-weekly-review"
+        "expert-weekly-review",
+        "expert-workbench"
       ]
     },
     "model": "sonnet",
@@ -166,7 +169,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "2c468446ec17456f"
+        "sha": "a8a12984741dc24d"
       },
       "snapshot": false
     },
@@ -184,6 +187,7 @@
       "memory",
       "people",
       "meetings",
+      "shell",
       "browse",
       "tenants"
     ],
@@ -222,7 +226,8 @@
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
-      "ted-personal-assistant:weekly-review"
+      "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:workbench"
     ],
     "disallowedTools": [
       "mcp__claude_ai_Interactive_Brokers_IBKR",
@@ -590,7 +595,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "2c468446ec17456f"
+        "sha": "a8a12984741dc24d"
       },
       "kind": {
         "who": "owner",
@@ -697,6 +702,7 @@
         "mcp__people__find_person",
         "mcp__send__check_again",
         "mcp__send__send",
+        "mcp__shell__run",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
@@ -726,7 +732,8 @@
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
         "ted-personal-assistant:evening-wrap",
-        "ted-personal-assistant:weekly-review"
+        "ted-personal-assistant:weekly-review",
+        "ted-personal-assistant:workbench"
       ],
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -741,7 +748,8 @@
         "expert-evening-wrap",
         "expert-meeting-prep",
         "expert-opus",
-        "expert-weekly-review"
+        "expert-weekly-review",
+        "expert-workbench"
       ]
     },
     "model": "haiku",
@@ -750,7 +758,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "2c468446ec17456f"
+        "sha": "a8a12984741dc24d"
       },
       "snapshot": false
     },
@@ -768,6 +776,7 @@
       "memory",
       "people",
       "meetings",
+      "shell",
       "browse"
     ],
     "tools": [
@@ -805,7 +814,8 @@
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
-      "ted-personal-assistant:weekly-review"
+      "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:workbench"
     ],
     "disallowedTools": [
       "mcp__claude_ai_Interactive_Brokers_IBKR",

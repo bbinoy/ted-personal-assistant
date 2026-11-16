@@ -186,8 +186,12 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   let error: string | undefined;
   let said: string[] = [];
   const scriptedAsks: Outcome["asks"] = [];
+  let perfectShell = 0; // workbench commands a scripted perfect run claims (a real run is counted from the audit log)
   let dreamCost = 0;
 
+  // What the chat gets from the send tool: its texts go to `said`, a file (the workbench's) is kept whole for the checks.
+  const files: { name: string; bytes: Buffer }[] = [];
+  const sinkOf = (): SendSink => async (content) => (content.kind === "text" ? said.push(content.text) : content.kind === "file" && files.push({ name: content.held.name, bytes: content.held.bytes }), "Sent.");
   const snapshot = (message: string) => {
     turns.push({ message, messages: said });
     snapshots.push({ message, messages: said, sent: mail.sent.map((s) => ({ ...s })), drafts: mail.drafts().map((m) => ({ id: m.id, to: m.to.map((p) => p.email), subject: m.subject, body: m.body })) });
@@ -221,6 +225,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
       search: (query) => web!.search(query),
       open: (url) => web!.open(url)!,
       say: (text) => void said.push(text),
+      sendFile: (name, bytes) => void files.push({ name, bytes }),
+      ranShell: () => void perfectShell++,
     };
     await c.perfect(script);
     // (the scripted run does not go through the browse guard, which writes the payment ledger: a completed fake payment gets its ledger row here, as the guard would have written it)
@@ -230,7 +236,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
     const realQuery = guardedQuery(query, fakes, fakeTools, guard, web);
     // One turn of the owner's chat as main.ts runs it (runChat): the judge is told what led to it, the run is built by runConversation, a reply is what the pipeline would have delivered.
     const chat = async (message: string, prompt: string, continuation?: { provenance?: unknown }) => {
-      const sink: SendSink = async (content) => (content.kind === "text" && said.push(content.text), "Sent.");
+      const sink = sinkOf();
       if (continuation) scopeOf(conv.key).carry((continuation.provenance as never) ?? null);
       else scopeOf(conv.key).say(message);
       if (!continuation) recordMessage("owner", Date.now(), message, o.now);
@@ -336,7 +342,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         snapshot("(a dream)");
       } else if (c.look) {
         // A look as the heartbeat starts it: createHeartbeatLook with a pipeline that records what would have been said (a post, or the send tool) instead of delivering it.
-        const sink: SendSink = async (content) => (content.kind === "text" && said.push(content.text), "Sent.");
+        const sink = sinkOf();
         const pipeline = {
           enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
           busy: () => false,
@@ -373,7 +379,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
 
   const questions = readAudit((e) => e.decision === "approval-asked");
   const asks = scriptedAsks.length ? scriptedAsks : questions.map((q, i) => ({ turn: answered[i]?.turn ?? 0, tool: q.tool, question: String(q.meta?.question ?? ""), payment: String(q.meta?.details ?? "").startsWith("💳"), answer: answered[i]?.text ?? "(unanswered)" }));
-  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, notes: Object.fromEntries(walkNotes(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
+  const outcome: Outcome = { time, calendar: cal.final(), notion: notion.final(), mail, tasks: listItems(ckey, { status: ["open", "done", "dropped", "snoozed"], limit: 200 }, nowMs, o.zone).filter((x) => x.id > firstId), web: { fetched: web?.hits ?? [], searches: web?.searches ?? [], submissions: fb?.submissions ?? [], payments: fb?.payments ?? [], payClicks: fb?.payClicks ?? [], ledger: ledger.allRows().map((r) => ({ status: r.status, totalMinor: r.totalMinor, currency: r.currency })) }, calls: rec.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), asks, turns: snapshots, files, shellRuns: o.perfect ? perfectShell : readAudit((e) => e.tool === "shell" && e.decision === "run").length, notes: Object.fromEntries(walkNotes(owner().notesDir).map((f) => [f, readFileSync(join(owner().notesDir, f), "utf8")])) };
   if (!error && guard.inits === 0 && !o.perfect && !c.group && !c.dream) guard.violations.push("no start-up message was checked"); // (a group the gate leaves unanswered starts no run at all)
   await web?.close();
   return {

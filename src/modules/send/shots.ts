@@ -135,6 +135,9 @@ export function heldPath(key: string, id: string): string | undefined {
   return path;
 }
 
+// Every file this turn holds (file1, file2...), in id order: what the workbench puts in its /work/in.
+export const heldFiles = (key: string): HeldFile[] => [...(turns.get(key)?.files.values() ?? [])];
+
 // The bytes as a short-lived file in a private folder, for the one call that needs a path (signal-cli attaching it); gone when `use` ends, however it ends.
 export async function withTempFile<T>(f: Pick<HeldFile, "name" | "bytes">, use: (path: string) => Promise<T>): Promise<T> {
   mkdirSync(shotsRoot(), { recursive: true, mode: 0o700 });

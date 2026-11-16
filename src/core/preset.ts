@@ -98,7 +98,7 @@ export const PROMPTS = {
   voice: ["own", "group"],
   summary: [],
   identity: ["own", "group", "who", "mail", "personality", "participation", "sources", "reactions", "send", "writes", "channel"],
-  capabilities: ["own", "group", "who", "mail", "reads", "asker", "asks", "provider", "mailSkill", "brief", "mailName", "mailFind", "mailSend", "mailEdit", "google", "people", "timed", "browse", "weather", "draw"],
+  capabilities: ["own", "group", "who", "mail", "reads", "asker", "asks", "provider", "mailSkill", "brief", "mailName", "mailFind", "mailSend", "mailEdit", "google", "people", "timed", "browse", "weather", "draw", "shell"],
   shared: ["whose", "asker", "who", "own", "group", "reads", "mail", "dream", "ownerDir", "logsDir"],
   tasks: ["own", "group", "who", "reads", "mail"],
   dream: ["subject", "own", "group", "peopleGuide"],

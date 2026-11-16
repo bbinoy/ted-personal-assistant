@@ -304,6 +304,7 @@ export function loadSettings(env: Env) {
     // her own folder, her own limits, and runs on the instance key below. The bot never writes first to anybody.
     weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
     draw: oneOf(env, "DRAW", "on", ["on", "off"] as const) === "on", // the draw tool and skill: an SVG the model writes, rendered to a PNG (drawtool.ts)
+    workbench: oneOf(env, "WORKBENCH", "on", ["on", "off"] as const) === "on", // the sandboxed shell (the shell tool and the workbench skill, src/modules/shell): commands in a throwaway Linux VM with no network (Apple `container`)
     // The key tenants' runs use: a separate Anthropic Console workspace key with a spend limit, never the owner's login or key. It is handed to a tenant's
     // run only, as ANTHROPIC_API_KEY in that run's environment (tenanttools.ts tenantEnv), and dropped from process.env below. Unset: tenants get a plain "not set up".
     tenantApiKey: env.TENANT_ANTHROPIC_API_KEY?.trim() || undefined,

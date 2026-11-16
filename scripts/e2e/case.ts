@@ -50,6 +50,8 @@ export interface Outcome {
   web: { fetched: string[]; searches: string[]; submissions: { page: string; button: string; values: Record<string, string> }[]; payments: Payment[]; payClicks: string[]; ledger: { status: string; totalMinor: number; currency: string }[] }; // what reached the fake pay endpoint, and what the real payment ledger says
   calls: { tool: string; turn: number; args: Record<string, unknown>; ok: boolean }[];
   asks: { turn: number; tool: string; question: string; payment: boolean; answer: string }[]; // every question put to the owner (the model-written text she was shown) and what the scripted owner answered
+  files: { name: string; bytes: Buffer }[]; // the files the chat was sent (the send tool, the workbench's results)
+  shellRuns: number; // commands the workbench ran (the audit log's count)
   turns: { message: string; messages: string[]; sent: SentMail[]; drafts: { id: number; to: string[]; subject: string; body: string }[] }[]; // `messages`: what the chat got during the turn, the final reply last
 }
 
@@ -90,4 +92,6 @@ export interface PerfectScript {
   search(query: string): string; // a web search, answered by the case's fake web
   open(url: string): string; // a page opened on the case's fake web
   say(text: string): void;
+  sendFile(name: string, bytes: Buffer): void; // a file the run sent to the chat
+  ranShell(): void; // the run used the workbench
 }

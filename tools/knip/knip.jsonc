@@ -14,7 +14,7 @@
         "@playwright/mcp"
       ],
       // System programs the code or the tests run, not npm packages.
-      "ignoreBinaries": ["mktemp", "ffmpeg", "pmset", "openssl"]
+      "ignoreBinaries": ["mktemp", "ffmpeg", "pmset", "openssl", "container"]
     },
     "packages/*": {
       "entry": ["test/*.test.ts"],
