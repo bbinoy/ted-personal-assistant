@@ -172,8 +172,8 @@ test("dream: deleting needs an expired date (checked in code), the person's own 
 
 test("dream: capped changes per run, and memory has a size limit", () => {
   seed([]);
-  const many = Array.from({ length: 26 }, (_, i) => write({ file: `p${i}.md`, evidence: "Mara is my sister and her birthday" }));
-  assert.equal(planOps({ ops: many }, ctx()).actions.length, 20);
+  const many = Array.from({ length: 46 }, (_, i) => write({ file: `p${i}.md`, evidence: "Mara is my sister and her birthday" }));
+  assert.equal(planOps({ ops: many }, ctx()).actions.length, 40);
   const full = planOps({ ops: [write({ evidence: "Mara is my sister and her birthday" })] }, ctx([], { maxNotes: 0 }));
   assert.equal(full.actions.length, 0);
 });

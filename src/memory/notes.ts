@@ -19,7 +19,7 @@ import { makeNotesDir, writeFileAtomic } from "../core/state.ts";
 export const NOTES_DIR = convPaths(OWNER_CONV).notes;
 
 export const MAX_NOTE_CHARS = 20_000; // a bound nobody should meet: it only stops one runaway file from filling a prompt
-export const INDEX_MAX_CHARS = 16_000; // the index is part of every run's prompt: past this, folders collapse to one line, then the tail is left out (the search finds it)
+export const INDEX_MAX_CHARS = 64_000; // a runaway guard, not a budget: every page is in the index, one line each. Only past this do folders collapse to one line, then the tail is left out (the search finds it)
 export const STYLE_NOTE = "style.md"; // how replies are written: the page code hands to groups and the gate
 export const HARD_NAMES_NOTE = "hard-names.md"; // the correct spellings of hard names: the page code hands to the transcriber
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;

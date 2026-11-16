@@ -4,7 +4,7 @@ import { emitRecord } from "../core/events.ts";
 import { convDbAt } from "../core/convdb.ts";
 import { dataRoot, isConvId, layout, OWNER_CONV } from "../core/convpaths.ts";
 import { NOTES_MARKER, writeFileAtomic } from "../core/state.ts";
-import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
+import { NOTE_PATH, parseNote, stemOf, walkNotes, writeIndex } from "./notes.ts";
 
 // TEMPORARY (deleted in the cleanup release, with scripts/restore-premigration.ts and every notes-premigration/ folder): the one-time move of every conversation's notes from the old flat layout, where the
 // start of a file name was its category (people-mara.md, setup-calendars.md, routine-brief.md), to pages (docs/ARCHITECTURE.md "Memory"). Code, deterministic, no model, before anything runs on the folders
@@ -16,6 +16,8 @@ import { NOTE_PATH, parseNote, writeIndex } from "./notes.ts";
 export const MARKER = NOTES_MARKER;
 export const PREMIGRATION = "notes-premigration";
 export const SNAPSHOTS = "dream-snapshots"; // in the copy: the dream's snapshots of the old layout
+const PREREPAIR = "notes-prerepair"; // beside the notes: the pages as they were before the repair of links and fields first wrote anything
+const LAYOUT_VERSION = "3\n"; // the marker's content: 2 = moved to pages, 3 = also repaired (links, person:, name:); a folder born after the upgrade is written as 3 (core/state.ts)
 export const KEYS_FILE = ".routine-keys.json"; // in the copy's folder: which routine_runs key became which (the restore replays it backwards)
 const LEGACY = /^(people|context|scheduling|triage|brief|style|setup|voice|status|routine)-/i;
 
@@ -55,13 +57,87 @@ function targetOf(file: string): string {
 
 const sameText = (a: string, b: string): boolean => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
 
-interface Counts { moved: number; mergedStyle: number; collided: number }
+// ---- the repair of what the move left: links, person: and name: ----
+// The move renamed files but left the [[links]] in the bodies as they were ("[[people-mara]]" now leads nowhere), gave every people-* page a person: made from its file name (junk for a page about a
+// project or a second name) and left the old `name: people-mara` line (nothing reads `name:`). Idempotent; once per conversation (the marker says 3 afterwards); the pages are copied first (notes-prerepair/, once).
+interface Repaired { links: number; persons: number; names: number }
+
+const frontOf = (text: string): { front: string; rest: string } | undefined => {
+  const m = /^---\n([\s\S]*?)\n---\n?/.exec(text);
+  return m ? { front: m[1]!, rest: text.slice(m[0].length) } : undefined;
+};
+const unq = (v: string): string => v.trim().replace(/^["']|["']$/g, "");
+const rebuild = (front: string, rest: string): string => (front.trim() ? `---\n${front}\n---\n${rest}` : rest.replace(/^\n+/, ""));
+
+// The new text of one page and what changed in it. `stems`: the stem (lower case) of every page that exists, and how many files carry it; `original`: the page as it was before the move, when it came from a people-* file.
+function repairText(text: string, stems: ReadonlyMap<string, number>, original: string | undefined): { text: string; links: number; person: boolean; name: boolean } {
+  let links = 0;
+  let out = text.replace(/\[\[([^\]\n|]+)(\|[^\]\n]*)?\]\]/g, (all, target: string, label = "") => {
+    const stem = stemOf(target.trim()).toLowerCase();
+    if (stems.has(stem) || !LEGACY.test(`${stem}.md`)) return all;
+    const now = stemOf(targetOf(`${stem}.md`)).toLowerCase(); // the stem the move gave it (a routine is routines/<stem>: a page's identity for a link is its stem)
+    if (now === stem || stems.get(now) !== 1) return all; // no such page, or several: left for the dream
+    links++;
+    return `[[${now}${label}]]`;
+  });
+  let person = false;
+  let name = false;
+  const f = frontOf(out);
+  if (f) {
+    let front = f.front;
+    const added = original !== undefined && !/^\s*person:/m.test(frontOf(original.replace(/\r\n/g, "\n"))?.front ?? ""); // never one the original file had
+    const who = /^person:[ \t]*(.*?)[ \t]*$/m.exec(front)?.[1];
+    if (added && who && !norm(f.rest).includes(norm(unq(who)))) {
+      front = front.replace(/^person:.*\n?/m, "").replace(/\n+$/, "");
+      person = true;
+    }
+    const nm = /^name:[ \t]*(.*?)[ \t]*$/m.exec(front)?.[1];
+    if (nm !== undefined && LEGACY.test(unq(nm))) {
+      front = front.replace(/^name:.*\n?/m, "").replace(/\n+$/, "");
+      name = true;
+    }
+    if (person || name) out = rebuild(front, f.rest);
+  }
+  return { text: out, links, person, name };
+}
+
+// The pages of one conversation, repaired in place: the counts, or undefined when nothing needed it. The copy is made before the first write (`copied`: the move's own copy already holds the old state).
+function repairOne(notes: string, convDir: string, copied: boolean): Repaired | undefined {
+  const files = walkNotes(notes).filter((f) => !/^status\//i.test(f));
+  const stems = new Map<string, number>();
+  for (const f of files) stems.set(stemOf(f).toLowerCase(), (stems.get(stemOf(f).toLowerCase()) ?? 0) + 1);
+  const total: Repaired = { links: 0, persons: 0, names: 0 };
+  const next: [string, string][] = [];
+  for (const f of files) {
+    const raw = readFileSync(join(notes, f), "utf8");
+    const old = f.includes("/") ? undefined : join(convDir, PREMIGRATION, `people-${f}`); // (only a top-level page can have come from a people-* file)
+    const r = repairText(raw, stems, old && existsSync(old) ? readFileSync(old, "utf8") : undefined);
+    if (r.text === raw) continue;
+    total.links += r.links;
+    total.persons += +r.person;
+    total.names += +r.name;
+    next.push([f, r.text]);
+  }
+  if (!next.length) return undefined;
+  const bak = join(convDir, PREREPAIR);
+  if (!copied && !existsSync(bak)) {
+    cpSync(notes, `${bak}.tmp`, { recursive: true });
+    renameSync(`${bak}.tmp`, bak);
+  }
+  for (const [f, text] of next) writeFileAtomic(join(notes, f), text);
+  return total;
+}
+
+interface Counts { moved: number; mergedStyle: number; collided: number; repaired?: Repaired }
 
 // One conversation. Throws an error carrying the step that failed. Returns undefined when there was nothing to move (the conversation just gets its marker).
 function migrateOne(root: string, conv: string): Counts | undefined {
   const l = layout(root).conv(conv);
-  if (!existsSync(l.notes) || existsSync(join(l.notes, MARKER))) return undefined;
-  const flat = readdirSync(l.notes, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md").map((e) => e.name).sort();
+  const marker = join(l.notes, MARKER);
+  if (!existsSync(l.notes)) return undefined;
+  const moved = existsSync(marker); // already on pages: only the repair may be left
+  if (moved && readFileSync(marker, "utf8") === LAYOUT_VERSION) return undefined;
+  const flat = moved ? [] : readdirSync(l.notes, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md").map((e) => e.name).sort();
   const counts: Counts = { moved: 0, mergedStyle: 0, collided: 0 };
   let step = 1;
   const keysPath = join(l.dir, PREMIGRATION, KEYS_FILE);
@@ -125,14 +201,16 @@ function migrateOne(root: string, conv: string): Counts | undefined {
         db.run("DELETE FROM routine_runs WHERE name = ?", old); // (a key that met a record of the new name: the old one is of no use)
       }
     }
-    // 5. the index again, the marker last
+    // 5. the links, person: and name: of the moved pages (the copy above is their backup), the index again, the marker last
     step = 5;
+    const fixed = repairOne(l.notes, l.dir, !moved && existsSync(join(l.dir, PREMIGRATION)));
+    if (fixed) counts.repaired = fixed;
     writeIndex(l.notes);
-    writeFileAtomic(join(l.notes, MARKER), "2\n");
+    writeFileAtomic(marker, LAYOUT_VERSION);
   } catch (e) {
     throw Object.assign(new Error(`${conv}: failed at step ${step}`), { code: (e as NodeJS.ErrnoException).code, step });
   }
-  return counts.moved || counts.mergedStyle || counts.collided ? counts : undefined;
+  return counts.moved || counts.mergedStyle || counts.collided || counts.repaired ? counts : undefined;
 }
 
 // Every conversation folder of the data folder (the owner first, then each group and friend). Idempotent: one with its marker is skipped. A failure of the OWNER's conversation throws, so the agent refuses to start on
@@ -146,8 +224,8 @@ export function migrateAll(root: string = dataRoot()): void {
     try {
       const counts = migrateOne(root, conv);
       if (!counts) continue;
-      console.log(`memory migrated: ${conv} moved ${counts.moved}, merged-style ${counts.mergedStyle}, collided ${counts.collided}`);
-      emitRecord("memory_migrated", "moved", "background", { conv, ...counts });
+      console.log(`memory migrated: ${conv} moved ${counts.moved}, merged-style ${counts.mergedStyle}, collided ${counts.collided}, links ${counts.repaired?.links ?? 0}, person ${counts.repaired?.persons ?? 0}, name ${counts.repaired?.names ?? 0}`);
+      emitRecord("memory_migrated", "moved", "background", { conv, moved: counts.moved, mergedStyle: counts.mergedStyle, collided: counts.collided, ...counts.repaired });
     } catch (e) {
       failed.push(conv);
       console.error(`memory migration: ${(e as Error).message}${(e as { code?: string }).code ? ` (${(e as { code?: string }).code})` : ""}`);

@@ -1,7 +1,7 @@
-import { HARD_NAMES_NOTE, INDEX_MAX_CHARS, indexOf, stemOf, STYLE_NOTE, type Note } from "./notes.ts";
+import { HARD_NAMES_NOTE, stemOf, STYLE_NOTE, type Note } from "./notes.ts";
 
 // Facts about how the pages of one conversation hang together, computed by code and handed to the nightly dream (dream.ts) and the doctor: which `[[links]]` lead nowhere, which pages nothing refers to, which
-// pages are about the same person, and whether the index no longer fits its budget. Pure; code decides nothing from them (CLAUDE.md §1: facts, not decisions): the dream repairs, links and merges.
+// pages are about the same person. Pure; code decides nothing from them (CLAUDE.md §1: facts, not decisions): the dream repairs, links and merges.
 // A page's identity for a link is its file stem (`people/mara-silva.md` is `mara-silva`), compared without case.
 
 const LINK = /\[\[([^\]\n]+)\]\]/g;
@@ -57,7 +57,5 @@ export function pageFacts(notes: readonly Note[]): string[] {
   if (lone.length) out.push(`pages nothing links to or names: ${list(lone)}`);
   const twice = samePerson(notes);
   if (twice.length) out.push(`pages about the same person: ${list(twice.map((g) => `${g.person} (${g.pages.join(", ")})`))}`);
-  const size = indexOf(notes.filter((n) => n.class !== "status"), Infinity).length;
-  if (size > INDEX_MAX_CHARS) out.push(`the index, MEMORY.md, would be ${size} characters and its budget is ${INDEX_MAX_CHARS}: fewer, larger pages and short descriptions keep every page in it`);
   return out;
 }

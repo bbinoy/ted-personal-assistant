@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { brokenLinks, linksOf, orphans, pageFacts, samePerson } from "../src/memory/links.ts";
-import { INDEX_MAX_CHARS, parseNote, type Note } from "../src/memory/notes.ts";
+import { parseNote, type Note } from "../src/memory/notes.ts";
 import { dreamPrompt } from "../src/conversation/dream.ts";
 
 // What the dream is told about how the pages hang together: facts computed by code, pure, over invented pages.
@@ -42,15 +42,13 @@ test("links: pages about the same person are grouped, case and spacing aside", (
   assert.deepEqual(samePerson(notes), [{ person: "Mara Silva", pages: ["mara.md", "people/mara-silva.md"] }]);
 });
 
-test("links: the facts are lines for the prompt, empty when all is well, and name an index over its budget", () => {
+test("links: the facts are lines for the prompt, empty when all is well", () => {
   const fine = [page("a.md", "See [[b]]."), page("b.md", "See [[a]].")];
   assert.deepEqual(pageFacts(fine), []);
   const lines = pageFacts([page("a.md", "See [[ghost]]."), page("b.md", "x", "Rui Alves"), page("c.md", "y", "Rui Alves")]);
   assert.match(lines.join("\n"), /does not exist: \[\[ghost\]\] in a\.md/);
   assert.match(lines.join("\n"), /nothing links to or names: .*b\.md/);
   assert.match(lines.join("\n"), /same person: Rui Alves \(b\.md, c\.md\)/);
-  const big = Array.from({ length: 200 }, (_, i) => page(`p${i}.md`, "x", undefined)).map((n) => ({ ...n, description: "d".repeat(150), text: `[[p${(Number(n.file.slice(1, -3)) + 1) % 200}]]` }));
-  assert.match(pageFacts(big).join("\n"), new RegExp(`budget is ${INDEX_MAX_CHARS}`));
 });
 
 test("dream: the prompt carries the facts as fenced data, and nothing when there are none", () => {
