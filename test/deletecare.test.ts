@@ -14,7 +14,7 @@ import { OWNER_CHAT } from "./runkinds.ts";
 // delete goes to a bin or is permanent, and a delete is never fixed.
 
 const MB = "mcp__mailbird__";
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const N = "mcp__claude_ai_Notion__";
 const opts = { signal: new AbortController().signal } as never;
 const setAuto = () => void ((settings as { autoApprove: string }).autoApprove = "auto");
@@ -43,8 +43,8 @@ test("which calls count as creating something: a draft, an event, a page; not an
   assert.equal(createsOf(`${MB}create_draft`, {}), true);
   assert.equal(createsOf(`${MB}reply_to_conversation`, {}), true);
   assert.equal(createsOf(`${MB}update_draft`, {}), false);
-  assert.equal(createsOf(`${CAL}create_event`, {}), true);
-  assert.equal(createsOf(`${CAL}update_event`, {}), false);
+  assert.equal(createsOf(`${CAL}create_calendar_event`, {}), true);
+  assert.equal(createsOf(`${CAL}update_calendar_event`, {}), false);
   assert.equal(createsOf(`${N}notion-create-pages`, {}), true);
   assert.equal(createsOf(`${N}notion-update-page`, {}), false);
   assert.equal(createsOf("mcp__google__manage_event", { action: "create" }), true);
@@ -56,7 +56,7 @@ test("the judge is told by code, for a delete only, whether it goes to a bin or 
   assert.match(notifyNote(`${N}notion-update-page`, { page_id: "p", in_trash: true }), /\nDelete: goes to the bin, restorable for about 30 days/);
   assert.equal(notifyNote(`${N}notion-update-page`, { page_id: "p" }), "");
   assert.match(notifyNote(`${MB}discard_draft`, { messageId: 1 }), /\nDelete: permanent, not known to go to a bin/);
-  assert.match(notifyNote(`${CAL}delete_event`, { eventId: "e" }), /Notifies: this call names no guests[\s\S]*\nDelete: permanent/);
+  assert.match(notifyNote(`${CAL}delete_calendar_event`, { eventId: "e" }), /Notifies: this call names no guests[\s\S]*\nDelete: permanent/);
   assert.equal(notifyNote(`${MB}archive_conversation`, { conversationId: "c" }), "");
 });
 
@@ -89,7 +89,7 @@ test("through the permission path: classify asks, the judge sees the care line, 
   assert.equal(r.asked.length, 1);
   // a calendar delete that names guests, or a Notion page: guests are never judged, a page is
   r = mk("auto", "c-owner");
-  await r.can(`${CAL}delete_event`, { eventId: "e1", attendees: [{ email: "a@example.org" }] });
+  await r.can(`${CAL}delete_calendar_event`, { eventId: "e1", notifyAttendees: true, confirm: true });
   assert.equal(r.asked.length, 1);
   const n = seen.length;
   await r.can(`${N}notion-update-page`, { page_id: "p", in_trash: true });

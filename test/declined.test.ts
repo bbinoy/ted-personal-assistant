@@ -9,8 +9,8 @@ import { TurnScope } from "../src/approvals/turnscope.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
-const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
-const DELETE = "mcp__claude_ai_Google_Calendar__delete_event";
+const CREATE = "mcp__mailbird__create_calendar_event";
+const DELETE = "mcp__mailbird__delete_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 (settings as { autoApprove: string }).autoApprove = "auto";
 

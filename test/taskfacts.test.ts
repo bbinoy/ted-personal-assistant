@@ -51,7 +51,7 @@ test("the judge is told the tasks moved out of Notion only after the import; bef
   assert.match(line, /^\nTasks: this conversation's tasks live in the assistant's own task list \(2 items, 1 imported from Notion\)/);
   assert.match(line, /should be done with the task tools instead/);
   assert.equal(tasksNote("mcp__claude_ai_Notion__notion-fetch", k), "", "a read is no edit");
-  assert.equal(tasksNote("mcp__claude_ai_Google_Calendar__create_event", k), "");
+  assert.equal(tasksNote("mcp__mailbird__create_calendar_event", k), "");
   assert.match(SYSTEM, /carries a "Tasks:" line written by code, the tasks have been moved out of Notion/);
   assert.match(SYSTEM, /choose fix with the reason "the tasks live in the task tools now/);
   assert.match(SYSTEM, /Without that line, judge a Notion edit as usual/);

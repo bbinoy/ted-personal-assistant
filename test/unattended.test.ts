@@ -18,7 +18,7 @@ const BROWSE_UNATTENDED: RunKind = { who: "browse", attended: false };
 // UNATTENDED RUNS NEVER ASK (the owner, 22 Oct): a look of the owner, a group or a friend, its expert, a routine, meeting prep, acts when it is sure and is silent when
 // it is not. What would be a question is declined back to the run with one fixed text and audited `background-skip`; no question, no approval-inbox item. A chat run asks as before.
 
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const EVENT = { summary: "Dentist", startTime: "2026-10-23T10:00:00", endTime: "2026-10-23T11:00:00" };
 const sig = () => ({ signal: new AbortController().signal }) as never;
 const says = (decision: Verdict["decision"]) => async (): Promise<Verdict> => ({ decision, reason: "test" });

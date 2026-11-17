@@ -19,6 +19,7 @@ export function makeTime(now: Date, zone: string): Time {
       throw new Error("no such weekday");
     },
     local: (date, hhmm) => `${date}T${hhmm}:00`,
+    utc: (date, hhmm) => new Date(instantOf(`${date}T${hhmm}:00`, zone)).toISOString().replace(".000Z", "Z"),
     at: (date, hhmm) => instantOf(`${date}T${hhmm}:00`, zone),
     hhmm: (ms) => isoIn(ms, zone).slice(11, 16),
     dateOf,

@@ -40,7 +40,26 @@ function when(start: unknown, end: unknown, zone: unknown): string | undefined {
 
 // When an event is, from a call's own arguments (strings or {dateTime}), as in an approval text; undefined when the call names no time.
 const dateTimeOf = (v: unknown): unknown => (v && typeof v === "object" ? ((v as { dateTime?: unknown; date?: unknown }).dateTime ?? (v as { date?: unknown }).date) : v);
+// A UTC time (Mailbird's startUtc, endUtc) as the wall clock of the event's own zone, so that the question reads like the event; without a known zone it is shown as UTC.
+// An all-day event has only its day.
+function utc(v: unknown, zone: string, allDay: boolean): string | undefined {
+  if (typeof v !== "string" || !/Z$/i.test(v)) return typeof v === "string" ? v : undefined;
+  if (allDay) return v.slice(0, 10);
+  const t = new Date(v);
+  if (Number.isNaN(t.getTime())) return v;
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(t).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  } catch {
+    return v; // an unknown zone name
+  }
+}
 export function whenOf(input: Record<string, unknown>): string | undefined {
+  if (input.startUtc !== undefined || input.endUtc !== undefined) {
+    const zone = typeof input.timeZone === "string" && input.timeZone ? input.timeZone : "UTC";
+    const allDay = input.isAllDay === true;
+    return when(utc(input.startUtc, zone, allDay), utc(input.endUtc, zone, allDay), zone);
+  }
   return when(dateTimeOf(input.startTime ?? input.start ?? input.start_time), dateTimeOf(input.endTime ?? input.end ?? input.end_time), input.timeZone ?? input.timezone);
 }
 
@@ -72,9 +91,10 @@ const LABELS: Record<string, string> = {
   location: "Where", attendees: "With", description: "Notes", body: "Message",
 };
 // Fields shown specially or not worth showing.
-const SKIP = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "timeZone", "timezone", "summary", "title"]);
+const SKIP = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "startUtc", "endUtc", "isAllDay", "timeZone", "timezone", "summary", "title"]);
+const SKIP_WHEN_FALSE = new Set(["notifyAttendees", "confirm"]); // (a call that emails nobody does not say so; one that does shows it)
 const SKIP_VALUES = new Set(["primary"]);
-const TIME_KEYS = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time"]);
+const TIME_KEYS = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "startUtc", "endUtc"]);
 
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
 
@@ -135,6 +155,7 @@ export function describeCall(tool: string, input: Record<string, unknown>, draft
     if (value === undefined || value === null || value === "") continue;
     if (SKIP.has(key) && !(TIME_KEYS.has(key) && !stamp(dateTimeOf(value)))) continue; // (a time the 🕒 line could not read is shown as it is, never hidden)
     if (typeof value === "string" && SKIP_VALUES.has(value)) continue;
+    if (value === false && SKIP_WHEN_FALSE.has(key)) continue;
     if (Array.isArray(value) && value.length === 0) continue;
     lines.push(`${meta?.labels?.[key] ?? LABELS[key] ?? key}: ${show(key, value)}`);
   }

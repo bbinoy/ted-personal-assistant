@@ -21,7 +21,7 @@ import { BROWSE_RUN, FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK, kindOf } f
 
 const MB = "mcp__mailbird__";
 const GM = "mcp__claude_ai_Gmail__";
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const DRIVE = "mcp__claude_ai_Google_Drive__";
 const N = "mcp__claude_ai_Notion__";
 
@@ -33,7 +33,7 @@ const LIVE: Record<string, string> = {
   claudedocs: "batch create delete export guide query read update",
   ibkr: "create_alert create_order_instruction create_watchlist delete_alert delete_order_instruction delete_watchlist edit_watchlist get_account_balances get_account_orders get_account_positions get_account_summary get_account_trades get_alert get_alerts get_combo_identifier get_company_connections get_company_themes get_option_data get_option_parameters get_order_instructions get_pa_allocation get_pa_performance_all_periods get_price_history get_price_snapshot get_theme_details get_watchlist get_watchlists provide_customer_feedback search_contracts search_futures search_investment_topics set_alert_status update_alert whats_new",
 };
-const PREFIX: Record<string, string> = { calendar: CAL, drive: DRIVE, docs: "mcp__claude_ai_Google_Docs__", claudedocs: "mcp__claude_ai_Claude_Docs__", ibkr: "mcp__claude_ai_Interactive_Brokers_IBKR__" };
+const PREFIX: Record<string, string> = { calendar: "mcp__claude_ai_Google_Calendar__", drive: DRIVE, docs: "mcp__claude_ai_Google_Docs__", claudedocs: "mcp__claude_ai_Claude_Docs__", ibkr: "mcp__claude_ai_Interactive_Brokers_IBKR__" };
 const liveNames = Object.entries(LIVE).flatMap(([k, v]) => v.split(" ").map((n) => PREFIX[k] + n));
 const known = registered().flatMap((m) => m.known ?? []);
 const everyName = [...new Set([...allRows().map((e) => e.tool), ...known, ...liveNames])];
@@ -70,7 +70,9 @@ test("never allowed: a tool no module lists is denied by a name that says trash,
   for (const e of allRows().filter((r) => r.action === "read" || r.action.endsWith("-read"))) assert.equal(neverAllowedTool(e.tool), false, e.tool);
   // and the plain names of every known tool: only the intended ones match
   const matched = everyName.filter((t) => nameIsNever(t) && !allRows().some((r) => r.tool === t));
-  assert.deepEqual(matched.filter((t) => !t.includes("Interactive_Brokers")).sort(), [], "every name the rule matches is already a row (the rule is the net for the ones nobody listed)");
+  // (Mailbird's delete_calendar removes a whole calendar with every event: no row on purpose, so the name rule denies it)
+  assert.deepEqual(matched.filter((t) => !t.includes("Interactive_Brokers") && t !== `${MB}delete_calendar`).sort(), [], "every name the rule matches is already a row (the rule is the net for the ones nobody listed)");
+  assert.equal(classify(`${MB}delete_calendar`, { calendarId: "c", confirm: true }, OWNER_CHAT), "deny");
 });
 
 test("never allowed: the arguments, snake_case and camelCase, for tools that only do it through a value", () => {
@@ -113,11 +115,11 @@ test("the five destructive actions the owner allows: ask on every source, judged
   const five: [string, Record<string, unknown>, RegExp][] = [
     [`${MB}discard_draft`, { messageId: 7 }, /Delete draft[\s\S]*7/],
     [`${GM}delete_draft`, { draftId: "d1" }, /Delete draft[\s\S]*d1/],
-    [`${CAL}delete_event`, { eventId: "e1", calendarId: "primary" }, /Delete calendar event[\s\S]*e1/],
+    [`${CAL}delete_calendar_event`, { eventId: "e1", calendarId: "primary" }, /Delete calendar event[\s\S]*e1/],
     [`${N}notion-update-page`, { page_id: "p1", properties: { in_trash: true } }, /Move Notion page to the bin[\s\S]*p1/],
   ];
-  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e1", attendees: ["a@example.org"] }), false, "a calendar delete that names guests is never judged");
-  assert.match(notifyNote(`${CAL}delete_event`, { eventId: "e1" }), /this call names no guests.*guests already on an existing event are not shown/);
+  assert.equal(isJudgeable(`${CAL}delete_calendar_event`, { eventId: "e1", notifyAttendees: true, confirm: true }), false, "a calendar delete that names guests is never judged");
+  assert.match(notifyNote(`${CAL}delete_calendar_event`, { eventId: "e1" }), /this call names no guests.*guests already on an existing event are not shown/);
   assert.ok(!NEVER_ACTIONS.has(DELETE_CONFIRM));
   for (const [t, input, shown] of five) {
     for (const source of SOURCES) {
@@ -131,12 +133,12 @@ test("the five destructive actions the owner allows: ask on every source, judged
     assert.equal(isFree(t, undefined, { input, run: OWNER_CHAT }), false, t);
     assert.match(describeCall(t, input), shown, t);
   }
-  assert.equal(describeCall(`${CAL}delete_event`, { eventId: "e1", summary: "Dentist" }).includes("Dentist"), true, "the title the call carries is shown");
+  assert.equal(describeCall(`${CAL}delete_calendar_event`, { eventId: "e1", summary: "Dentist" }).includes("Dentist"), true, "the title the call carries is shown");
   // the tools are offered to the model: not in the hidden list when seen
-  const hidden = hiddenTools([`${MB}discard_draft`, `${GM}delete_draft`, `${CAL}delete_event`, `${N}notion-update-page`]);
+  const hidden = hiddenTools([`${MB}discard_draft`, `${GM}delete_draft`, `${CAL}delete_calendar_event`, `${N}notion-update-page`]);
   for (const [t] of five) assert.ok(!hidden.includes(t), t);
   // an isolated run only has what its capability set holds: the owner's connectors are not a friend's or a group's
-  assert.equal(classify(`${CAL}delete_event`, { eventId: "e" }, GROUP_CHAT), "deny");
+  assert.equal(classify(`${CAL}delete_calendar_event`, { eventId: "e" }, GROUP_CHAT), "deny");
   // the neighbours stay denied
   for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, OWNER_CHAT), "deny", t);
 });
@@ -190,9 +192,9 @@ const TABLE: [string, string, string, string][] = [
   [`${MB}show_notification`, "ask", "ask", "deny"],
   [`${MB}trash_conversation`, "deny", "deny", "deny"],
   [`${MB}set_sender_blocked`, "deny", "deny", "deny"],
-  [`${CAL}list_events`, "allow", "allow", "deny"],
-  [`${CAL}create_event`, "ask", "ask", "deny"],
-  [`${CAL}delete_event`, "ask", "ask", "deny"],
+  [`${CAL}list_calendar_events`, "allow", "allow", "deny"],
+  [`${CAL}create_calendar_event`, "ask", "ask", "deny"],
+  [`${CAL}delete_calendar_event`, "ask", "ask", "deny"],
   [`${MB}discard_draft`, "ask", "ask", "deny"],
   [`${GM}delete_draft`, "ask", "ask", "deny"],
   [`${GM}delete_label`, "deny", "deny", "deny"],
@@ -240,28 +242,28 @@ test("guests: every field that names people counts, by token, in any case; remov
   for (const input of names) {
     assert.ok(namesPeople(input), JSON.stringify(input));
     assert.equal(namesNoGuests(input), false);
-    assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e", ...input }), false, JSON.stringify(input));
-    assert.match(notifyNote(`${CAL}create_event`, { summary: "s", ...input }), /this call names guests/, JSON.stringify(input));
-    assert.equal(applyChanges(`${CAL}create_event`, { summary: "s", ...input }, [{ field: Object.keys(input)[0]!, value: "x@example.org" }]), undefined, "never changed by a reply");
+    assert.equal(isJudgeable(`${CAL}delete_calendar_event`, { eventId: "e", ...input }), false, JSON.stringify(input));
+    assert.match(notifyNote(`${CAL}create_calendar_event`, { summary: "s", ...input }), /this call names guests/, JSON.stringify(input));
+    assert.equal(applyChanges(`${CAL}create_calendar_event`, { summary: "s", ...input }, [{ field: Object.keys(input)[0]!, value: "x@example.org" }]), undefined, "never changed by a reply");
   }
   for (const input of [{}, { attendees: [] }, { attendeeEmails: [] }, { addedAttendees: [""] }, { removedAttendeeEmails: ["a@example.org"] }, { guestPermissions: { guestsCanModify: true, guestsCanSeeGuests: false } }, { summary: "Dentist", startTime: "2026-10-21T10:00:00", endTime: "2026-10-21T11:00:00", timeZone: "Europe/Zurich", location: "Zürich", notificationLevel: "NONE", calendarId: "primary" }]) {
     assert.equal(namesPeople(input), false, JSON.stringify(input));
-    assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "e", ...input }), true, JSON.stringify(input));
+    assert.equal(isJudgeable(`${CAL}update_calendar_event`, { eventId: "e", ...input }), true, JSON.stringify(input));
   }
-  assert.match(notifyNote(`${CAL}update_event`, { eventId: "e", notificationLevel: "ALL" }), /names no guests; notificationLevel=ALL/);
+  assert.match(notifyNote(`${CAL}update_calendar_event`, { eventId: "e", notificationLevel: "ALL" }), /names no guests; notificationLevel=ALL/);
   // calendarId is still never edited by a reply
-  assert.equal(applyChanges(`${CAL}create_event`, { summary: "s", calendarId: "primary" }, [{ field: "calendarId", value: "other" }]), undefined);
+  assert.equal(applyChanges(`${CAL}create_calendar_event`, { summary: "s", calendarId: "primary" }, [{ field: "calendarId", value: "other" }]), undefined);
 });
 
 test("hidden tools read the same predicate: what is never allowed by name is hidden when seen", () => {
-  const hidden = hiddenTools([`${CAL}trash_event`, `${CAL}list_events`, "mcp__x__trash_thing", "mcp__x__get_thing", `${MB}set_conversation_spam`, `${MB}get_message`]);
+  const hidden = hiddenTools([`${CAL}trash_event`, `${CAL}list_calendar_events`, "mcp__x__trash_thing", "mcp__x__get_thing", `${MB}set_conversation_spam`, `${MB}get_message`]);
   for (const t of [`${CAL}trash_event`, "mcp__x__trash_thing", `${MB}set_conversation_spam`]) assert.ok(hidden.includes(t), t);
-  for (const t of [`${CAL}list_events`, "mcp__x__get_thing", `${MB}get_message`]) assert.ok(!hidden.includes(t), t);
+  for (const t of [`${CAL}list_calendar_events`, "mcp__x__get_thing", `${MB}get_message`]) assert.ok(!hidden.includes(t), t);
 });
 
 test("mayFix: no fix for a send, an unsubscribe, an invite answer, nor an action the judge never sees; calendar writes may be fixed", () => {
-  for (const t of [`${MB}send_message_now`, `${MB}unsubscribe_from_newsletter`, `${CAL}respond_to_event`, `${DRIVE}share_file`, "mcp__tenants__remove_tenant", `${N}notion-move-pages`, "mcp__new_server__do_something"]) assert.equal(mayFix(t), false, t);
-  for (const t of [`${CAL}create_event`, `${CAL}update_event`, `${N}notion-update-page`]) assert.equal(mayFix(t), true, t);
+  for (const t of [`${MB}send_message_now`, `${MB}unsubscribe_from_newsletter`, `${CAL}respond_to_calendar_event`, `${DRIVE}share_file`, "mcp__tenants__remove_tenant", `${N}notion-move-pages`, "mcp__new_server__do_something"]) assert.equal(mayFix(t), false, t);
+  for (const t of [`${CAL}create_calendar_event`, `${CAL}update_calendar_event`, `${N}notion-update-page`]) assert.equal(mayFix(t), true, t);
   for (const m of registered()) for (const a of m.floor?.judgeNever ?? []) assert.ok(!(m.floor?.noFix ?? []).includes(a), `${m.name}: ${a} is judgeNever, which already means no fix`);
 });
 

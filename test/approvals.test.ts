@@ -5,7 +5,7 @@ import { formatWait } from "../src/approvals/approvals.ts";
 import { answer, answerReaction, request } from "./approvalrig.ts";
 
 // Background approvals (wake-ups, presets, the handler) must not swallow the owner's chat messages.
-const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
+const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
 const ask = (background: boolean, ts = 500) => {
   const asked = request(async () => ts, "Create event x", call, undefined, { background });
   return asked;

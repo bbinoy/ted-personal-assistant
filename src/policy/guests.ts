@@ -35,3 +35,11 @@ export function peopleIn(v: unknown, depth = 0): string[] {
   return Object.entries(v).flatMap(([k, x]) => (isPeopleKey(k) ? texts(x) : peopleIn(x, depth + 1)));
 }
 export const namesNoGuests = (input: Record<string, unknown>): boolean => !namesPeople(input);
+
+// Pure: for a calendar write, one line for the judge (not the owner) saying whether this call names guests or asks for notifications. It only reads the call's own
+// arguments (a flag set to false asks for nothing); whether an existing event has guests is not known here.
+const NOTIFY_FIELD = /^(notificationLevel|sendUpdates|send_updates|sendNotifications|notifyAttendees|confirm)$/i;
+export function notifyLine(input: Record<string, unknown>): string {
+  const notify = Object.entries(input).filter(([k, v]) => NOTIFY_FIELD.test(k) && v !== false && String(v).toLowerCase() !== "false").map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);
+  return `\nNotifies: ${namesPeople(input) ? "this call names guests" : "this call names no guests"}${notify.length ? `; ${notify.join(", ")}` : "; this call asks for no notifications"} (guests already on an existing event are not shown here)`;
+}

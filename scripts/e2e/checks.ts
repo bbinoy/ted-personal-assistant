@@ -1,13 +1,11 @@
 // Helpers the end-to-end cases share (scripts/e2e/cases*.ts).
 import { inflateSync } from "node:zlib";
 import { toolPrefix } from "./fakeserver.ts";
-import { CALENDAR_SERVER } from "./fakecalendar.ts";
 import { MAILBIRD_SERVER } from "./fakemail.ts";
 import type { Check, Outcome } from "./case.ts";
 
 export const OWNER_EMAIL = "owner.ownmail@example.com";
-export const CAL = toolPrefix(CALENDAR_SERVER);
-export const MB = toolPrefix(MAILBIRD_SERVER);
+export const MB = toolPrefix(MAILBIRD_SERVER); // (the calendar is Mailbird's too)
 
 export const check = (name: string, pass: boolean, why?: string): Check => ({ name, pass, ...(!pass && why ? { why } : {}) });
 export const created = (o: Outcome) => o.calendar.filter((e) => e.createdByCall);
@@ -33,4 +31,4 @@ export function pdfInside(bytes: Buffer): string {
   }
   return parts.join("\n");
 }
-export const deletes =(o: Outcome): string[] => called(o, `${CAL}delete_event`).map(() => "a calendar event was deleted");
+export const deletes =(o: Outcome): string[] => called(o, `${MB}delete_calendar_event`).map(() => "a calendar event was deleted");

@@ -37,3 +37,23 @@ test("without a known zone, or for another tool, the result is untouched", () =>
   assert.equal(cleanToolOutput(TOOL, result([ev])), undefined);
   assert.equal(cleanToolOutput("mcp__claude_ai_Notion__notion-fetch", result([ev]), undefined, ZONE), undefined);
 });
+
+// Mailbird's list_calendar_events: a top-level array of rows with UTC times and no zone; code adds the wall times in the conversation's zone and keeps the UTC ones.
+const MB_TOOL = "mcp__mailbird__list_calendar_events";
+const rows = (r: unknown[]) => ({ content: [{ type: "text", text: JSON.stringify(r) }] });
+const rowsOut = (r: { output: unknown } | undefined) => JSON.parse(((r!.output as ReturnType<typeof rows>).content[0] as { text: string }).text);
+
+test("a Mailbird row gets start and end in the owner's zone, summer time included, and keeps startUtc and endUtc", () => {
+  const ev = (startUtc: string, endUtc: string) => ({ id: 7, calendarId: 1, calendarName: "Home", subject: "Call", startUtc, endUtc, isAllDay: false, location: "", organizerEmail: "a@example.com", status: "confirmed", isRecurring: false, isRecurringInstance: false });
+  const [a, b] = rowsOut(cleanToolOutput(MB_TOOL, rows([ev("2026-11-04T16:00:00Z", "2026-11-04T16:30:00Z"), ev("2026-07-01T14:00:00Z", "2026-07-01T15:00:00Z")]), undefined, ZONE));
+  assert.deepEqual([a.start, a.end, a.startUtc], ["2026-11-04T17:00:00+01:00", "2026-11-04T17:30:00+01:00", "2026-11-04T16:00:00Z"]);
+  assert.deepEqual([b.start, b.end], ["2026-07-01T16:00:00+02:00", "2026-07-01T17:00:00+02:00"]);
+});
+
+test("an all-day Mailbird row is its UTC dates, not shifted; without a zone or for another tool nothing changes", () => {
+  const ev = { id: 8, subject: "Holiday", startUtc: "2026-11-04T00:00:00Z", endUtc: "2026-11-05T00:00:00Z", isAllDay: true };
+  const [out] = rowsOut(cleanToolOutput(MB_TOOL, rows([ev]), undefined, "America/New_York"));
+  assert.deepEqual([out.start, out.end], ["2026-11-04", "2026-11-05"]);
+  assert.equal(cleanToolOutput(MB_TOOL, rows([ev])), undefined);
+  assert.equal(cleanToolOutput("mcp__mailbird__get_message", rows([ev]), undefined, ZONE), undefined);
+});

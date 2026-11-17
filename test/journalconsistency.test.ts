@@ -19,7 +19,7 @@ import { FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 // SUCCEEDED and is not a read, with the audit rows of its decision beside it; a read is audit only; a refusal or a decline leaves no journal line; a friend's audit rows carry no words while
 // her journal has them. Fakes stand in for the judge, the approver and the tool itself (the SDK's PostToolUse is `noteDone`, which agentrun.ts calls).
 
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const MB = "mcp__mailbird__";
 const FORGET = "mcp__memory__forget_note";
 const opts = { signal: new AbortController().signal } as never;
@@ -68,9 +68,9 @@ test("judge auto-approve: one 'auto-approved' audit row, one journal line that s
   const before = journal(key).length;
   const can = canUse(key, { say: "add my flight to the calendar", judge: judge({ decision: "auto", reason: "matches the request" }) });
   const input = calendarCall("Flight LHR-ZRH");
-  assert.equal(((await can(`${CAL}create_event`, input, opts)) as Out).behavior, "allow");
-  await noteDone({ conv: key, source: "chat", tool: `${CAL}create_event`, input, response: JSON.stringify({ id: "ev-77", summary: "Flight LHR-ZRH" }) });
-  assert.equal(audit(`${CAL}create_event`, (e) => e.decision === "auto-approved").length, 1);
+  assert.equal(((await can(`${CAL}create_calendar_event`, input, opts)) as Out).behavior, "allow");
+  await noteDone({ conv: key, source: "chat", tool: `${CAL}create_calendar_event`, input, response: JSON.stringify({ id: "ev-77", summary: "Flight LHR-ZRH" }) });
+  assert.equal(audit(`${CAL}create_calendar_event`, (e) => e.decision === "auto-approved").length, 1);
   const lines = journal(key).slice(before);
   assert.equal(lines.length, 1);
   assert.equal(lines[0]!.cat, "calendar");
@@ -85,17 +85,17 @@ test("ask approved: one 'ask-approved' row and one journal line that says the pe
   const before = journal(key).length;
   const yes = canUse(key, { say: "put the dentist in", judge: judge({ decision: "ask", reason: "unsure" }), approve: async () => ({ approved: true }) });
   const input = calendarCall("Dentist");
-  assert.equal(((await yes(`${CAL}create_event`, input, opts)) as Out).behavior, "allow");
-  await noteDone({ conv: key, source: "chat", tool: `${CAL}create_event`, input, response: "{}" });
-  assert.equal(audit(`${CAL}create_event`, (e) => e.decision === "ask-approved").length, 1);
+  assert.equal(((await yes(`${CAL}create_calendar_event`, input, opts)) as Out).behavior, "allow");
+  await noteDone({ conv: key, source: "chat", tool: `${CAL}create_calendar_event`, input, response: "{}" });
+  assert.equal(audit(`${CAL}create_calendar_event`, (e) => e.decision === "ask-approved").length, 1);
   const lines = journal(key).slice(before);
   assert.equal(lines.length, 1);
   assert.match(lines[0]!.text, /Why: your message at \d\d:\d\d; you approved it when asked\./);
 
   const no = canUse(key, { say: "and the haircut", judge: judge({ decision: "ask", reason: "unsure" }), approve: async () => ({ approved: false }) });
   const other = calendarCall("Haircut");
-  assert.equal(((await no(`${CAL}create_event`, other, opts)) as Out).behavior, "deny");
-  assert.equal(audit(`${CAL}create_event`, (e) => e.decision === "ask-declined").length, 1);
+  assert.equal(((await no(`${CAL}create_calendar_event`, other, opts)) as Out).behavior, "deny");
+  assert.equal(audit(`${CAL}create_calendar_event`, (e) => e.decision === "ask-declined").length, 1);
   assert.equal(journal(key).length - before, 1, "a declined call did not happen: no line");
 });
 
@@ -124,7 +124,7 @@ test("a question nobody answers lapses SILENTLY: nothing more is said in the cha
   reset();
   const key = fresh("owner");
   const before = journal(key).length;
-  const tool = `${CAL}create_event`;
+  const tool = `${CAL}create_calendar_event`;
   const said: string[] = [];
   const d = await approvals.request(async (t) => (said.push(t), 6001), "📅 Create Team lunch\nWhen: Fri", { tool, input: calendarCall("Team lunch") }, undefined, { scope: key, source: "chat", question: "Add the team lunch?", minutes: 0.001 });
   assert.equal(d.approved, false);

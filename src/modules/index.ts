@@ -2,7 +2,7 @@ import type { Note } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
 import { browseModule, browserModule } from "./browse/module.ts";
 import { builtinModule } from "./builtin.ts";
-import { calendarModule } from "./calendar.ts";
+import { googleCalendarModule } from "./calendar.ts";
 import { claudeDocsModule, docsModule, driveModule } from "./drive.ts";
 import { drawModule } from "./draw/module.ts";
 import { filesModule } from "./files/module.ts";
@@ -11,6 +11,7 @@ import { ibkrModule } from "./ibkr.ts";
 import { googleModule } from "./google/module.ts";
 import { notionHostedModule } from "./notion/module.ts";
 import { intakeModule } from "./intake.ts";
+import { mailbirdCalendarModule } from "./mailbird/calendar.ts";
 import { mailbirdModule } from "./mailbird/module.ts";
 import { memoryModule } from "./memory/module.ts";
 import { peopleModule } from "./people/module.ts";
@@ -31,11 +32,12 @@ import { weatherModule } from "./weather/module.ts";
 // when every module has been evaluated.
 let all: readonly ToolModule[] | undefined;
 export const registered = (): readonly ToolModule[] =>
-  (all ??= [sendModule, filesModule, weatherModule, drawModule, tasksModule, voiceModule, memoryModule, peopleModule, meetingsModule, shellModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
+  (all ??= [sendModule, filesModule, weatherModule, drawModule, tasksModule, voiceModule, memoryModule, peopleModule, meetingsModule, shellModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, mailbirdCalendarModule, googleCalendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
 
-// LOADED: every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names (none: no mail module). A module that is not loaded has no rows,
+// LOADED: every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names (none: no mail module); a module with `withMail` only while that provider is the one
+// (the calendar goes with the mail client: Mailbird's own with Mailbird, the Google Calendar connector otherwise). A module that is not loaded has no rows,
 // no skills and no connection; only its floor data (registered() below) keeps restricting, because a floor rule can only take away.
-export const loaded = (mail: string = settings.mailProvider): readonly ToolModule[] => registered().filter((m) => !m.slot || m.name === mail);
+export const loaded = (mail: string = settings.mailProvider): readonly ToolModule[] => registered().filter((m) => (m.slot ? m.name === mail : !m.withMail || m.withMail.includes(mail)));
 
 // The setup the bundled skills need before they can do their job, as the file name each one
 // is saved under (plugin/skills/setup tells the chat agent to use exactly these).

@@ -166,7 +166,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
     ["mcp__browser__browser_click", {}],
     ["mcp__mailbird__get_message", {}],
     ["mcp__mailbird__send_message_now", {}],
-    ["mcp__claude_ai_Google_Calendar__list_events", {}],
+    ["mcp__mailbird__list_calendar_events", {}],
     ["mcp__claude_ai_Notion__notion-fetch", {}],
     ["mcp__claude_ai_Google_Drive__search_files", {}],
     ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", {}],

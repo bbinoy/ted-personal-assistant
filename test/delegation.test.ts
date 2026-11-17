@@ -20,13 +20,13 @@ import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 const signal = new AbortController().signal;
 const refuse = async () => ({ approved: false }) as never;
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 
 // A plugin folder with a heavy skill that has a lean tool set, a heavy one without, and a light one.
 function plugin(): string {
   const dir = mkdtempSync(join(tmpdir(), "plugin-"));
   const skill = (name: string, front: string) => (mkdirSync(join(dir, "skills", name), { recursive: true }), writeFileSync(join(dir, "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: x\n${front}---\n\n# ${name}\n`));
-  skill("heavy", "delegate: sonnet\ntools: [mcp__claude_ai_Google_Calendar__*, mcp__send__send, Skill]\n");
+  skill("heavy", "delegate: sonnet\ntools: [mcp__mailbird__*, mcp__send__send, Skill]\n");
   skill("deep", "delegate: opus\n");
   skill("light", "");
   return dir;
@@ -36,7 +36,7 @@ const SKILLS = ["ted-personal-assistant:heavy", "ted-personal-assistant:deep", "
 
 test("skill hints: delegate and tools are read from the frontmatter; a typo fails loudly", () => {
   const dir = plugin();
-  assert.deepEqual(skillHint("heavy", dir), { delegate: "sonnet", tools: ["mcp__claude_ai_Google_Calendar__*", "mcp__send__send", "Skill"] });
+  assert.deepEqual(skillHint("heavy", dir), { delegate: "sonnet", tools: ["mcp__mailbird__*", "mcp__send__send", "Skill"] });
   assert.deepEqual(skillHint("deep", dir), { delegate: "opus" });
   assert.deepEqual(skillHint("light", dir), {});
   assert.deepEqual(skillHint("missing", dir), {});
@@ -61,7 +61,7 @@ test("experts: two general experts (Sonnet from the preset, Opus from OPUS_MODEL
   assert.equal(x.tools, undefined, "the general expert has the run's whole tool set");
   assert.deepEqual(x.disallowedTools, ["Agent"], "and no way to delegate further");
   const heavy = set.agents["expert-heavy"]!;
-  assert.deepEqual(heavy.tools, ["mcp__claude_ai_Google_Calendar__*", "mcp__send__send", "Skill"], "exactly the declared tools");
+  assert.deepEqual(heavy.tools, ["mcp__mailbird__*", "mcp__send__send", "Skill"], "exactly the declared tools");
   assert.equal(heavy.model, "sonnet");
   assert.deepEqual(heavy.skills, ["ted-personal-assistant:heavy"]);
   assert.equal(set.agents["expert-deep"]!.model, settings.opusModel, "a skill's delegate: opus is the OPUS_MODEL");
@@ -183,8 +183,8 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   assert.equal(denied?.behavior, "deny");
   assert.ok(readAudit((e) => e.tool === "mcp__mailbird__delete_conversation_permanently" && e.decision === "deny-policy" && e.meta?.agent_type === "expert").length >= 1);
   // a write by the expert is judged with the brief next to the provenance; the same write by the run itself carries no brief
-  await can(`${CAL}create_event`, { summary: "Dinner", start: { dateTime: "2026-10-23T19:00:00" } }, { signal, toolUseID: "u2", agentID: "sub-1" } as never);
-  await can(`${CAL}create_event`, { summary: "Dinner", start: { dateTime: "2026-10-23T20:00:00" } }, { signal, toolUseID: "u3" } as never);
+  await can(`${CAL}create_calendar_event`, { summary: "Dinner", start: { dateTime: "2026-10-23T19:00:00" } }, { signal, toolUseID: "u2", agentID: "sub-1" } as never);
+  await can(`${CAL}create_calendar_event`, { summary: "Dinner", start: { dateTime: "2026-10-23T20:00:00" } }, { signal, toolUseID: "u3" } as never);
   assert.equal(judged.length, 2);
   assert.deepEqual(judged[0]!.provenance.expertBriefs, delegations);
   assert.equal(judged[1]!.provenance.expertBriefs, undefined);

@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CAL, MB, OWNER_EMAIL, check, created, deletes, pdfInside, plain, sends } from "./checks.ts";
+import { MB, OWNER_EMAIL, check, created, deletes, pdfInside, plain, sends } from "./checks.ts";
 import { instantOf, isoIn } from "./fakeserver.ts";
 import type { Case, Check, Outcome, PerfectScript, Time } from "./case.ts";
 
@@ -100,7 +100,7 @@ const e4: Case = {
   perfect: async (s) => {
     s.turn(0);
     const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { conversationId: string; subject: string }[];
-    await s.tool(`${CAL}create_event`, { summary: "Startup Nights 2026", startTime: s.time.local(s.time.nextWeekday(3), "18:30"), endTime: s.time.local(s.time.nextWeekday(3), "21:00"), timeZone: s.time.zone, location: "The Foundry, 12 Mill Lane, London" });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Startup Nights 2026", startUtc: s.time.utc(s.time.nextWeekday(3), "18:30"), endUtc: s.time.utc(s.time.nextWeekday(3), "21:00"), timeZone: s.time.zone, location: "The Foundry, 12 Mill Lane, London", notifyAttendees: false, confirm: false });
     for (const r of rows) if (/Loop|workshops|Last chance|weekly offers|digest|receipt|booking request|Startup Nights/i.test(r.subject)) await s.tool(`${MB}archive_conversation`, { conversationId: r.conversationId });
     s.say("Archived the newsletters, the two receipts and the confirmed booking request, and the Startup Nights ticket after adding it to your calendar. I kept today's brief and the two onboarding mails.");
   },
@@ -142,8 +142,8 @@ const e7: Case = {
   reply: ["It says the dinner was updated with the time and place and that Mara was invited.", "It does not ask for Mara's email address.", "It is short: three lines at most."],
   perfect: async (s) => {
     s.turn(0);
-    const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.day(1), "00:00"), endTime: s.time.local(s.time.day(2), "00:00") })) as { events: { id: string; summary: string }[] };
-    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Dinner/.test(e.summary))!.id, summary: "Dinner with Mara at Marlow & Pine", startTime: s.time.local(s.time.day(1), "19:00"), endTime: s.time.local(s.time.day(1), "21:00"), timeZone: s.time.zone, location: "Marlow & Pine, 14 Quay Street, London", description: "Booking reference MP-48213", attendees: [{ email: MARA }] });
+    const ev = JSON.parse(await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.day(1), "00:00"), endUtc: s.time.utc(s.time.day(2), "00:00") })) as { events: { id: string; subject: string }[] };
+    await s.tool(`${MB}update_calendar_event`, { eventId: ev.events.find((e) => /Dinner/.test(e.subject))!.id, subject: "Dinner with Mara at Marlow & Pine", startUtc: s.time.utc(s.time.day(1), "19:00"), endUtc: s.time.utc(s.time.day(1), "21:00"), timeZone: s.time.zone, location: "Marlow & Pine, 14 Quay Street, London", description: "Booking reference MP-48213", attendees: [{ email: MARA }], notifyAttendees: true, confirm: true });
     s.say("Updated the dinner: 19:00 tomorrow at Marlow & Pine, 14 Quay Street, booking ref MP-48213. Mara is invited.");
   },
 };
@@ -345,7 +345,7 @@ const e2: Case = {
   reply: ["It says the event was added with its date, time and place, and that the registration was done.", "It is short: three lines at most.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}create_event`, { summary: "Harbour Lights Meetup", startTime: `${s.time.nextWeekday(4)}T11:30:00`, endTime: `${s.time.nextWeekday(4)}T13:00:00`, timeZone: "Europe/London", location: "The Boathouse, 4 Dock Road, London E1", description: EVENT_URL });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Harbour Lights Meetup", startUtc: new Date(instantOf(`${s.time.nextWeekday(4)}T11:30:00`, "Europe/London")).toISOString().replace(".000Z", "Z"), endUtc: new Date(instantOf(`${s.time.nextWeekday(4)}T13:00:00`, "Europe/London")).toISOString().replace(".000Z", "Z"), timeZone: "Europe/London", location: "The Boathouse, 4 Dock Road, London E1", description: EVENT_URL, notifyAttendees: false, confirm: false });
     await s.tool("mcp__browser__browser_navigate", { url: REGISTER_URL });
     await s.tool("mcp__browser__browser_type", { target: "e3", text: "Alex Rowan" });
     await s.tool("mcp__browser__browser_type", { target: "e4", text: OWNER_EMAIL });
@@ -529,14 +529,14 @@ const e14: Case = {
   reply: ["Turn 1 says the tea is in the calendar for 8pm tonight at Example Bar.", "After the invite request it does not say that it asked for an OK or that the invite goes out once approved (the question already said so); silence or a short outcome after the yes is fine.", "It never asks the owner for Mira's email address."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}create_event`, { summary: "Tea with Mira", startTime: s.time.local(s.time.today, "20:00"), endTime: s.time.local(s.time.today, "21:00"), timeZone: s.time.zone, location: "Example Bar" });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Tea with Mira", startUtc: s.time.utc(s.time.today, "20:00"), endUtc: s.time.utc(s.time.today, "21:00"), timeZone: s.time.zone, location: "Example Bar", notifyAttendees: false, confirm: false });
     s.say("Tea with Mira is in your calendar tonight at 8pm, Example Bar.");
     s.turn(1);
     await s.tool(`${MB}search_conversations`, { query: "Mira" });
     s.note("mira-keller.md", `---\nperson: Mira Keller\n---\nMira Keller, ${MIRA}\n`);
-    s.ask(`${CAL}update_event`, "Invite Mira Keller (mira.keller@example.com) to Tea with Mira?", "yes");
-    const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") })) as { events: { id: string; summary: string }[] };
-    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Tea/.test(e.summary))!.id, attendees: [{ email: MIRA }] });
+    s.ask(`${MB}update_calendar_event`, "Invite Mira Keller (mira.keller@example.com) to Tea with Mira?", "yes");
+    const ev = JSON.parse(await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(1), "00:00") })) as { events: { id: string; subject: string }[] };
+    await s.tool(`${MB}update_calendar_event`, { eventId: ev.events.find((e) => /Tea/.test(e.subject))!.id, attendees: [{ email: MIRA }], notifyAttendees: true, confirm: true });
     s.say("Done, Mira has the invite.");
   },
 };
@@ -553,11 +553,11 @@ const e14b: Case = {
   reply: [e14.reply[0]!, "It says Mira was invited, in a short line.", e14.reply[2]!],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}create_event`, { summary: "Tea with Mira", startTime: s.time.local(s.time.today, "20:00"), endTime: s.time.local(s.time.today, "21:00"), timeZone: s.time.zone, location: "Example Bar" });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Tea with Mira", startUtc: s.time.utc(s.time.today, "20:00"), endUtc: s.time.utc(s.time.today, "21:00"), timeZone: s.time.zone, location: "Example Bar", notifyAttendees: false, confirm: false });
     s.say("Tea with Mira is in your calendar tonight at 8pm, Example Bar.");
     s.turn(1);
-    const ev = JSON.parse(await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") })) as { events: { id: string; summary: string }[] };
-    await s.tool(`${CAL}update_event`, { eventId: ev.events.find((e) => /Tea/.test(e.summary))!.id, attendees: [{ email: MIRA }] });
+    const ev = JSON.parse(await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(1), "00:00") })) as { events: { id: string; subject: string }[] };
+    await s.tool(`${MB}update_calendar_event`, { eventId: ev.events.find((e) => /Tea/.test(e.subject))!.id, attendees: [{ email: MIRA }], notifyAttendees: true, confirm: true });
     s.say("Mira has the invite.");
   },
 };
@@ -606,7 +606,7 @@ const e17: Case = {
   id: "e17",
   title: "a slow two-step task; a correction arrives mid-run and is acted on, nothing done twice",
   turns: ["Find the earliest free hour for a call with Mira on Thursday or Friday (look at Thursday first, then Friday) and put a placeholder called 'Call with Mira' on my calendar then."],
-  interject: { on: `${CAL}list_events`, text: "also: it has to be after 18:00", afterMs: 1500 }, // (while the first calendar read is still out)
+  interject: { on: `${MB}list_calendar_events`, text: "also: it has to be after 18:00", afterMs: 1500 }, // (while the first calendar read is still out)
   world: (t) => ({
     slowMs: 5000,
     calendar: [
@@ -621,7 +621,7 @@ const e17: Case = {
     const mine = created(o);
     const call = mine[0];
     const days = [t.nextWeekday(4), t.nextWeekday(5)];
-    const makes = o.calls.filter((c) => c.tool === `${CAL}create_event` && c.ok).length;
+    const makes = o.calls.filter((c) => c.tool === `${MB}create_calendar_event` && c.ok).length;
     return [
       check("exactly one placeholder was created, once", mine.length === 1 && makes === 1, `${mine.length} created by ${makes} calls`),
       check("it is called Call with Mira", !!call && /call with mira/i.test(call.summary), call?.summary),
@@ -634,8 +634,8 @@ const e17: Case = {
   perfect: async (s) => {
     s.turn(0);
     const day = s.time.nextWeekday(4);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(day, "00:00"), endTime: s.time.local(s.time.plus(day, 1), "00:00"), timeZone: s.time.zone });
-    await s.tool(`${CAL}create_event`, { summary: "Call with Mira", startTime: s.time.local(day, "18:00"), endTime: s.time.local(day, "19:00"), timeZone: s.time.zone });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(day, "00:00"), endUtc: s.time.utc(s.time.plus(day, 1), "00:00") });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Call with Mira", startUtc: s.time.utc(day, "18:00"), endUtc: s.time.utc(day, "19:00"), timeZone: s.time.zone, notifyAttendees: false, confirm: false });
     s.say("Done: a placeholder 'Call with Mira' is on Thursday at 18:00, the first free hour after 18:00.");
   },
 };
@@ -741,7 +741,7 @@ const e20: Case = {
   reply: ["Either nothing was said, or one short message; it asks no question and does not claim anything was sent."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(14), "00:00") });
     s.note("whereabouts.md", `---\nname: whereabouts\ndescription: Whereabouts: Zurich; next London from ${s.time.day(1)} to ${s.time.day(5)} (flight ZU 318)\n---\nFlight ZU 318 Zurich - London on ${s.time.day(1)}, hotel Example Court until ${s.time.day(5)}. Source: calendar.\n`);
   },
 };
@@ -851,7 +851,7 @@ const e27: Case = {
     const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { lastMessageId: number }[];
     await s.tool(`${MB}list_attachments`, { messageId: rows[0]!.lastMessageId });
     const d = s.time.day(12);
-    await s.tool(`${CAL}create_event`, { summary: "Train London Paddington -> Bristol Temple Meads", startTime: s.time.local(d, "08:12"), endTime: s.time.local(d, "09:35"), timeZone: s.time.zone, description: "Booking reference LR-90417. Coach C, seat 41." });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Train London Paddington -> Bristol Temple Meads", startUtc: s.time.utc(d, "08:12"), endUtc: s.time.utc(d, "09:35"), timeZone: s.time.zone, description: "Booking reference LR-90417. Coach C, seat 41.", notifyAttendees: false, confirm: false });
     s.say(`The train to Bristol is on your calendar: ${longDate(d)}, 08:12 from London Paddington. Booking reference LR-90417.`);
   },
 };
@@ -1104,7 +1104,7 @@ const e32: Case = {
   reply: ["It confirms the coffee with Sam is kept for the next stay in Valmora, in a line or two.", "It gives the start of the stay (the first day, not the late dinner) and asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(60), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(60), "00:00") });
     s.tasks.add({ title: "When in Valmora: coffee with Sam" });
     s.say(`Saved: when in Valmora, coffee with Sam. Your next stay starts on ${s.time.day(30)}.`);
   },
@@ -1146,10 +1146,10 @@ const stayDone = (o: Outcome, startDay: number, endDay: number): Check[] => {
 };
 const stayPerfect = async (s: PerfectScript): Promise<void> => {
   s.turn(0);
-  await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+  await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(28), "00:00") });
   await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: SAM_E, name: "Sam Ortiz" }], subject: "Coffee in Valmora?", body: "<p>Hi Sam, I am in Valmora from the 5th. Coffee on the 7th at 10?</p>" });
   await s.tool(`${MB}create_draft`, { accountId: 1, to: [{ email: MIA_E, name: "Mia Okoye" }], subject: "Coffee in Valmora?", body: "<p>Hi Mia, I am in Valmora from the 5th. Coffee on the 8th at 10?</p>" });
-  await s.tool(`${CAL}create_event`, { summary: "Hold: coffee with Sam (Valmora)", startTime: s.time.local(s.time.day(6), "10:00"), endTime: s.time.local(s.time.day(6), "11:00"), timeZone: s.time.zone });
+  await s.tool(`${MB}create_calendar_event`, { subject: "Hold: coffee with Sam (Valmora)", startUtc: s.time.utc(s.time.day(6), "10:00"), endUtc: s.time.utc(s.time.day(6), "11:00"), timeZone: s.time.zone, notifyAttendees: false, confirm: false });
   s.tasks.edit(s.tasks.find("Mia Okoye"), { due: null, remindAtMs: null });
   s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, `At home. Valmora stay from ${s.time.day(4)} to ${s.time.day(18)} (calendar).`));
   s.say("Your Valmora stay starts in 4 days. Drafts to Sam and Mia are ready, each proposing a coffee, and a hold is on your calendar. The rail pass is still open.");
@@ -1209,7 +1209,7 @@ const e56: Case = {
   reply: ["Nothing meaningful was said, or at most one short line; it does not offer or announce drafts."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(28), "00:00") });
     s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(4)} to ${s.time.day(18)}`, "At home. Valmora stay (calendar)."));
   },
 };
@@ -1263,7 +1263,7 @@ const e35: Case = {
   reply: ["Nothing meaningful was said, or at most one short line; it does not announce drafts and asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(28), "00:00") });
     s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(20)} to ${s.time.day(30)} (draft)`, "Planned stay, flights not booked."));
   },
 };
@@ -1361,7 +1361,7 @@ const e39: Case = {
   reply: ["Nothing meaningful was said, or at most one short line; it does not talk about a trip or a stay."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(14), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(14), "00:00") });
   },
 };
 
@@ -1453,7 +1453,7 @@ const e41: Case = {
   reply: ["Nothing meaningful was said, or at most one short line; it does not offer a new draft for Sam and asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(28), "00:00") });
   },
 };
 
@@ -1514,7 +1514,7 @@ const e44: Case = {
   reply: ["It is a short chat message (the brief itself went by mail); it asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(28), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(28), "00:00") });
     s.note("whereabouts.md", whereaboutsNote(`Whereabouts: home; next Valmora from ${s.time.day(17)} to ${s.time.day(31)}`, `At home. Valmora stay moved to ${s.time.day(17)} to ${s.time.day(31)} (plan note, newer than the calendar).`));
     await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Today\nNothing pressing." });
     s.say("Your brief is in your inbox.");
@@ -1575,7 +1575,7 @@ const e22: Case = {
     await s.tool(`${MB}search_conversations`, { query: "ticket" });
     s.open(TICKET_URL);
     await s.tool("mcp__browser__browser_navigate", { url: TICKET_URL });
-    await s.tool(`${CAL}create_event`, { summary: "Train Zurich HB to Basel SBB", startTime: s.time.local(s.time.day(9), "09:34"), endTime: s.time.local(s.time.day(9), "10:54"), timeZone: s.time.zone, description: "Order TK-5521, seat 41, coach 7" });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Train Zurich HB to Basel SBB", startUtc: s.time.utc(s.time.day(9), "09:34"), endUtc: s.time.utc(s.time.day(9), "10:54"), timeZone: s.time.zone, description: "Order TK-5521, seat 41, coach 7", notifyAttendees: false, confirm: false });
     s.say(`The train to Basel is on your calendar for ${s.time.day(9)}, 09:34 to 10:54.`);
   },
 };
@@ -1771,7 +1771,7 @@ const e51: Case = {
   reply: ["It is a short chat message (the brief itself went by mail) and asks no question.", "It does not mention pins or focus marks that were taken out."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}list_events`, { startTime: s.time.local(s.time.today, "00:00"), endTime: s.time.local(s.time.day(1), "00:00") });
+    await s.tool(`${MB}list_calendar_events`, { startUtc: s.time.utc(s.time.today, "00:00"), endUtc: s.time.utc(s.time.day(1), "00:00") });
     for (const w of ["bookshelf", "tea shop", "old photos", "gardening"]) s.tasks.edit(s.tasks.find(w), { focus: false });
     s.tasks.edit(s.tasks.find("budget review"), { focus: true });
     await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Focus today\n- Send the venue deposit\n- Budget review at 11:00: numbers prepared" });
@@ -1819,7 +1819,7 @@ const e52: Case = {
     const rows = JSON.parse(await s.tool(`${MB}list_conversations`, { folderId: 10 })) as { lastMessageId: number }[];
     await s.tool(`${MB}list_attachments`, { messageId: rows[0]!.lastMessageId });
     const d = s.time.day(15);
-    await s.tool(`${CAL}create_event`, { summary: "Boiler service visit", startTime: s.time.local(d, "10:30"), endTime: s.time.local(d, "11:30"), timeZone: s.time.zone, description: "From the building maintenance report, page 62." });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Boiler service visit", startUtc: s.time.utc(d, "10:30"), endUtc: s.time.utc(d, "11:30"), timeZone: s.time.zone, description: "From the building maintenance report, page 62.", notifyAttendees: false, confirm: false });
     s.say(`The boiler service visit is on ${longDate(d)} at 10:30, and it is on your calendar.`);
   },
 };

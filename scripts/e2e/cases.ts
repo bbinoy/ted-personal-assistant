@@ -1,5 +1,5 @@
 // The end-to-end cases (scripts/e2e-eval.ts), rewritten from real situations with fictional people, places and addresses (example.com / example.org). Every date is relative to the case's frozen clock.
-import { CAL, MB, check, created, deletes, plain, sends, words } from "./checks.ts";
+import { MB, check, created, deletes, plain, sends, words } from "./checks.ts";
 import { moreCases } from "./cases-more.ts";
 import { memoryCases } from "./cases-memory.ts";
 import type { Case } from "./case.ts";
@@ -34,7 +34,7 @@ const e1: Case = {
   reply: ["It confirms the lunch event on Thursday and that Mira was invited.", "It is one or two short lines.", "It asks no question and offers no choices."],
   perfect: async (s) => {
     s.turn(0);
-    await s.tool(`${CAL}create_event`, { summary: "Lunch with Mira", startTime: s.time.local(s.time.nextWeekday(4), "12:00"), endTime: s.time.local(s.time.nextWeekday(4), "13:00"), timeZone: s.time.zone, attendees: [{ email: MIRA }] });
+    await s.tool(`${MB}create_calendar_event`, { subject: "Lunch with Mira", startUtc: s.time.utc(s.time.nextWeekday(4), "12:00"), endUtc: s.time.utc(s.time.nextWeekday(4), "13:00"), timeZone: s.time.zone, attendees: [{ email: MIRA }], notifyAttendees: true, confirm: true });
     s.say("Lunch with Mira is in for Thursday at 12:00, and the invite is on its way to her.");
   },
 };

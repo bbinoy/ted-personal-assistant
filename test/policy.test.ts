@@ -17,7 +17,7 @@ test("policy: every source audit.ts names is classified", () => { // (the per-so
 
 const N = "mcp__claude_ai_Notion__";
 const M = "mcp__mailbird__";
-const C = "mcp__claude_ai_Google_Calendar__";
+const C = "mcp__mailbird__";
 const chat = (tool: string, input: Record<string, unknown> = {}) => classify(tool, input, OWNER_CHAT);
 
 test("reads are allowed, including Notion's prefixed names (regression: brief hung on approval)", () => {
@@ -25,7 +25,7 @@ test("reads are allowed, including Notion's prefixed names (regression: brief hu
     `${N}notion-fetch`, `${N}notion-search`, `${N}notion-ai-search`, `${N}notion-query-meeting-notes`,
     `${N}notion-get-comments`, `${N}notion-list-recent-pages`,
     `${M}get_message`, `${M}list_conversations`, `${M}search_conversations`,
-    `${C}list_events`, `${C}get_event`, `${C}suggest_time`,
+    `${C}list_calendar_events`, `${C}list_calendars`, `${C}search_contacts`,
     "mcp__claude_ai_Google_Drive__read_file_content", "mcp__claude_ai_Google_Docs__read_doc",
   ]) assert.equal(chat(t), "allow", t);
 });
@@ -71,9 +71,10 @@ test("a verb in the middle of a name is not a read", () => {
 });
 
 test("edit-and-approve: allowed fields only, calendar only", () => {
-  const input = { summary: "t", startTime: "2026-10-12T15:00:00", endTime: "2026-10-12T16:00:00", attendees: ["a@example.com"] };
-  const tool = `${C}create_event`;
-  assert.deepEqual(applyChanges(tool, input, [{ field: "startTime", value: "2026-10-12T16:00:00" }])?.startTime, "2026-10-12T16:00:00");
+  const input = { subject: "t", startUtc: "2026-10-12T15:00:00Z", endUtc: "2026-10-12T16:00:00Z", attendees: ["a@example.com"], notifyAttendees: false, confirm: false };
+  const tool = `${C}create_calendar_event`;
+  assert.deepEqual(applyChanges(tool, input, [{ field: "startUtc", value: "2026-10-12T16:00:00Z" }])?.startUtc, "2026-10-12T16:00:00Z");
+  assert.equal(applyChanges(tool, input, [{ field: "notifyAttendees", value: "true" }]), undefined); // a flag is not a string: a reply cannot turn the invitations on
   assert.equal(applyChanges(tool, input, [{ field: "attendees", value: "x" }]), undefined); // protected
   assert.equal(applyChanges(tool, input, [{ field: "newField", value: "x" }]), undefined); // no new fields
   assert.equal(applyChanges(`${M}send_message_now`, { to: "a" }, [{ field: "to", value: "b" }]), undefined); // not modifiable
@@ -104,17 +105,17 @@ test("audit ids: keeps ids, drops content", () => {
 
 test("hidden tools: unused connectors, Notion beyond the skills' four, and always-denied tools", () => {
   const N = "mcp__claude_ai_Notion__notion-";
-  const hidden = hiddenTools([`${N}fetch`, `${N}search`, `${N}create-pages`, `${N}update-page`, `${N}query-data-sources`, "mcp__mailbird__trash_conversation", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events"]);
+  const hidden = hiddenTools([`${N}fetch`, `${N}search`, `${N}create-pages`, `${N}update-page`, `${N}query-data-sources`, "mcp__mailbird__trash_conversation", "mcp__mailbird__get_message", "mcp__mailbird__list_calendar_events"]);
   assert.ok(hidden.includes("mcp__claude_ai_Gmail") && hidden.includes("mcp__claude_ai_Interactive_Brokers_IBKR"));
   assert.ok(hidden.includes(`${N}query-data-sources`) && hidden.includes("mcp__mailbird__trash_conversation"));
-  for (const keep of [`${N}fetch`, `${N}search`, `${N}create-pages`, `${N}update-page`, "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events"]) assert.ok(!hidden.includes(keep), keep);
+  for (const keep of [`${N}fetch`, `${N}search`, `${N}create-pages`, `${N}update-page`, "mcp__mailbird__get_message", "mcp__mailbird__list_calendar_events"]) assert.ok(!hidden.includes(keep), keep);
 });
 
 test("hidden tools: both lists come from settings, so a skill that needs another Notion tool can have it", () => {
   const N = "mcp__claude_ai_Notion__notion-";
   const cfg = { hiddenConnectors: ["mcp__claude_ai_Gmail"], visibleTools: { notion: ["notion-fetch", "notion-query-data-sources"], mailbird: ["get_message"] } };
   const hidden = hiddenTools([`${N}fetch`, `${N}query-data-sources`, `${N}search`], cfg);
-  assert.deepEqual(hidden, ["mcp__claude_ai_Gmail", `${N}search`]);
+  assert.deepEqual(hidden, ["mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Calendar", `${N}search`]); // (the calendar is Mailbird's: the Google Calendar connector is hidden whole)
 });
 
 test("hidden tools: Drive and Docs show reading and finding only; DRIVE_TOOLS brings one back", () => {
@@ -133,13 +134,13 @@ test("hidden tools: the defaults hide exactly what the per-provider lists did, f
   const MB = "mcp__mailbird__";
   const GM = "mcp__claude_ai_Gmail__";
   const NO = "mcp__claude_ai_Notion__notion-";
-  const mailbirdKeep = ["list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
+  const mailbirdKeep = ["list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing", "list_calendars", "list_calendar_events", "create_calendar_event", "update_calendar_event", "respond_to_calendar_event", "delete_calendar_event", "search_contacts", "create_contact", "update_contact"];
   const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
   const notionKeep = ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"];
-  const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, `${MB}set_sender_blocked`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
+  const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, `${MB}set_sender_blocked`, `${MB}create_calendar`, `${MB}update_calendar`, `${MB}delete_calendar`, `${MB}delete_contact`, `${MB}remove_conversation_from_folder`, "mcp__claude_ai_Google_Calendar__list_events", ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__mailbird__list_calendar_events"];
   const base = ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Claude_Docs"]; // (Google Drive and Docs are visible by default since the people lookup: HIDDEN_CONNECTORS hides them again)
   const oracle = (provider: "mailbird" | "gmail" | "none") => {
-    const connectors = [base[0]!, ...(provider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), ...base.slice(1), ...(provider !== "mailbird" ? ["mcp__mailbird"] : [])];
+    const connectors = [base[0]!, ...(provider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), ...base.slice(1), ...(provider === "mailbird" ? ["mcp__claude_ai_Google_Calendar"] : ["mcp__mailbird"])];
     const extra = seen.filter((t) => (t.startsWith(MB) && !mailbirdKeep.includes(t.slice(MB.length))) || (t.startsWith(GM) && !gmailKeep.includes(t.slice(GM.length))) || (t.startsWith("mcp__claude_ai_Notion__") && !notionKeep.includes(t.slice("mcp__claude_ai_Notion__".length))) || neverAllowedTool(t));
     return [...connectors, ...new Set(extra)];
   };

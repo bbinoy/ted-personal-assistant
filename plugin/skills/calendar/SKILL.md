@@ -1,6 +1,6 @@
 ---
 name: calendar
-description: Use for reviewing the owner's Google Calendar - listing the day's / week's events, flagging conflicts and overlaps, proposing reschedule slots, and creating calendar events from travel bookings. Part of the daily brief; also for ad-hoc "what's my day / find me a slot / is X on my calendar". Pairs with `ted-personal-assistant:mail`, `ted-personal-assistant:meeting-prep`, `ted-personal-assistant:daily-brief`.
+description: Use for reviewing the owner's calendar - listing the day's / week's events, flagging conflicts and overlaps, proposing reschedule slots, and creating calendar events from travel bookings. Part of the daily brief; also for ad-hoc "what's my day / find me a slot / is X on my calendar". Pairs with `ted-personal-assistant:mail`, `ted-personal-assistant:meeting-prep`, `ted-personal-assistant:daily-brief`.
 ---
 
 # Calendar review
@@ -11,19 +11,23 @@ Which calendars to check, the time zone and which calendar travel bookings go on
 are in the owner's `setup/calendars` note (the `setup` notes in your memory block
 or `MEMORY.md`). Use exactly those; do not guess calendar ids.
 
-**If the calendar tools (`list_calendars`, `list_events`) do not exist** (the connector is not connected in the owner's Claude account), say so plainly, never guess or invent calendar data, skip this part, and in an unattended run end the brief with one line: "🔌 <connector> isn't connected, so calendar was skipped." In chat, add how to fix it: connect it under Settings, Connectors in their Claude account, then message you again.
+**If the calendar tools (`list_calendars`, `list_calendar_events`) do not exist** (Mailbird is not running, or its MCP server is off), say so plainly, never guess or invent calendar data, skip this part, and in an unattended run end the brief with one line: "🔌 <connector> isn't connected, so calendar was skipped." In chat, add how to fix it: open Mailbird and check its MCP setting (the `ted-personal-assistant:mailbird` skill), then message you again.
 
 **If there is no `setup/calendars` note:**
 - in chat, load `ted-personal-assistant:setup` and set it up with the owner now;
 - in an unattended run, call `list_calendars` and save the `setup/calendars` note yourself, as the setup skill says, then carry on and say so in one line.
 
-A work calendar shared into the owner's Google account is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one; which is which follows the mail skill's "Work and private accounts".
+A work calendar shared into one of the owner's accounts is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one; which is which follows the mail skill's "Work and private accounts".
 
-Google Calendar via MCP. Call `list_events` with an explicit start/end range and
-the owner's time zone, for **all of the listed calendars in the same turn** (they
-are independent). The note may list calendars that are **not** connected (a work
-account that cannot be added, say): those are invisible, so never assume the list
-is complete, and if a workday looks empty, say so. Event times in results are already in the owner's zone: read them as shown, never convert.
+## The tools (Mailbird's calendar, over every calendar account the owner has)
+
+- `list_calendars` first: it gives each calendar's `id` (the `calendarId` of the other tools), name, account, time zone and whether it is read-only.
+- `list_calendar_events` takes `startUtc` and `endUtc` (UTC, ISO-8601 with a `Z`, e.g. `2026-05-03T00:00:00Z`) and optionally a `calendarId`; recurring events come expanded. Call it for **all of the listed calendars in the same turn** (they are independent). The note may list calendars that are **not** connected (a work account that cannot be added, say): those are invisible, so never assume the list is complete, and if a workday looks empty, say so.
+- **Time zones.** Each event row has `startUtc`/`endUtc` (what the write tools take back, with `instanceStartUtc` for one occurrence) and, added for you, `start`/`end` in the owner's zone (a plain date for an all-day event): read those and say them as they are. To ask for a local day, convert its midnight and the next midnight to UTC (a day is not 24 hours across a clock change).
+- `create_calendar_event` (`subject`, `startUtc`, `endUtc`, optionally `calendarId`, `timeZone`, `location`, `description`, `attendees`, `isAllDay`), `update_calendar_event` (`eventId` and only what changes; for one occurrence of a repeating event also `instanceStartUtc` and `scope`), `respond_to_calendar_event`, `delete_calendar_event` (no undo). There is no get-one-event tool: find an event by listing its day.
+- **Guests are emailed only with `notifyAttendees: true` AND `confirm: true`.** The two are required arguments of the writes: pass both `false` for anything with nobody to notify (bookings, holds, the owner's own plans), and `true` only when the owner asked for the invitation (or the change or cancellation) to go out. Guests named without both true are only saved on the event, nobody is emailed.
+
+With the Google Calendar connector instead of Mailbird (a Gmail setup), the tools are `list_calendars`, `list_events`, `get_event`, `create_event`, `update_event`, `respond_to_event` and `delete_event`: give `list_events` an explicit start/end range and the owner's time zone, event times in results are already in the owner's zone (read them as shown, never convert), and write `startTime`/`endTime` as full ISO times with the UTC offset of the place (no `timeZone`).
 
 ## Window
 
@@ -48,9 +52,9 @@ location - and hand it to `ted-personal-assistant:meeting-prep`, which decides w
 If an email asks to move a meeting, or two things clash, propose 2-3
 concrete alternative slots from the owner's actual free time (following the
 owner's meeting preferences in their pages) in the brief. For an event with guests or other
-people, do **not** call `update_event` on your own - the owner decides, then asks.
+people, do **not** call `update_calendar_event` on your own - the owner decides, then asks.
 A clash among the owner's own guest-less events or placeholders is fixed
-with `update_event`, in any run; say so in one line.
+with `update_calendar_event`, in any run; say so in one line.
 
 ## Bookings -> calendar (the automatic write)
 
@@ -63,17 +67,16 @@ buses. The daily brief also scans recent booking confirmations via
 
 - "I booked X": find the mail in the newest inbox rows (`list_conversations`) as well as by keyword; the sender rarely uses the owner's words.
 - If the date or time is only in the mail's attachment (a ticket, a confirmation PDF), open it first (`ted-personal-assistant:mail`) and never ask the owner for it.
-- `create_event` on the calendar the setup note names for bookings (else the primary
+- `create_calendar_event` on the calendar the setup note names for bookings (else the primary
   one; a work trip on the work calendar), with no guests: clear title ("Startup Nights 2026", "Flight ZRH -> BCN LX123",
   "Hotel: <name>, <city>", "Train <A> -> <B>", "Dinner at <place>"),
   correct start/end, location, and confirmation number + one-line summary in the
-  description. Times: write each of `startTime` and `endTime` as a full ISO time with
-  the UTC offset of the place it happens in (a flight ZRH 10:30 -> LHR 11:20 local on
-  3 May is `2026-05-03T10:30:00+02:00` to `2026-05-03T11:20:00+01:00`; a train
-  within one time zone uses that zone's offset). Do NOT set `timeZone` (it overrides
-  the offsets), and never send two local times without offsets: the two ends of a
-  flight are in different time zones, and an event with mixed times is held back for
-  the owner's approval. Use the booking's own times, else the owner's time zone.
+  description. Times: `startUtc` and `endUtc` are the real instants in UTC, worked out from the
+  local time and the UTC offset of the place it happens in (a flight ZRH 10:30 -> LHR 11:20 local on
+  3 May is `2026-05-03T08:30:00Z` to `2026-05-03T10:20:00Z`; a train
+  within one time zone uses that zone's offset), and `timeZone` is the IANA zone the event is
+  shown in (where it starts). Never copy a local time into `startUtc`: the two ends of a
+  flight are in different time zones. Use the booking's own times, else the owner's time zone.
   The offset differs by DATE as well as place (daylight saving): the UK clocks change
   on the last Sunday of October, so on 31 Oct 2026 London is `+00:00` while Zurich is
   `+01:00`, whereas on 3 May both are on summer time (London `+01:00`, Zurich
@@ -87,7 +90,7 @@ buses. The daily brief also scans recent booking confirmations via
 When an email asks about availability, proposes a time, or answers a time the owner suggested, do not just report it and ask what to do. Do the
 whole job and ask once:
 
-1. Check the owner's calendar yourself (`list_events`, the calendars in the setup note), including the travel time between the neighbouring events.
+1. Check the owner's calendar yourself (`list_calendar_events`, the calendars in the setup note), including the travel time between the neighbouring events.
 2. Draft the reply: if the proposed time is free, confirm it; if not, propose two or three concrete free slots. Write it in the owner's voice
    and language, ready to send.
 3. Tell the owner in one short message what the mail says, what the calendar shows, the draft, and one thing worth knowing (a clash, a tight
@@ -109,20 +112,21 @@ another time"), so the owner can correct it with one word. Moving or editing one
 no guests works the same way. This is never a question to the owner: a wrong guess is fixed in a second. Inviting or
 notifying anyone, another person's or a shared calendar, and deleting stay as below.
 
-To invite someone by name ("invite Sam"), call `find_person` first, as your rules say; the invite still asks, with the guests shown.
+To invite someone by name ("invite Sam"), look for the address with `find_person` and `search_contacts` first, as your rules say; the invite still asks, with the guests shown, and goes out only with `notifyAttendees: true` and `confirm: true` once the owner has said yes.
 
 ## Cancelling, declining and deleting (in chat)
 
-Before you act on an event, look it up by day and title (`list_events` for that day, or `get_event`), so you know what it is and who organises it. Name it by title and time in anything you say ("the Embassy reception, Fri 15 May 18:00"), never by id.
+Before you act on an event, look it up by day and title (`list_calendar_events` for that day), so you know what it is and who organises it. Name it by title and time in anything you say ("the Embassy reception, Fri 15 May 18:00"), never by id.
 
-- "Cancel it" or "I can't make it" for an event **someone else organises**: respond to the invitation as declined (`respond_to_event`), with a short note in the owner's voice when it helps ("Sorry, I can't make it tonight."). The organiser is notified by that. Do not delete it: a delete tells the organiser nothing.
-- Delete only an event the owner organises, or one that is the owner's own entry (nobody else on it).
-- Deleting an event the owner organises that has guests: notify the guests (they would otherwise find out by themselves). It touches other people, so the owner is asked first; that is right.
+- "Cancel it" or "I can't make it" for an event **someone else organises**: respond to the invitation as declined (`respond_to_calendar_event` with `response: "declined"`; it emails the organiser, so it asks the owner first and goes out with `confirm: true` only after that yes), with a short note in the owner's voice when it helps ("Sorry, I can't make it tonight."). Do not delete it: a delete tells the organiser nothing.
+- Delete only an event the owner organises, or one that is the owner's own entry (nobody else on it); there is no undo.
+- Deleting an event the owner organises that has guests: notify the guests (`notifyAttendees: true`, `confirm: true`; they would otherwise find out by themselves). It touches other people, so the owner is asked first; that is right.
 
 ## Guardrails
 
 - May, in any run: create, move or edit an event on the owner's own calendar with nobody invited and no notifications (bookings, holds, own plans), and mention it.
-- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting stays a question (and `delete_event` is never unattended).
+- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting stays a question (and `delete_calendar_event` is never unattended).
+- Whole calendars (creating, renaming or deleting one) are not yours to manage: those tools are not offered.
 - The agent's policy (`src/policy/policy.ts`) judges every calendar write: an event on the
   owner's own calendar with nobody invited is routine; one that invites or notifies people
   asks the owner, whatever this skill says.

@@ -179,7 +179,7 @@ test("manifest rows: browser tools exist only for the browse run; reads run free
   // the entry tool exists everywhere (the same judged path; it starts a sandboxed run), the browser's own tools only in that run
   for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK, BROWSE_RUN]) assert.equal(access("mcp__browse__browse", run), "judged", run.who);
   // the browse run holds no owner tool at all
-  for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Google_Calendar__create_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, BROWSE_RUN), "allow", t);
+  for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__mailbird__create_calendar_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, BROWSE_RUN), "allow", t);
   assert.equal(classify("mcp__memory__forget_note", {}, BROWSE_RUN), "deny");
   // other sources get no browser tools
   for (const source of ["chat", "background", "group"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, kindOf(source)), "deny", source);

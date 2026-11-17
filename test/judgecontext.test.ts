@@ -9,7 +9,7 @@ import { APPROVAL_SYSTEM, parseCheck } from "../src/approvals/approvalprompt.ts"
 import { discardJudge, runJudge } from "../src/approvals/approvaljudge.ts";
 import { forgetSeen, peopleFor, rememberNames } from "../src/approvals/seennames.ts";
 
-const CAL = "mcp__claude_ai_Google_Calendar__update_event";
+const CAL = "mcp__mailbird__update_calendar_event";
 const CONV = "owner";
 const args = { eventId: "e1", calendarId: "primary", attendees: ["c.mignon@example.com"], sendUpdates: "all" };
 const details = "Update calendar event e1: add guest c.mignon@example.com\nNotifies: c.mignon@example.com\nNamed: “Embassy reception”, Fri 21 Nov, 18:00";

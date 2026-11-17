@@ -6,7 +6,7 @@ import { OWNER_CHAT } from "./runkinds.ts";
 
 // The anti-repeat state of permissions.ts ("already done", failed asks) is kept per conversation.
 
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
 const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test" });

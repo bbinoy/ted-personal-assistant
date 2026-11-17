@@ -11,7 +11,7 @@ import { settings } from "../src/core/settings.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
 (settings as { warm: boolean }).warm = false;
-const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
+const CREATE = "mcp__mailbird__create_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 const judging = (j: AnswerJudgement): AnswerDeps => ({ judge: async () => j, recent: () => [] });
 const ask: () => Promise<Verdict> = async () => ({ decision: "ask", reason: "the call does not match the request" });
