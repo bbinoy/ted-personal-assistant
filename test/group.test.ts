@@ -34,7 +34,7 @@ test("groups: web search, the memory tools (scoped by their server) and the file
   mkdirSync(NOTES_DIR, { recursive: true });
   assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
   for (const t of ["mcp__memory__search_logs", "mcp__memory__forget_note", "mcp__memory__undo_dream"]) assert.equal(classify(t, {}, GROUP_CHAT), "allow", t);
-  for (const t of ["Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, GROUP_CHAT), "deny", t);
+  for (const t of ["Bash", "mcp__mailbird__get_message", "mcp__mailbird__list_calendar_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, GROUP_CHAT), "deny", t);
   for (const t of ["Read", "Write", "Edit"]) {
     assert.equal(classify(t, { file_path: join(dir, "people-eve.md") }, GROUP_CHAT, dir), "allow", t);
     assert.equal(classify(t, { file_path: join(dir, "anything at all.txt") }, GROUP_CHAT, dir), "allow", `${t}: no file name rules, containment is the only gate`);

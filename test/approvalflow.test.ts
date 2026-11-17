@@ -15,7 +15,7 @@ import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 // No model process is started here: the judge is injected, and warm spares are off.
 (settings as { warm: boolean }).warm = false;
 
-const CAL = "mcp__claude_ai_Google_Calendar__update_event";
+const CAL = "mcp__mailbird__update_calendar_event";
 const MAIL = "mcp__claude_ai_Gmail__send_message";
 const cal: { tool: string; input: Record<string, unknown> } = { tool: CAL, input: { eventId: "e1", summary: "Dentist", startTime: "2026-10-20T10:00:00", endTime: "2026-10-20T11:00:00" } };
 const mail: { tool: string; input: Record<string, unknown> } = { tool: MAIL, input: { to: ["alice@example.com"], bcc: ["carol@example.com"], subject: "Agenda" } };

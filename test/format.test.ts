@@ -16,7 +16,7 @@ test("approval text: nothing is cut silently", () => {
 });
 
 test("approval text: people shown as addresses, any other object shown in full", () => {
-  const text = describeCall("mcp__claude_ai_Google_Calendar__create_event", {
+  const text = describeCall("mcp__mailbird__create_calendar_event", {
     summary: "Sync",
     startTime: "2026-10-14T15:00:00",
     endTime: "2026-10-14T16:00:00",
@@ -29,7 +29,7 @@ test("approval text: people shown as addresses, any other object shown in full",
 });
 
 test("approval text: a calendar change that moves only the end or only the start still shows the time", () => {
-  const tool = "mcp__claude_ai_Google_Calendar__update_event";
+  const tool = "mcp__mailbird__update_calendar_event";
   assert.match(describeCall(tool, { eventId: "abc123", endTime: "2026-11-11T12:30:00" }), /🕒 ends Wed 11 Nov, 12:30/);
   assert.match(describeCall(tool, { eventId: "abc123", end: { dateTime: "2026-11-11T12:30:00" }, timeZone: "Europe/Berlin" }), /🕒 ends Wed 11 Nov, 12:30 \(Europe\/Berlin\)/);
   assert.match(describeCall(tool, { eventId: "abc123", end_time: "2026-11-11" }), /🕒 ends Wed 11 Nov$/m);

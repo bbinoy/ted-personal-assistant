@@ -14,7 +14,7 @@ import { CHAT } from "./util.ts";
 import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 const SEND = "mcp__mailbird__send_message_now";
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 
 test("makeApprove: the sent question is the model's own, unchanged", async () => {

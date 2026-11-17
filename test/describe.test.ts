@@ -11,8 +11,8 @@ import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
-const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
-const DELETE = "mcp__claude_ai_Google_Calendar__delete_event";
+const CREATE = "mcp__mailbird__create_calendar_event";
+const DELETE = "mcp__mailbird__delete_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 const ask: () => Promise<Verdict> = async () => ({ decision: "ask", reason: "x" });
 
@@ -46,7 +46,7 @@ test("another conversation's event is not named from this one's record; unknown 
   forgetCreated();
   noteCreated("g-1", ["abc"], Date.now(), "“Secret”");
   assert.equal(await objectLines("owner", DELETE, { eventId: "abc" }), "\nNamed: unknown (only its id is known: it was not made by the assistant here, not read in this conversation, and could not be looked up)");
-  assert.equal(await objectLines("owner", "mcp__claude_ai_Google_Calendar__update_event", { eventId: "abc", startTime: "2026-10-21T09:00:00" }), "", "a change of an unknown event: no claim");
+  assert.equal(await objectLines("owner", "mcp__mailbird__update_calendar_event", { eventId: "abc", startTime: "2026-10-21T09:00:00" }), "", "a change of an unknown event: no claim");
   assert.equal(await objectLines("owner", DELETE, { eventId: "abc", summary: "Coffee" }), "");
   assert.equal(await objectLines("owner", CREATE, { summary: "Coffee" }), "");
 });

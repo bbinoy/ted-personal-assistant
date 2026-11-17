@@ -2,25 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { agreement, isJudgeable, isPlainWebAddress, judgeAction, judgePrompt, mayAutoApprove, parseVerdict, provenanceFor, type Provenance } from "../src/approvals/autojudge.ts";
 
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const MB = "mcp__mailbird__";
 const own = (message: string, o: Partial<Extract<Provenance, { kind: "owner" }>> = {}): Provenance => ({ kind: "owner", message, ...o });
 
 test("judge floor: calendar events are judged with or without guests, new or existing (an untrusted run's unnamed guest is asked: permissions.ts)", () => {
-  assert.equal(isJudgeable(`${CAL}create_event`, { summary: "Pottery", startTime: "2026-10-14T16:00:00" }), true);
-  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", attendees: [] }), true);
-  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", location: "Balboa" }), true);
-  assert.equal(isJudgeable(`${CAL}create_event`, { summary: "Coffee", attendees: [{ email: "a@example.com" }] }), true);
-  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), true);
-  assert.equal(isJudgeable(`${CAL}create_event`, { guests: ["a@example.com"] }), true);
-  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), false, "a delete that names guests emails a cancellation");
+  assert.equal(isJudgeable(`${CAL}create_calendar_event`, { summary: "Pottery", startTime: "2026-10-14T16:00:00" }), true);
+  assert.equal(isJudgeable(`${CAL}update_calendar_event`, { eventId: "x", attendees: [] }), true);
+  assert.equal(isJudgeable(`${CAL}update_calendar_event`, { eventId: "x", location: "Balboa" }), true);
+  assert.equal(isJudgeable(`${CAL}create_calendar_event`, { summary: "Coffee", attendees: [{ email: "a@example.com" }] }), true);
+  assert.equal(isJudgeable(`${CAL}update_calendar_event`, { eventId: "x", attendees: [{ email: "a@example.com" }] }), true);
+  assert.equal(isJudgeable(`${CAL}create_calendar_event`, { guests: ["a@example.com"] }), true);
+  assert.equal(isJudgeable(`${CAL}delete_calendar_event`, { eventId: "x", notifyAttendees: true, confirm: true }), false, "a delete that names guests emails a cancellation");
 });
 
 test("judge floor: what the judge may see at all: routine upkeep yes; sharing, stopping a tenant, unknown tools and trading no", () => {
-  for (const t of [`${MB}archive_conversation`, `${MB}create_draft`, `${MB}select_conversation`, `${MB}send_self_briefing`, `${CAL}respond_to_event`, "mcp__claude_ai_Notion__notion-update-page", "mcp__browse__browse", "mcp__browser__browser_navigate", "mcp__browser__browser_handle_dialog"]) assert.equal(isJudgeable(t, {}), true, t);
+  for (const t of [`${MB}archive_conversation`, `${MB}create_draft`, `${MB}select_conversation`, `${MB}send_self_briefing`, `${CAL}respond_to_calendar_event`, "mcp__claude_ai_Notion__notion-update-page", "mcp__browse__browse", "mcp__browser__browser_navigate", "mcp__browser__browser_handle_dialog"]) assert.equal(isJudgeable(t, {}), true, t);
   for (const t of ["mcp__claude_ai_Google_Drive__share_file", "mcp__tenants__remove_tenant", "mcp__tenants__suspend_tenant", "mcp__new_server__do_something", "Bash"]) assert.equal(isJudgeable(t, {}), false, t);
-  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e" }), true, "a delete is judged with care");
-  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e", attendees: ["a@example.org"] }), false, "unless it names guests");
+  assert.equal(isJudgeable(`${CAL}delete_calendar_event`, { eventId: "e" }), true, "a delete is judged with care");
+  assert.equal(isJudgeable(`${CAL}delete_calendar_event`, { eventId: "e", notifyAttendees: true, confirm: true }), false, "unless it names guests");
 });
 
 test("judge modes: auto lets an auto verdict skip the question; off never; an ask or fix never does", () => {

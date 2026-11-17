@@ -10,7 +10,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "connectorback-"));
 
 const { recordConnectors } = await import("../src/modules/connectors.ts");
 
-const srv = (notion: string, mail = "connected") => [{ name: "claude.ai Notion", status: notion }, { name: "claude.ai Google Calendar", status: "connected" }, { name: "mailbird", status: mail }];
+const srv = (notion: string, mail = "connected") => [{ name: "claude.ai Notion", status: notion }, { name: "mailbird", status: mail }];
 
 test("connector back: first record, up -> up and up -> down name nothing; down -> up names the connector", () => {
   assert.deepEqual(recordConnectors([], srv("connected")), []); // first ever record
@@ -20,10 +20,10 @@ test("connector back: first record, up -> up and up -> down name nothing; down -
   assert.deepEqual(recordConnectors([], srv("connected")), ["Notion"]);
   assert.deepEqual(recordConnectors([], srv("connected")), []);
   assert.deepEqual(recordConnectors([], srv("connected", "failed")), []); // the local mail client counts too
-  assert.deepEqual(recordConnectors([], srv("connected")), ["mail"]);
+  assert.deepEqual(recordConnectors([], srv("connected")), ["Mailbird calendar", "mail"]); // (Mailbird holds the calendar too)
 });
 
 test("connector back: an offline start-up (every server failed) names nothing", () => {
-  const off = [{ name: "claude.ai Notion", status: "failed" }, { name: "claude.ai Google Calendar", status: "failed" }];
+  const off = [{ name: "claude.ai Notion", status: "failed" }, { name: "claude.ai Google Drive", status: "failed" }];
   assert.deepEqual(recordConnectors([], off), []);
 });

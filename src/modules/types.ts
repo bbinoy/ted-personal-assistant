@@ -182,6 +182,7 @@ export interface MailRuntime {
 export interface ToolModule {
   name: string; // the module's name, also the key of its code in runtime.ts; for the mail slot, the value of MAIL_PROVIDER
   slot?: "mail"; // one module per slot is loaded, the one settings names; every module without a slot is always loaded
+  withMail?: readonly string[]; // loaded only while MAIL_PROVIDER is one of these: the calendar of a mail client that has one (Mailbird's), else the owner's Google Calendar
   connection: Connection;
   rows: readonly ToolEntry[];
   free?: true | readonly string[]; // rows that run without the judge: all of the module's, or those with these actions (a read, the assistant's own plumbing)

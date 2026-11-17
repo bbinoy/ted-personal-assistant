@@ -112,7 +112,7 @@ const resumes: (string | undefined)[] = [];
 const textOf = async (p: any): Promise<string> => (typeof p === "string" ? p : String((await p[Symbol.asyncIterator]().next()).value.message.content));
 const result = (subtype: string, text = "") => ({ type: "result", subtype, is_error: subtype !== "success", result: text, session_id: "sess-0", total_cost_usd: 0.01 });
 type Opts = { prompt: unknown; options: { resume?: string; canUseTool: (t: string, i: object, o: { signal: AbortSignal; toolUseID: string; agentID?: string }) => Promise<{ behavior: string; message?: string; interrupt?: boolean }> } };
-const ask = (o: Opts, id: string, agentID?: string) => o.options.canUseTool("mcp__claude_ai_Google_Calendar__list_events", {}, { signal: new AbortController().signal, toolUseID: id, agentID });
+const ask = (o: Opts, id: string, agentID?: string) => o.options.canUseTool("mcp__mailbird__list_calendar_events", {}, { signal: new AbortController().signal, toolUseID: id, agentID });
 
 test("run path: the denied call ends the turn with no reply, the session is kept, and the next turn is told it was cut short", async () => {
   writeSession(conv.convId, { sessionId: "sess-0", costUsd: 0 });

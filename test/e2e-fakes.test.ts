@@ -19,7 +19,7 @@ const { clockLine } = await import("../src/core/brief.ts");
 const { entryFor } = await import("../src/policy/toolmanifest.ts");
 const { Mailbird } = await import("../src/modules/mailbird/mailbird.ts");
 const { Recorder } = await import("../scripts/e2e/fakeserver.ts");
-const { FakeCalendar, CALENDAR_SERVER } = await import("../scripts/e2e/fakecalendar.ts");
+const { FakeCalendar } = await import("../scripts/e2e/fakecalendar.ts");
 const { FakeMail, MAILBIRD_SERVER } = await import("../scripts/e2e/fakemail.ts");
 const { assertHermetic, blockRealMailbird, guardedQuery, initProblems, isAnswered, newGuardState } = await import("../scripts/e2e/guard.ts");
 const { makeTime } = await import("../scripts/e2e/time.ts");
@@ -33,13 +33,13 @@ const ZONE = "Europe/London";
 
 const rec = new Recorder();
 const cal = new FakeCalendar(rec, ZONE, OWNER_EMAIL, [], () => NOW.getTime());
-const mail = new FakeMail(rec, { email: OWNER_EMAIL }, []);
-const fakes = { [CALENDAR_SERVER]: cal.service.config, [MAILBIRD_SERVER]: mail.service.config };
-const fakeTools = new Set([...cal.service.tools, ...mail.service.tools]);
+const mail = new FakeMail(rec, { email: OWNER_EMAIL }, [], false, [], cal.defs); // (Mailbird holds the calendar too)
+const fakes = { [MAILBIRD_SERVER]: mail.service.config };
+const fakeTools = new Set(mail.service.tools);
 
 test("the fakes carry the real tool names: every one is in the production manifest", () => {
   for (const t of fakeTools) assert.ok(entryFor(t), `${t} is not a tool the manifest knows`);
-  assert.ok(fakeTools.has("mcp__claude_ai_Google_Calendar__create_event"));
+  for (const t of ["create_calendar_event", "update_calendar_event", "respond_to_calendar_event", "delete_calendar_event", "list_calendar_events", "search_contacts"]) assert.ok(fakeTools.has(`mcp__mailbird__${t}`), t);
   assert.ok(fakeTools.has("mcp__mailbird__send_message_now"));
 });
 
@@ -80,7 +80,7 @@ test("a start-up message with a real connector in it stops the run, and is kept 
   await assert.rejects(runConversation(owner(), { now: NOW }, chatTurn(owner(), { prompt: "hi" }), undefined, { query: q }), /eval guard.*claude\.ai Gmail/);
   assert.ok(state.violations.some((v) => v.includes("claude.ai Gmail")));
   assert.equal(state.aborted, true);
-  assert.deepEqual(initProblems({ mcp_servers: [{ name: "claude.ai Google Calendar", status: "connected" }, { name: "mailbird", status: "failed" }], tools: ["mcp__claude_ai_Google_Calendar__create_event"] }, Object.keys(fakes)), []);
+  assert.deepEqual(initProblems({ mcp_servers: [{ name: "mailbird", status: "failed" }], tools: ["mcp__mailbird__create_calendar_event"] }, Object.keys(fakes)), []);
   assert.deepEqual(initProblems({ mcp_servers: [], tools: ["mcp__claude_ai_Notion__notion-fetch"] }, Object.keys(fakes)), ["unexpected MCP tool mcp__claude_ai_Notion__notion-fetch"]);
 });
 
@@ -114,16 +114,22 @@ test("the fake calendar and mail behave like the real ones in shape and in effec
   const t = makeTime(NOW, ZONE);
   const r = new Recorder();
   const c = new FakeCalendar(r, ZONE, OWNER_EMAIL, [{ summary: "Existing", start: t.local(t.day(1), "09:00"), end: t.local(t.day(1), "10:00") }], () => NOW.getTime());
-  const made = JSON.parse((await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.day(2), "12:00"), endTime: t.local(t.day(2), "13:00"), timeZone: ZONE, attendees: [{ email: "Guest@Example.com" }] })).text);
-  assert.equal(made.start.timeZone, ZONE);
-  assert.equal(made.attendees.length, 2, "the owner and the guest");
-  const listed = JSON.parse((await c.service.call("list_events", { startTime: t.local(t.day(2), "00:00"), endTime: t.local(t.day(3), "00:00") })).text);
-  assert.deepEqual(listed.events.map((e: { summary: string }) => e.summary), ["Lunch"]);
-  assert.deepEqual(c.final().find((e) => e.summary === "Lunch")!.invited, ["guest@example.com"]);
-  assert.equal(r.calls.length, 2);
-  assert.equal((await c.service.call("get_event", { eventId: "nope" })).isError, true);
-
-  const m = new FakeMail(r, { email: OWNER_EMAIL }, [{ from: "a@example.org", subject: "Hello", body: "<p>Hi</p>", receivedAt: NOW.toISOString() }]);
+  const m = new FakeMail(r, { email: OWNER_EMAIL }, [{ from: "a@example.org", subject: "Hello", body: "<p>Hi</p>", receivedAt: NOW.toISOString() }], false, [], c.defs);
+  const guest = { attendees: [{ email: "Guest@Example.com" }] };
+  const made = JSON.parse((await m.service.call("create_calendar_event", { subject: "Lunch", startUtc: t.utc(t.day(2), "12:00"), endUtc: t.utc(t.day(2), "13:00"), timeZone: ZONE, notifyAttendees: false, confirm: false })).text);
+  assert.equal(made.timeZone, ZONE);
+  assert.match(made.startUtc, /Z$/, "times come back in UTC");
+  assert.equal(made.attendees, undefined, "no guests yet");
+  await m.service.call("update_calendar_event", { eventId: made.id, ...guest, notifyAttendees: false, confirm: true });
+  assert.deepEqual(c.final().find((e) => e.summary === "Lunch")!.invited, [], "no invitation without notifyAttendees and confirm");
+  await m.service.call("update_calendar_event", { eventId: made.id, attendees: [{ email: "Guest@Example.com" }, { email: "Other@Example.com" }], notifyAttendees: true, confirm: true });
+  assert.deepEqual(c.final().find((e) => e.summary === "Lunch")!.invited, ["other@example.com"], "only the guest added with both flags is invited");
+  const listed = JSON.parse((await m.service.call("list_calendar_events", { startUtc: t.utc(t.day(2), "00:00"), endUtc: t.utc(t.day(3), "00:00") })).text);
+  assert.deepEqual(listed.events.map((e: { subject: string }) => e.subject), ["Lunch"]);
+  assert.equal((await m.service.call("respond_to_calendar_event", { eventId: made.id, response: "accepted", confirm: false })).isError, true, "an answer needs confirm: true");
+  assert.equal((await m.service.call("delete_calendar_event", { eventId: "nope", notifyAttendees: false, confirm: false })).isError, true);
+  const person = JSON.parse((await m.service.call("create_contact", { firstName: "Sam", emails: ["sam@example.org"] })).text);
+  assert.equal(JSON.parse((await m.service.call("search_contacts", { query: "sam" })).text).contacts[0].id, person.id);
   const list = JSON.parse((await m.service.call("list_conversations", { folderId: 10 })).text);
   assert.equal(list.length, 1);
   const draft = JSON.parse((await m.service.call("reply_to_conversation", { conversationId: list[0].conversationId, body: "<p>Thanks</p>" })).text);
@@ -153,16 +159,16 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
     const w = c.world(t);
     const r = new Recorder();
     const cc = new FakeCalendar(r, ZONE, OWNER_EMAIL, w.calendar, () => NOW.getTime());
-    const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail);
+    const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail, false, [], cc.defs);
     await act(cc, mm);
     return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notes: {}, notion: [], files: [], shellRuns: 0, asks: [], web: { fetched: [], searches: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
   };
-  const e1 = await outcome("e1", async (c) => {
-    for (let i = 0; i < 2; i++) await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.nextWeekday(4), "12:00"), endTime: t.local(t.nextWeekday(4), "13:00") });
+  const e1 = await outcome("e1", async (_c, m) => {
+    for (let i = 0; i < 2; i++) await m.service.call("create_calendar_event", { subject: "Lunch", startUtc: t.utc(t.nextWeekday(4), "12:00"), endUtc: t.utc(t.nextWeekday(4), "13:00"), notifyAttendees: false, confirm: false });
   });
   const failed1 = e1.c.state(e1.o).filter((k) => !k.pass).map((k) => k.name);
   assert.ok(failed1.includes("exactly one event was created") && failed1.includes("Mira is a guest") && failed1.includes("the invitation was sent"), failed1.join());
-  const e5 = await outcome("e5", async (c) => void (await c.service.call("create_event", { summary: "Dinner at Larkfield", startTime: t.local(t.day(1), "19:30") })));
+  const e5 = await outcome("e5", async (_c, m) => void (await m.service.call("create_calendar_event", { subject: "Dinner at Larkfield", startUtc: t.utc(t.day(1), "19:30"), endUtc: t.utc(t.day(1), "20:30"), notifyAttendees: false, confirm: false })));
   const failed5 = e5.c.state(e5.o).filter((k) => !k.pass).map((k) => k.name);
   assert.ok(failed5.some((n) => n.startsWith("exactly one dinner")) && failed5.some((n) => n.startsWith("no event was created")) && failed5.some((n) => n.startsWith("one open task")), failed5.join());
   const e6 = await outcome("e6", async (_c, m) => {

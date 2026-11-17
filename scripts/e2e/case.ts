@@ -14,6 +14,7 @@ export interface Time {
   plus(date: string, days: number): string; // a date moved by days
   nextWeekday(weekday: number, includeToday?: boolean): string; // 0 = Sunday .. 6 = Saturday
   local(date: string, hhmm: string): string; // a wall time, "2026-11-05T12:00:00"
+  utc(date: string, hhmm: string): string; // the instant of a wall time in the zone as UTC, "2026-11-05T12:00:00Z" (what the calendar tools take)
   at(date: string, hhmm: string): number; // the instant of a wall time in the zone
   hhmm(ms: number): string; // the wall time of an instant, "19:30"
   dateOf(ms: number): string; // the date of an instant in the zone

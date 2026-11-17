@@ -10,7 +10,7 @@ import { OWNER_CHAT } from "./runkinds.ts";
 // An event on the owner's OWN calendar with nobody else on it is routine (the owner, 22 Oct: "it's just an event for me"): the judge autos it even when the day or time is the assistant's
 // best guess, and the assistant says in its reply which date and time it chose. Events that invite or notify people keep the careful rule; deletes keep theirs.
 
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const opts = { signal: new AbortController().signal } as never;
 (settings as unknown as { autoApprove: string }).autoApprove = "auto";
 const UNCLE = { summary: "Visit godmother Rosa", startTime: "2026-10-24T10:00:00+02:00", endTime: "2026-10-24T13:30:00+02:00" };
@@ -31,26 +31,26 @@ test("the judge's rule: own calendar, no guests, no notifications is auto even w
 });
 
 test("a no-guest create with a guessed time reaches the judge with the 'names no guests' line, and its auto runs it without a question", async () => {
-  assert.equal(isJudgeable(`${CAL}create_event`, UNCLE), true);
-  assert.match(notifyNote(`${CAL}create_event`, UNCLE), /this call names no guests; this call asks for no notifications/);
+  assert.equal(isJudgeable(`${CAL}create_calendar_event`, UNCLE), true);
+  assert.match(notifyNote(`${CAL}create_calendar_event`, UNCLE), /this call names no guests; this call asks for no notifications/);
   const c = chat("auto");
-  assert.equal(((await c.can(`${CAL}create_event`, UNCLE, opts)) as { behavior: string }).behavior, "allow");
+  assert.equal(((await c.can(`${CAL}create_calendar_event`, UNCLE, opts)) as { behavior: string }).behavior, "allow");
   assert.equal(c.asked.length, 0);
   assert.match(c.judged[0]!.description, /Notifies: this call names no guests; this call asks for no notifications/);
 });
 
 test("an update of the owner's own no-guest event is judged the same way (auto runs it)", async () => {
   const c = chat("auto");
-  assert.equal(isJudgeable(`${CAL}update_event`, { eventId: "e1", startTime: "2026-10-24T11:00:00+02:00" }), true);
-  assert.equal(((await c.can(`${CAL}update_event`, { eventId: "e1", startTime: "2026-10-24T11:00:00+02:00" }, opts)) as { behavior: string }).behavior, "allow");
+  assert.equal(isJudgeable(`${CAL}update_calendar_event`, { eventId: "e1", startTime: "2026-10-24T11:00:00+02:00" }), true);
+  assert.equal(((await c.can(`${CAL}update_calendar_event`, { eventId: "e1", startTime: "2026-10-24T11:00:00+02:00" }, opts)) as { behavior: string }).behavior, "allow");
   assert.equal(c.asked.length, 0);
 });
 
 test("an event with an attendee is judged like a send: the judge decides, nobody is asked when it says auto", async () => {
   const withGuest = { ...UNCLE, attendees: ["greta@example.com"] };
-  assert.equal(isJudgeable(`${CAL}create_event`, withGuest), true);
+  assert.equal(isJudgeable(`${CAL}create_calendar_event`, withGuest), true);
   const c = chat("auto");
-  assert.equal(((await c.can(`${CAL}create_event`, withGuest, opts)) as { behavior: string }).behavior, "allow");
+  assert.equal(((await c.can(`${CAL}create_calendar_event`, withGuest, opts)) as { behavior: string }).behavior, "allow");
   assert.deepEqual([c.judged.length, c.asked.length], [1, 0]);
 });
 

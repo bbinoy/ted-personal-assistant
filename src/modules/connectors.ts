@@ -2,7 +2,7 @@ import { loaded, registered } from "./index.ts";
 import { kvGet, kvSet } from "../core/instancedb.ts";
 import { settings } from "../core/settings.ts";
 
-// Which connectors the last run could actually see, for the doctor and /status only. Notion and Google Calendar come through the owner's Claude account; if one is not
+// Which connectors the last run could actually see, for the doctor and /status only. Notion (and Google Calendar, without Mailbird) come through the owner's Claude account; Mailbird is local; if one is not
 // connected its tools simply do not exist, and the run sees that itself. This record is never put in a prompt (it can be stale) and never hides a tool.
 //
 // Which connectors there are is the tool modules' business (src/modules): each one with a connector connection and a `key` is recorded under that key; one that also says
@@ -10,6 +10,9 @@ import { settings } from "../core/settings.ts";
 // and the doctor, with no edit in this file.
 
 const KEY = "connectors"; // (the kv row of instance.db)
+
+// The modules whose connectors are looked at: every one, but of the calendars (`withMail`) only that of the mail provider in use, which both are recorded as "calendar".
+const watched = () => registered().filter((m) => !m.withMail || m.withMail.includes(settings.mailProvider));
 
 // A connector's `key` -> whether the last run saw it; `at` is when.
 export type Connectors = { at: string } & { [key: string]: boolean | string | undefined };
@@ -27,7 +30,7 @@ interface ServerStatus {
 // connecting and their tools appear a moment later. Without server info (an older SDK), fall
 // back to whether any of its tools were given.
 // Which connectors there are, under which name they are recorded, which server name they show up as and which tool prefix they have: each tool module's
-// `connection` (src/modules). Notion and Calendar are recorded as "notion" and "calendar", Mailbird as "mail", the Gmail connector as "gmail".
+// `connection` (src/modules). Notion and the calendar are recorded as "notion" and "calendar", Mailbird as "mail", the Gmail connector as "gmail".
 export function detect(tools: readonly string[], servers?: readonly ServerStatus[], at = new Date()): Connectors {
   const hasTool = (prefix: string) => tools.some((t) => t.startsWith(prefix));
   const up = (match: RegExp, toolPrefix: string): boolean => {
@@ -35,7 +38,7 @@ export function detect(tools: readonly string[], servers?: readonly ServerStatus
     const s = servers.find((x) => match.test(x.name.replace(/^claude\.ai\s+/i, "")));
     return !!s && !["failed", "needs-auth", "disabled"].includes(s.status);
   };
-  const seen = registered().flatMap((m) => (m.connection.kind === "connector" && m.connection.key ? [[m.connection.key, up(m.connection.server, m.connection.prefix)] as const] : []));
+  const seen = watched().flatMap((m) => (m.connection.kind === "connector" && m.connection.key ? [[m.connection.key, up(m.connection.server, m.connection.prefix)] as const] : []));
   return { at: at.toISOString(), ...Object.fromEntries(seen) };
 }
 
@@ -91,7 +94,7 @@ export function reportable(): Reported[] {
 // What the owner calls a connector, and what is lost without it, by its key (the prompts' words). Computed from the modules when read.
 const byKey = (field: "label" | "skipped"): Record<string, string> =>
   new Proxy({} as Record<string, string>, {
-    get: (_, key) => (typeof key === "string" ? (registered().flatMap((m) => (m.connection.kind === "connector" && m.connection.key === key ? [m.connection[field]] : [])).find(Boolean) ?? key) : undefined),
+    get: (_, key) => (typeof key === "string" ? (watched().flatMap((m) => (m.connection.kind === "connector" && m.connection.key === key ? [m.connection[field]] : [])).find(Boolean) ?? key) : undefined),
   });
 export const NAMES = byKey("label");
 export const SKIPPED = byKey("skipped");

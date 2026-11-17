@@ -9,7 +9,7 @@ import { TYPED_YES_NEEDED } from "../src/modules/browse/paymentrules.ts";
 
 // Approvals are asked in the conversation that triggered the action, one approver per conversation: the owner's chat (her own turns and her
 // unattended runs), each group, each tenant. An answer anywhere else applies to nothing, the admin's included. Fake values only.
-const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
+const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
 const never = { judge: async () => assert.fail("the judge must not be called"), recent: () => [] };
 const MARA = "tenant:mara";
 

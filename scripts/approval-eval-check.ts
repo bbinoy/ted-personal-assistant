@@ -10,8 +10,8 @@ import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 
 const MAIL = "mcp__claude_ai_Gmail__send_message";
 const FWD = "mcp__claude_ai_Gmail__forward";
-const CAL = "mcp__claude_ai_Google_Calendar__update_event";
-const NEW = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__update_calendar_event";
+const NEW = "mcp__mailbird__create_calendar_event";
 const NOTION = "mcp__claude_ai_Notion__notion-update-page";
 
 const mail = { to: ["alice@example.com"], cc: ["bob@example.com"], bcc: ["carol@example.com"], subject: "Offsite agenda", body: "Hi both, the draft agenda for the offsite is attached below. Can you confirm by Friday?" };

@@ -22,7 +22,7 @@ const declined = new Map<string, Entry[]>();
 
 const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim().toLowerCase() : undefined);
 function dayOf(input: Record<string, unknown>): string | undefined {
-  const start = input.startTime ?? input.start ?? input.start_time;
+  const start = input.startTime ?? input.start ?? input.start_time ?? input.startUtc;
   const s = start && typeof start === "object" ? (start as { dateTime?: unknown; date?: unknown }).dateTime ?? (start as { date?: unknown }).date : start;
   return typeof s === "string" ? /^\d{4}-\d{2}-\d{2}/.exec(s)?.[0] : undefined;
 }
