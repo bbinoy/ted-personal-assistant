@@ -8,10 +8,10 @@ This is a personal project that runs daily for its author. It works, its safety-
 
 - **macOS** (launchd supervises the agent; Mailbird is the mail client). Linux would work for everything except those two.
 - **Node 24+** (TypeScript runs directly, there is no build step).
-- **[Claude Code](https://docs.claude.com/en/docs/claude-code/overview)** installed and logged in (`claude auth login`). The agent uses your stored login so it can reach your claude.ai connectors (Notion, Google Calendar, Gmail…). *Check Anthropic's current terms for using your plan for personal automation like this.* An API key or `claude setup-token` also work but cannot use those connectors (see `HARNESS_AUTH` in `.env.example`).
+- **[Claude Code](https://docs.claude.com/en/docs/claude-code/overview)** installed and logged in (`claude auth login`). The agent uses your stored login so it can reach your claude.ai connectors (Notion, Gmail, Google Calendar…). *Check Anthropic's current terms for using your plan for personal automation like this.* An API key or `claude setup-token` also work but cannot use those connectors (see `HARNESS_AUTH` in `.env.example`).
 - **[signal-cli](https://github.com/AsamK/signal-cli)** (`brew install signal-cli`). Either linked to your own Signal account as a secondary device (Note to Self, the default), or, better, registered as the assistant's own account ([SIGNAL-ACCOUNT.md](SIGNAL-ACCOUNT.md)).
 - **A mail client with an MCP server**, unless you run chat only (below). This repo uses [Mailbird](https://www.getmailbird.com/); see [Why a local mail client](ADAPTING.md#why-the-default-is-a-local-client). Gmail only: use the Gmail connector instead ([Gmail](#gmail-no-local-mail-client) below).
-- Optional: Notion and Google Calendar connected under *claude.ai → Settings → Connectors*, for the task and calendar parts of the brief.
+- Optional: Notion connected under *claude.ai → Settings → Connectors*, for meeting prep. The calendar is Mailbird's own (all the calendar accounts you have in it); without Mailbird (`MAIL_PROVIDER=gmail` or `none`) it is the Google Calendar connector, connected the same way.
 
 ## Install
 
@@ -86,14 +86,14 @@ After the agent is running, send it **"set up"** on Signal. It walks you through
 
 | Item | What it does | Saved as |
 |---|---|---|
-| Calendars | lists your Google calendars, you pick which count, plus your time zone | `setup/calendars.md` |
+| Calendars | lists your calendars (Mailbird's, or Google's without Mailbird), you pick which count, plus your time zone | `setup/calendars.md` |
 | Meeting notes | searches Notion for your meetings database the same way, or creates a page for prep notes | `setup/meetings.md` |
 | How you write (mail only) | with your permission, reads up to 15 of your sent mails and describes your style for you to correct | `setup/voice-writing.md` |
 | Optional | booking link, topics for the brief's radar | `setup/booking-link.md`, `radar-topics.md` |
 
 **Moving your tasks off Notion (once).** Tasks live in the assistant now (`list_tasks`, `add_task`, `/tasks`); nothing needs setting up. If you keep a task table in Notion, send **"import my tasks"** in your own chat (the owner's chat only). Ted reads the table with your Notion connector (using your `setup/tasks` page if it has one, else it asks which page), maps each row (title, kind, due date, person, open or done, its Notion link) and shows a preview written by code: counts by status and kind, the first 15 rows, what was left out (finished rows older than 30 days by default; say "keep the history" to include them) and any rows it rejected with the reason. **Nothing is imported until you say yes** ("import them" or a thumbs-up on the preview). Then all rows come in at once as your own items, each with a history entry and one journal line ("Imported 42 tasks from Notion"). Running it again only brings rows that are new in the table (each row is matched by its Notion link), so it is safe to repeat. After the import Ted never writes tasks to Notion again; archive the old table when you like. Friends and groups do not have the import (their Notion is not read this way).
 
-**Notion and Google Calendar come through connectors in your Claude account** (Settings, then Connectors). If one is not connected, its tools do not exist, and the agent says so plainly ("Notion isn't connected") instead of asking you to type in what the connector would have told it, and skips that part: tasks and meeting prep without Notion, the calendar review without Google Calendar. Mail triage, chat and writing-style setup need neither. Connect it, message the agent again, and it carries on. `npm run doctor` shows the status of each connector as of the last run.
+**Notion (and Google Calendar, without Mailbird) come through connectors in your Claude account** (Settings, then Connectors); Mailbird's calendar and contacts come through its own MCP server, like its mail. If one is not connected, its tools do not exist, and the agent says so plainly ("Notion isn't connected") instead of asking you to type in what the connector would have told it, and skips that part: tasks and meeting prep without Notion, the calendar review without a calendar. Mail triage, chat and writing-style setup need neither. Connect it, message the agent again, and it carries on. `npm run doctor` shows the status of each connector as of the last run.
 
 Until something is set up, the parts of the agent that need it skip it and say so (in chat, it offers to set it up; in the daily brief, a one-line "🛠 Setup" note at the end). `npm run doctor` shows what is missing. To change something later, say "set up my calendar" (or tasks, meetings, writing) again, or edit the note in `conversations/owner/notes/`.
 

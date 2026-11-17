@@ -40,16 +40,17 @@ Never ask for or store account keys or recovery keys in this chat.
 
 ## First: are the connectors there?
 
-Calendars and Notion come through connectors in the owner's Claude account. If a
-connector is not connected, its tools simply do not exist in this session (your
+The calendar comes from the mail client (Mailbird's own calendar tools) or, without Mailbird, the Google Calendar connector; Notion is a connector in the owner's Claude account. If one is
+not connected, its tools simply do not exist in this session (your
 prompt may also say so). Check before you start an item that needs one: the calendar
-tools (`list_calendars`, `list_events`) for calendars, the Notion tools
+tools (`list_calendars`, `list_calendar_events`) for calendars, the Notion tools
 (`notion-search`, `notion-fetch`) for meetings.
 
 If one is missing:
-- say plainly that it is not connected, and how to fix it: add it as a connector in
+- say plainly that it is not connected, and how to fix it: for the calendar, open
+  Mailbird and check its MCP setting; for Notion (or the Google Calendar connector), add it as a connector in
   their Claude account (Settings, then Connectors; the same account they use for
-  `claude auth login` on this Mac), then message you again to continue;
+  `claude auth login` on this Mac); then message you again to continue;
 - **do not** ask them to type in what the connector would have told you (calendar
   names, page links) and **do not** save anything for that item: an unverified note
   is worse than none;
