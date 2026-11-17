@@ -36,7 +36,7 @@ test("ted's preset loads: the rhythm, the run limits, the skills and a text for 
   assert.ok(!("notes" in p), "the preset has no note categories: what a page is for is the model's, the folders are code's");
   assert.deepEqual(p.limits, { maxTurns: 40, maxBudgetUsd: 2 });
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
-  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "evening-wrap", "weekly-review", "setup"]);
+  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "evening-wrap", "weekly-review", "expenses", "setup"]);
   assert.deepEqual(p.expert, { model: "sonnet", maxTurns: 40 });
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
 });

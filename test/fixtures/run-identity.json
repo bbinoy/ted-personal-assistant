@@ -25,6 +25,7 @@
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:expenses",
       "ted-personal-assistant:workbench"
     ],
     "strict": null,
@@ -933,6 +934,7 @@
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:expenses",
       "ted-personal-assistant:workbench"
     ],
     "strict": null,

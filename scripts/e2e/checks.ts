@@ -24,7 +24,9 @@ export function pdfInside(bytes: Buffer): string {
     const to = raw.indexOf("endstream", from);
     if (to < 0) continue;
     try {
-      parts.push(inflateSync(bytes.subarray(from, to)).toString("latin1"));
+      const inner = inflateSync(bytes.subarray(from, to)).toString("latin1");
+      parts.push(inner);
+      for (const h of inner.matchAll(/<([0-9A-Fa-f]{4,})>\s*Tj/g)) parts.push(Buffer.from(h[1]!.length % 2 ? `${h[1]}0` : h[1]!, "hex").toString("latin1")); // text a library wrote as hex glyph codes (pdf-lib)
     } catch {
       // not a flate stream (a picture, a font)
     }

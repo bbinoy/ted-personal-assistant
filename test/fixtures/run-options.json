@@ -147,6 +147,7 @@
         "ted-personal-assistant:draw",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review",
+        "ted-personal-assistant:expenses",
         "ted-personal-assistant:workbench"
       ],
       "memory": {
@@ -227,6 +228,7 @@
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:expenses",
       "ted-personal-assistant:workbench"
     ],
     "disallowedTools": [
@@ -733,6 +735,7 @@
         "ted-personal-assistant:draw",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review",
+        "ted-personal-assistant:expenses",
         "ted-personal-assistant:workbench"
       ],
       "memory": {
@@ -815,6 +818,7 @@
       "ted-personal-assistant:draw",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review",
+      "ted-personal-assistant:expenses",
       "ted-personal-assistant:workbench"
     ],
     "disallowedTools": [

@@ -132,7 +132,7 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review", "workbench"].map(P);
+  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review", "expenses", "workbench"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("mail"), P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));
