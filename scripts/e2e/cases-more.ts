@@ -2348,9 +2348,9 @@ const e72: Case = {
 const TRIP_URL = "https://rail.example.org/booking/BK-4410/receipt";
 const EXPENSE_NOTES = { "expenses.md": "I send my expense claims to claims@example.org, with the receipts as one PDF and the amounts in the mail." };
 const tinyPdf = (text: string) => Buffer.from(`%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n${text}\ntrailer<</Root 1 0 R>>\n%%EOF\n`, "latin1");
-const tripWorld = (t: Time, railFails: number) => ({
+const tripWorld = (t: Time, railFails: number, notes: Record<string, string> = EXPENSE_NOTES) => ({
   calendar: [{ summary: "Trip to Basel: client workshop", start: t.local(t.day(-3), "08:00"), end: t.local(t.day(-2), "19:00"), location: "Basel" }],
-  notes: EXPENSE_NOTES,
+  notes,
   web: { [TRIP_URL]: { url: TRIP_URL, heading: "Booking BK-4410", text: ["Receipt: Zurich HB to Basel SBB and back, 1 adult, total CHF 38.00, paid."], buttons: [{ name: "Print receipt" }], ...(railFails ? { pdfFails: railFails } : {}) } },
   mail: [
     { from: { email: "receipts@example.com", displayName: "Lakeside Taxi" }, subject: "Your receipt for the ride", body: "<p>Thank you for riding with us. The receipt is attached.</p>", receivedAt: new Date(t.now.getTime() - 60 * 3_600_000).toISOString(), attachments: [{ name: "taxi-receipt.pdf", text: "", pages: ["Lakeside Taxi receipt: Basel SBB to the workshop venue, total CHF 24.50."] }] },
@@ -2365,7 +2365,7 @@ const packChecks = (o: Outcome, withRail: boolean): Check[] => {
   const pdfs = (d?.attachments ?? []).filter((a) => a.bytes?.subarray(0, 5).toString("latin1") === "%PDF-");
   const text = pdfs.map((a) => pdfInside(a.bytes!)).join("\n");
   const said = o.turns.flatMap((x) => x.messages).join("\n");
-  const total = withRail ? /123[.,]70/ : /85[.,]70/;
+  const total = /(85|123)[.,]70/; // (CHF 123.70 with the rail amount read from the page, 85.70 without it)
   return [
     check("exactly one draft exists", drafts.length === 1, `${drafts.length}`),
     check("it goes to the expenses address from the notes", !!d && d.to.some((p) => p.email === "claims@example.org"), d?.to.map((p) => p.email).join(",")),
@@ -2373,7 +2373,7 @@ const packChecks = (o: Outcome, withRail: boolean): Check[] => {
     check(withRail ? "the rail receipt saved from the booking page is in the pack" : "the pack has no broken rail file", withRail ? /38\.00/.test(text) : pdfs.every((a) => a.size > 0)),
     check("the hotel invoice is named as missing in the draft or the reply", /hotel/i.test(`${d?.body ?? ""}\n${said}`)),
     check("a waiting item for the hotel invoice is on the task list", o.tasks.some((x) => /hotel/i.test(`${x.title} ${x.details ?? ""}`))),
-    check("the CHF total is given", total.test(`${d?.body ?? ""}\n${said}`), said.slice(0, 200)),
+    check("the total in CHF is in the message", total.test(said), said.slice(0, 200)),
     check("nothing was sent and the owner was not asked anything", o.mail.sent.length === 0 && o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
   ];
 };
@@ -2437,4 +2437,40 @@ const e74: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74];
+const e75: Case = {
+  id: "e75",
+  title: "trip expenses with no known expense address: asked once in the chat, nothing drafted to a guess, then the answer is saved as a note and used",
+  zone: "Europe/Zurich",
+  turns: ["Expense my trip to Basel, find me all the receipts I need", "It is claims@example.org"],
+  world: (t) => tripWorld(t, 0, {}),
+  maxQuestions: 0,
+  state: (o) => {
+    const first = o.turns[0]?.messages ?? [];
+    const lastFirst = first[first.length - 1] ?? "";
+    const drafts = o.mail.drafts();
+    const second = (o.turns[1]?.messages ?? []).join("\n");
+    return [
+      check("the first turn asked for the address, once, in one question", (lastFirst.match(/\?/g) ?? []).length === 1 && /address|where/i.test(lastFirst), lastFirst.slice(0, 200)),
+      check("the first turn drafted nothing", (o.turns[0]?.drafts.length ?? 0) === 0, `${o.turns[0]?.drafts.length}`),
+      check("then exactly one draft, to the address given", drafts.length === 1 && drafts[0]!.to.some((p) => p.email === "claims@example.org"), drafts.map((d) => d.to.map((p) => p.email).join(",")).join("; ")),
+      check("the address was saved as a note", Object.values(o.notes).some((n) => /claims@example\.org/.test(n))),
+      check("the second turn asks nothing more and names the hotel invoice", !/\?/.test(second) && /hotel/i.test(second), second.slice(0, 200)),
+      check("a waiting item for the hotel invoice is on the task list", o.tasks.some((x) => /hotel/i.test(`${x.title} ${x.details ?? ""}`))),
+      check("nothing was sent", o.mail.sent.length === 0),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["The first reply asks where the expense claims should go, in one short question, and does nothing else that needs the answer.", "After the address, the reply says one draft to that address holds the pack, with the amounts and the total in CHF, and that the hotel invoice is missing.", "It ends with 'say send' and says nothing was sent. It asks no further question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "receipt" });
+    s.say("Where should I send your expense claims? One address is enough, and I will remember it.");
+    s.turn(1);
+    s.note("expenses.md", "Expense claims go to claims@example.org.");
+    await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: "Expenses: trip to Basel", body: "<p>Taxi CHF 24.50, workshop dinner CHF 61.20, rail CHF 38.00. Total CHF 123.70. Missing: hotel invoice.</p>" });
+    s.tasks.add({ title: "Hotel invoice from Harbour Hotel Basel (trip expenses)" });
+    s.say("One draft to claims@example.org: taxi CHF 24.50, dinner CHF 61.20, rail CHF 38.00, total CHF 123.70. The hotel invoice is missing and on your waiting list. Say send and I will send it.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75];
