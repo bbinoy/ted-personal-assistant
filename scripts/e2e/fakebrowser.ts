@@ -15,6 +15,7 @@ export interface FakePage {
   text?: string[];
   links?: { name: string; to: string }[];
   fields?: { name: string }[]; // text boxes, in order
+  pdfFails?: number; // saving this page as a PDF fails this many times (a page that will not save), then works
   gate?: { code: string; to: string }; // a login page for a shared access code: typing the code with Enter opens `to`
   buttons?: { name: string; to?: string; pay?: boolean; submit?: boolean }[]; // `pay`: the payment is made by this click (the fake pay endpoint); `submit`: a form is sent by this click (a sign-up), recorded with what was typed
 }
@@ -39,6 +40,7 @@ export class FakeBrowser {
   readonly submissions: { page: string; button: string; values: Record<string, string> }[] = [];
   private current: FakePage | undefined;
   private values = new Map<string, string>(); // ref -> typed value
+  private readonly saves = new Map<string, number>(); // page address -> saves tried
   private readonly pages: Record<string, FakePage>;
   private readonly card: FakeCard | undefined;
 
@@ -85,6 +87,9 @@ export class FakeBrowser {
         run: async (a) => {
           const p = this.current;
           if (!p || !a.filename) throw new Error("No page to save.");
+          const tried = (this.saves.get(p.url) ?? 0) + 1;
+          this.saves.set(p.url, tried);
+          if (tried <= (p.pdfFails ?? 0)) throw new Error("page.pdf: Protocol error (Page.printToPDF): Printing failed");
           const doc = await PDFDocument.create(); // a real one-page PDF with the page's text, so open_file can read it
           const font = await doc.embedFont(StandardFonts.Helvetica);
           const page = doc.addPage();
