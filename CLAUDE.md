@@ -27,7 +27,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **The default is: act, and don't ask.** When it is unclear whether the user should be asked or notified, the answer is no.
 - **Ask only for critical, irreversible actions.** Paying (typed YES, card holder's own chat), and anything that cannot be undone and touches money or other people where the judge is unsure. Everything else happens automatically.
 - **Prefer the reversible way.** Archive instead of delete, mark done instead of remove, own-calendar entries freely. Make undo easy: the journal and the daily brief say what was done, and the user can reverse it in one message.
-- **Background runs never ask.** Unattended work acts when the judge says yes and skips silently when it does not.
+- **Every run may ask when the judge is unsure.** A background run asks like a chat turn, in the conversation that triggered it, and does not wait: its question waits through quiet hours (and `/quiet`), and lapses after a day if unanswered, like any question (a yes that comes late runs only if the call is still current). Payments stay §5.
 - **Trust the judge, not parallel paths.** Mail and web content is marked untrusted; the code floor and the judge decide. Do not add restricted copies of tools or provenance stamps for unattended runs: the §5 invariants are the hard limits.
 - **Inform minimally.** Tell the user what happened only when it matters to them, in one friendly line, or collect it into the daily brief. Low-risk work (adding a task, archiving routine mail, a calendar placeholder) is done and then mentioned, never proposed for approval.
 - **Spend is warned, never paused.** The owner hears about spend at thresholds; only real API failures (rate limit, billing, a refused key) stop a run.
@@ -41,7 +41,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 
 ## 5. Safety invariants (never relax these)
 
-- Payments only by a typed YES in the card holder's own foreground chat, never judged, never in background runs.
+- Payments only by a typed YES in the card holder's own chat, never judged.
 - Secrets never go through the chat or a model. They are entered at the local CLI or on a one-time link page, and the audit keeps lengths only.
 - The never-allowed set stays denied for everyone (trading; trash, spam, permanent delete, blocking senders).
 - The judge may only loosen inside the code floor, and it fails toward not acting.
