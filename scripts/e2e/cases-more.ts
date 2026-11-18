@@ -2344,9 +2344,9 @@ const e72: Case = {
   },
 };
 
-// ---- e73, e74: trip expenses (plugin/skills/expenses). One pack, one draft, one message; a step that fails is retried once and the rest goes on ----
+// ---- e73, e74: trip expenses (plugin/skills/expenses). Receipts as separate PDFs in one draft (or one mail per receipt when the notes say so), one message; a step that fails is retried once and the rest goes on ----
 const TRIP_URL = "https://rail.example.org/booking/BK-4410/receipt";
-const EXPENSE_NOTES = { "expenses.md": "I send my expense claims to claims@example.org, with the receipts as one PDF and the amounts in the mail." };
+const EXPENSE_NOTES = { "expenses.md": "I send my expense claims to claims@example.org, with each receipt attached and the amounts in the mail." };
 const tinyPdf = (text: string) => Buffer.from(`%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n${text}\ntrailer<</Root 1 0 R>>\n%%EOF\n`, "latin1");
 const tripWorld = (t: Time, railFails: number, notes: Record<string, string> = EXPENSE_NOTES) => ({
   calendar: [{ summary: "Trip to Basel: client workshop", start: t.local(t.day(-3), "08:00"), end: t.local(t.day(-2), "19:00"), location: "Basel" }],
@@ -2363,14 +2363,13 @@ const packChecks = (o: Outcome, withRail: boolean): Check[] => {
   const drafts = o.mail.drafts();
   const d = drafts[0];
   const pdfs = (d?.attachments ?? []).filter((a) => a.bytes?.subarray(0, 5).toString("latin1") === "%PDF-");
-  const text = pdfs.map((a) => pdfInside(a.bytes!)).join("\n");
   const said = o.turns.flatMap((x) => x.messages).join("\n");
   const total = /(85|123)[.,]70/; // (CHF 123.70 with the rail amount read from the page, 85.70 without it)
   return [
     check("exactly one draft exists", drafts.length === 1, `${drafts.length}`),
     check("it goes to the expenses address from the notes", !!d && d.to.some((p) => p.email === "claims@example.org"), d?.to.map((p) => p.email).join(",")),
-    check("PDFs are attached and hold the taxi and dinner receipts", pdfs.length >= 1 && /24\.50/.test(text) && /61\.20/.test(text), `${pdfs.length} pdfs`),
-    check(withRail ? "the rail receipt saved from the booking page is in the pack" : "the pack has no broken rail file", withRail ? /38\.00/.test(text) : pdfs.every((a) => a.size > 0)),
+    check("each receipt is its own PDF (the taxi and the dinner, none merged)", pdfs.length >= (withRail ? 3 : 2) && pdfs.some((a) => /24\.50/.test(pdfInside(a.bytes!)) && !/61\.20/.test(pdfInside(a.bytes!))) && pdfs.some((a) => /61\.20/.test(pdfInside(a.bytes!)) && !/24\.50/.test(pdfInside(a.bytes!))), `${pdfs.length} pdfs`),
+    check(withRail ? "the website receipt is its own attachment" : "the pack has no broken rail file", withRail ? pdfs.some((a) => /38\.00/.test(pdfInside(a.bytes!)) && !/24\.50|61\.20/.test(pdfInside(a.bytes!))) : pdfs.every((a) => a.size > 0)),
     check("the hotel invoice is named as missing in the draft or the reply", /hotel/i.test(`${d?.body ?? ""}\n${said}`)),
     check("a waiting item for the hotel invoice is on the task list", o.tasks.some((x) => /hotel/i.test(`${x.title} ${x.details ?? ""}`))),
     check("the total in CHF is in the message", total.test(said), said.slice(0, 200)),
@@ -2379,7 +2378,7 @@ const packChecks = (o: Outcome, withRail: boolean): Check[] => {
 };
 const e73: Case = {
   id: "e73",
-  title: "trip expenses: receipts from mail, a receipt saved from a booking page, one pack in one draft, the missing hotel invoice a waiting item",
+  title: "trip expenses: receipts from mail, a receipt saved from a booking page, separate receipt PDFs in one draft, the missing hotel invoice a waiting item",
   zone: "Europe/Zurich",
   turns: ["Expense my trip to Basel, find me all the receipts I need"],
   world: (t) => tripWorld(t, 0),
@@ -2394,9 +2393,8 @@ const e73: Case = {
     await s.tool("mcp__browser__browser_pdf_save", { filename: join(tmpdir(), "e73-rail.pdf") });
     s.ranShell();
     const dir = mkdtempSync(join(tmpdir(), "e73-"));
-    const file = join(dir, "expense-pack.pdf");
-    writeFileSync(file, tinyPdf("Lakeside Taxi receipt CHF 24.50 Example Events invoice CHF 61.20 Receipt CHF 38.00"));
-    await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: "Expenses: trip to Basel", body: "<p>Taxi CHF 24.50, workshop dinner CHF 61.20, rail CHF 38.00. Total CHF 123.70. Missing: hotel invoice.</p>", attachments: [file] });
+    const files = [["taxi", "Lakeside Taxi receipt CHF 24.50"], ["dinner", "Example Events invoice CHF 61.20"], ["rail", "Receipt CHF 38.00"]].map(([n, t]) => { const f = join(dir, `${n}.pdf`); writeFileSync(f, tinyPdf(t!)); return f; });
+    await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: "Expenses: trip to Basel", body: "<p>Taxi CHF 24.50, workshop dinner CHF 61.20, rail CHF 38.00. Total CHF 123.70. Missing: hotel invoice.</p>", attachments: files });
     rmSync(dir, { recursive: true, force: true });
     rmSync(join(tmpdir(), "e73-rail.pdf"), { force: true });
     s.tasks.add({ title: "Hotel invoice from Harbour Hotel Basel (trip expenses)" });
@@ -2428,9 +2426,8 @@ const e74: Case = {
     for (const n of [1, 2]) await s.tool("mcp__browser__browser_pdf_save", { filename: join(tmpdir(), `e74-rail-${n}.pdf`) }).catch(() => "");
     s.ranShell();
     const dir = mkdtempSync(join(tmpdir(), "e74-"));
-    const file = join(dir, "expense-pack.pdf");
-    writeFileSync(file, tinyPdf("Lakeside Taxi receipt CHF 24.50 Example Events invoice CHF 61.20"));
-    await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: "Expenses: trip to Basel", body: "<p>Taxi CHF 24.50, workshop dinner CHF 61.20. Total CHF 85.70. Missing: rail receipt, hotel invoice.</p>", attachments: [file] });
+    const files = [["taxi", "Lakeside Taxi receipt CHF 24.50"], ["dinner", "Example Events invoice CHF 61.20"]].map(([n, t]) => { const f = join(dir, `${n}.pdf`); writeFileSync(f, tinyPdf(t!)); return f; });
+    await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: "Expenses: trip to Basel", body: "<p>Taxi CHF 24.50, workshop dinner CHF 61.20. Total CHF 85.70. Missing: rail receipt, hotel invoice.</p>", attachments: files });
     rmSync(dir, { recursive: true, force: true });
     s.tasks.add({ title: "Hotel invoice from Harbour Hotel Basel (trip expenses)" });
     s.say("One draft to claims@example.org has the taxi CHF 24.50 and the dinner CHF 61.20, total CHF 85.70. The rail booking receipt would not save as a PDF and the hotel invoice has not arrived; both are missing and the hotel is on your waiting list. Say send and I will send it.");
@@ -2473,4 +2470,45 @@ const e75: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75];
+const e77: Case = {
+  id: "e77",
+  title: "trip expenses where the notes say the expense inbox wants one mail per receipt: one draft per receipt with that receipt attached, no question, nothing sent, one message listing them",
+  zone: "Europe/Zurich",
+  turns: ["Expense my trip to Basel, find me all the receipts I need"],
+  world: (t) => tripWorld(t, 0, { "expenses.md": "Expense claims go to claims@example.org; that inbox wants one mail per receipt, each with the receipt attached." }),
+  maxQuestions: 0,
+  state: (o) => {
+    const drafts = o.mail.drafts();
+    const said = o.turns.flatMap((x) => x.messages).join("\n");
+    const pdfsOf = (d: (typeof drafts)[number]) => (d.attachments ?? []).filter((a) => a.bytes?.subarray(0, 5).toString("latin1") === "%PDF-").map((a) => pdfInside(a.bytes!));
+    const has = (amount: RegExp) => drafts.filter((d) => pdfsOf(d).length === 1 && amount.test(pdfsOf(d)[0]!));
+    return [
+      check("one draft per receipt (three), all to the expenses address", drafts.length === 3 && drafts.every((d) => d.to.some((p) => p.email === "claims@example.org")), `${drafts.length} drafts`),
+      check("each draft has exactly one PDF, and the taxi, the dinner and the rail receipt are each in a draft of their own", has(/24\.50/).length === 1 && has(/61\.20/).length === 1 && has(/38\.00/).length === 1),
+      check("no draft holds two receipts", drafts.every((d) => pdfsOf(d).length === 1)),
+      check("the message lists the receipts and the total", /123[.,]70/.test(said) && /24[.,]50/.test(said) && /61[.,]20/.test(said) && /38[.,]00/.test(said), said.slice(0, 200)),
+      check("nothing was sent and the owner was not asked anything", o.mail.sent.length === 0 && o.asks.length === 0, o.asks.map((a) => a.question).join("; ")),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It says there are three drafts, one per receipt (taxi, dinner, rail), with the amounts and the total CHF 123.70.", "It says the hotel invoice is missing.", "It ends with an offer to send them ('say send'), and says nothing was sent.", "It asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}search_conversations`, { query: "receipt" });
+    await s.tool("mcp__browser__browser_navigate", { url: TRIP_URL });
+    await s.tool("mcp__browser__browser_pdf_save", { filename: join(tmpdir(), "e77-rail.pdf") });
+    s.ranShell();
+    const dir = mkdtempSync(join(tmpdir(), "e77-"));
+    for (const [n, t, line] of [["taxi", "Lakeside Taxi receipt CHF 24.50", "Taxi, CHF 24.50"], ["dinner", "Example Events invoice CHF 61.20", "Workshop dinner, CHF 61.20"], ["rail", "Receipt CHF 38.00", "Rail, CHF 38.00"]] as const) {
+      const f = join(dir, `${n}.pdf`);
+      writeFileSync(f, tinyPdf(t));
+      await s.tool(`${MB}create_draft`, { to: [{ email: "claims@example.org" }], subject: `Expense: ${line}`, body: `<p>${line}</p>`, attachments: [f] });
+    }
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(join(tmpdir(), "e77-rail.pdf"), { force: true });
+    s.tasks.add({ title: "Hotel invoice from Harbour Hotel Basel (trip expenses)" });
+    s.say("Three drafts to claims@example.org, one per receipt: taxi CHF 24.50, dinner CHF 61.20, rail CHF 38.00, total CHF 123.70. The hotel invoice has not arrived; it is on your waiting list. Say send and I will send all three.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e77];
