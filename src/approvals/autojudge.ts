@@ -46,11 +46,20 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
   return veto ? veto(input, view) : true;
 }
 
+// Pure: is this whole address in the text (not as the tail or head of a longer one)?
+const mentions = (text: string, a: string): boolean => {
+  const at = a.toLowerCase();
+  for (let i = text.indexOf(at); i >= 0; i = text.indexOf(at, i + 1)) {
+    if (!/[\p{L}\p{N}._%+@-]/u.test(text[i - 1] ?? " ") && !/[\p{L}\p{N}_@-]/u.test(text[i + at.length] ?? " ")) return true;
+  }
+  return false;
+};
+
 // Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
 // or pages may have had its recipient or guest steered, so permissions.ts hands this list to the judge as a fact (a standing go-ahead in the notes may cover it); it blocks nothing. A person counts as the person's when their words hold
 // the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Mara" covers the
-// Mara of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
-// have seen the exact address, and whether their reply approves it is the judge's call, the judge reads it). Only that one message, never older ones. An address that is exactly one of the person's own mail accounts (`own`: what the mail provider itself reports, MailTools.ownAddresses) is known like a note from before the run. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
+// Mara of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed: they
+// have seen the exact address, and whether their reply approves it is the judge's call). Only that one message, never older ones. An address that is exactly one of the person's own mail accounts (`own`: what the mail provider itself reports, MailTools.ownAddresses) is known like a note from before the run. A word that merely appears in an address, or an address that only ends with a typed one, proves nothing (whole-address match). A reply whose recipients the call does not name itself goes to
 // the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
 export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = [], own: readonly string[] = []): string[] {
   const text = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n");
@@ -59,7 +68,7 @@ export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | 
   const byName = addressesNamedIn(text, known);
   const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
   const mine = new Set(own.map((a) => a.toLowerCase()));
-  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !mine.has(a.toLowerCase()) && !words.includes(a) && !byName.has(a) && !(view.action === "reply" && !named.has(a)));
+  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !mine.has(a.toLowerCase()) && !mentions(words, a) && !byName.has(a) && !(view.action === "reply" && !named.has(a)));
 }
 
 // Pure: does this mode let a verdict skip the phone?

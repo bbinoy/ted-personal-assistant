@@ -199,6 +199,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   };
   const conversation = setup.conversation ?? UNSCOPED_KEY;
   const source = auditSource(run); // (the audit label)
+  const notesAtStart = memoryDir ? indexText(memoryDir) : ""; // the judge reads the notes as they were when the run began: a rule a mail-steered run saves mid-run never counts for its own calls
   const knownAtStart = knownPeople(memoryDir); // the people notes of before this run: a note written during it (from mail it read) does not make an address known to the floor
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
   type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
@@ -326,7 +327,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     const outside = reached && isUntrusted() ? recipientsOutside(reached, input, provenance, knownAtStart, own ?? []) : [];
     if (outside.length) log(tool, "judge-fact", source, { reason: "recipients-outside", recipients: outside.length });
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried, notes: indexText(memoryDir) || undefined, ...(reached && isUntrusted() ? { outside } : {}) });
+      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried, notes: notesAtStart || undefined, ...(reached && isUntrusted() ? { outside } : {}) });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
         judged = { decision: "ask", reason: judged.reason };

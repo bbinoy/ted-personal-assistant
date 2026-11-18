@@ -206,7 +206,7 @@ export function withinCaps(tool: string, input: Record<string, unknown>, dir: st
 }
 
 // The index text as code wrote it (MEMORY.md), for a reader that adds its own framing (the approval judge); empty when there are no notes.
-export function indexText(dir: string = NOTES_DIR): string {
+export function indexText(dir: string): string {
   try {
     return readFileSync(join(dir, "MEMORY.md"), "utf8").trim();
   } catch {

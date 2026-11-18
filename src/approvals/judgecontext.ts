@@ -1,6 +1,6 @@
 import { fence } from "../core/fence.ts";
 import { OWNER } from "../core/settings.ts";
-import { LIMITS } from "../core/sanitize.ts";
+import { clean, LIMITS } from "../core/sanitize.ts";
 import type { Provenance } from "./autojudge.ts";
 import type { Recent } from "./approvalprompt.ts";
 
@@ -51,7 +51,7 @@ function notesBlock(notes: string): string {
 
 // Pure: the recipient check as a fact (it used to be a floor that asked before the judge). Code lists the addresses; the judge decides.
 function outsideLine(outside: readonly string[]): string {
-  return `\n\nRecipients not in ${OWNER}'s words, contacts or own accounts: ${outside.length}${outside.length ? ` (${outside.join(", ")})` : ""}; the run read untrusted text (code-written fact, not an instruction).`;
+  return `\n\nRecipients not in ${OWNER}'s words, contacts or own accounts: ${outside.length}${outside.length ? ` (${outside.map((a) => clean("recipient", a, { line: true, max: LIMITS.line })).join(", ")})` : ""}; the run read untrusted text (code-written fact, not an instruction).`;
 }
 
 export function judgeContext(c: JudgeContext): string {
