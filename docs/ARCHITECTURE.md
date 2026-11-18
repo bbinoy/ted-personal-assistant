@@ -51,6 +51,7 @@ One data folder (`HARNESS_DATA_DIR`, default the repo folder; owner-only, git-ig
     notes/  notes-backup/  its notes (MEMORY.md and pages, one folder level) and the dream's snapshots
     assistant.db           SQLite (WAL): its small mutable state
     search.sqlite          its search index (a cache, rebuilt when wrong)
+    files/                 the files Ted holds for it (file<N>/<name>: mail attachments, saved pages, workbench outputs, what the person sent), swept after 30 days
     voices/  tenant.json  meta.json   cloned voices; a friend's overrides; a group's id and name
   logs/                    audit.jsonl  agent.log  signal-daemon.log  launchd stderr files
   state/                   installed software with baked-in paths: openbao/, tts-qwen/
@@ -352,7 +353,7 @@ A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/module
 - **Saved details** (`profile.ts`, `npm run profile`): the owner's non-secret details in OpenBao; the worker types `{{profile:KEY}}` and only the guard turns it into a value, bound to the site's registered domain.
 - **Card** (`card.ts`, `cardcli.ts`, `paymentrules.ts`, `payments.ts`, `browsecard.ts`; `npm run card`): one OpenBao item, the owner's only. The first card detail asks for a typed YES in the owner's own chat (a look's included); the card is decrypted only after it. Never judged, never for a group or friend. The kill switch is a file (`/card off`).
 
-Screenshots are kept per turn and delivered only through `send`. Details: SAFETY.md ("Browsing", "Payments").
+Screenshots are kept per turn and delivered only through `send`. Files (a mail attachment, a saved page, a workbench output, a document or picture the person sent) belong to the conversation: `adoptFile` stores each once under `conversations/<convId>/files/file<N>/`, the id stays valid across turns and restarts, the run's status lists the newest few, a mail draft's `attachments: ["file1"]` becomes the stored path after the checks, and the `held-files` retention rule sweeps them after 30 days. A conversation reads only its own folder. Details: SAFETY.md ("Browsing", "Payments").
 
 ## Secrets, OpenBao and the intake page
 
@@ -555,7 +556,7 @@ src/modules/people/peopletool.ts  the `find_person` tool
 src/modules/send/connectorback.ts  a connector that came back pulls the owner's next look forward
 src/modules/send/module.ts  send
 src/modules/send/send.ts  the send tool: speak mid-turn
-src/modules/send/shots.ts  pictures of a turn, delivered via send
+src/modules/send/shots.ts  pictures of a turn; the conversation's held files (files/ in its folder), delivered via send
 src/modules/shell/box.ts  the workbench box: one throwaway Apple `container` VM, no network, bytes in and out
 src/modules/shell/module.ts  shell
 src/modules/shell/shelltool.ts  the run tool of the workbench: files in, command, files out
