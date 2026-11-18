@@ -31,8 +31,12 @@ import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail/module.ts";
 import { GOOGLE_MAIL_TOOL, GOOGLE_PREFIX, GOOGLE_TOOLS } from "./google/module.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
-import { setDraftReader } from "./mailbird/module.ts";
+import { setAccountsReader, setDraftReader } from "./mailbird/module.ts";
+import { cachedAccounts } from "./mailbird/accounts.ts";
+
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
+
+const ACCOUNTS_TTL_MS = 10 * 60_000; // how long Mailbird's account list is kept for the recipient floor
 
 // The code the tool modules wrap, bound to them by name. The declarations (this folder's other files) are read by nearly everything, so they import nothing
 // of the application; what they start, and the mail clients they talk to, is here, and only the places that start things import this file: agentrun.ts
@@ -226,6 +230,7 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
     start: () => {
       const client = new Mailbird();
       setDraftReader(async (id) => viewDraft(await client.call("get_message", { messageId: id })));
+      setAccountsReader(cachedAccounts(() => client.call("list_accounts"), ACCOUNTS_TTL_MS));
     },
     check: (line) =>
       mailbirdCheck(line, (ms) => new Mailbird(undefined, ms)),
