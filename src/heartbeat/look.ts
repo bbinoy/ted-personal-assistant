@@ -37,7 +37,7 @@ import { meetingWhy } from "../tasks/meetings.ts";
 // the day's budget, a friend's key and her own budget), ONE run of the same agent as the conversation's chat starts (agent.ts runLook): the same prompt, tools and skills, on HEARTBEAT_MODEL, in the
 // fresh session (every look starts one; continuity is the shared context: facts, the chat tail, the journal, its own posts). The message is the background check: the time in the conversation's zone, why
 // it is due and the routines due. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge path, with `standing` provenance (the check's fixed
-// text is what the judge reads as the reason for the run; no message of anyone's led there). It never asks anyone: what the judge is not sure about is not done (permissions.ts UNATTENDED_SKIP).
+// text is what the judge reads as the reason for the run; no message of anyone's led there). What the judge is not sure about is asked like in a chat turn (handed off, so the look goes on; held through quiet hours: approvers.ts).
 // It answers with a message or [[silent]] and the minutes until its next look.
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..60 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 

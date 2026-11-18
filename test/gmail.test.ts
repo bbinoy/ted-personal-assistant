@@ -164,7 +164,7 @@ test("a Gmail reply that names no recipients is shown with the people of the ori
   });
 });
 
-test("an unattended Gmail send never acts on its own and asks nobody; chat sends are judged; forward and new sends are normalised (to, cc, bcc as strings, attachments)", async () => {
+test("an unattended Gmail send never acts on its own: it asks like a chat send; chat sends are judged; forward and new sends are normalised (to, cc, bcc as strings, attachments)", async () => {
   await withGmail({}, async () => {
     const view = (tool: string, i: Record<string, unknown>) => mailView(`${GM}${tool}`, i, undefined, "gmail");
     const v = view("send_message", { to: "A@Example.com", cc: ["b@example.com"], bcc: "c@example.com", subject: "s", body: "b", attachments: [{ content: "AA==" }] });
@@ -173,9 +173,9 @@ test("an unattended Gmail send never acts on its own and asks nobody; chat sends
     assert.equal(view("send_message", { draftId: "d" }), undefined, "a draft id alone has no content to show");
     let asked = 0;
     const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_LOOK, undefined, noJudge);
-    assert.equal((await canUse(`${GM}send_message`, { to: ["x@example.com"], subject: "s", body: "b" }, opts))!.behavior, "deny");
-    assert.equal((await canUse(`${GM}forward`, { messageId: "m", to: ["y@example.com"] }, opts))!.behavior, "deny");
-    assert.equal(asked, 0);
+    assert.equal((await canUse(`${GM}send_message`, { to: ["x@example.com"], subject: "s", body: "b" }, opts))!.behavior, "allow", "asked, and the stub says yes");
+    assert.equal((await canUse(`${GM}forward`, { messageId: "m", to: ["y@example.com"] }, opts))!.behavior, "allow");
+    assert.equal(asked, 2, "never on its own: each send was put to the person");
   });
 });
 

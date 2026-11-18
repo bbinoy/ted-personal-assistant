@@ -29,7 +29,7 @@ import { lookerOf } from "./scope.ts";
 //
 // What a message and a look differ in is THIS table and nothing else (the code that reads it never asks which trigger it is):
 //   attended  who is waiting: a message's person is, a look's nobody. It decides the tools the manifest marks `attended` (the edits of the person's list for a message, the look's bookkeeping
-//             for a look: toolmanifest.ts), and that an unattended run never asks (permissions.ts)
+//             for a look: toolmanifest.ts)
 //   fresh     the session: a message resumes the conversation's chat session, a look starts a fresh one every time and keeps none (continuity is the shared context)
 //   model     HARNESS_MODEL, or HEARTBEAT_MODEL (a look is a cheap model that decides and delegates)
 //   answer    a reply, or the look's JSON (message, nextCheckMinutes, urgent)

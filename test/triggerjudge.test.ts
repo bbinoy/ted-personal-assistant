@@ -34,10 +34,9 @@ test("the same action, judged by the same fake judge, decides the same under a c
     for (const c of cases) {
       const j = fake(decision);
       const asked: string[] = [];
-      const unattended = !c.kind.attended; // (a wake-up is a look: it asks nobody)
       const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.kind, undefined, j.fn, undefined, c.tools, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} ${decision}` });
       const r = (await can(tool, { ...input }, opts)) as { behavior: string; message?: string };
-      assert.equal(asked.length, decision === "ask" && !unattended ? 1 : 0, `${c.name} ${decision}: only a chat turn asks`);
+      assert.equal(asked.length, decision === "ask" ? 1 : 0, `${c.name} ${decision}: a look asks like a chat turn`);
       assert.equal(j.seen.length, 1, `${c.name}: the judge is asked once`);
       assert.equal(j.seen[0]!.untrustedInput, false, c.name);
       descriptions.push(j.seen[0]!.description);
@@ -53,7 +52,7 @@ test("the same action, judged by the same fake judge, decides the same under a c
     const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.kind, undefined, j.fn, undefined, undefined, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} share` });
     assert.equal(((await can("mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }, opts)) as { behavior: string }).behavior, "deny", c.name);
     assert.equal(j.seen.length, 0, c.name);
-    assert.equal(asked.length, c.kind.attended ? 1 : 0, `${c.name}: asked in a chat, not done in a wake-up`);
+    assert.equal(asked.length, 1, `${c.name}: asked, in a wake-up too`);
   }
   // the untrusted-input flag, the real defence, is the same switch under every trigger
   const j = fake("auto");

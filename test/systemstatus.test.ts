@@ -35,7 +35,7 @@ test("a background approval that lapsed is told to the next run once, with its a
   const conv = owner();
   const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
   const asked = request(async () => 7001, "Create event Dentist\nmore details", call, undefined, { background: true });
-  t.mock.timers.tick(15 * 60_000);
+  t.mock.timers.tick(24 * 3_600_000);
   assert.equal((await asked).expired, true);
   closeAllConvDbs(); // a restart: the entry is in the file
   const now = new Date(Date.now() + 5 * 60_000);
@@ -44,7 +44,7 @@ test("a background approval that lapsed is told to the next run once, with its a
   chat.done({ ended: false, said: false });
   const look = factsFor(conv, now, false);
   const line = look.status.find((s) => /lapsed unanswered/.test(s));
-  assert.ok(line && /Create event Dentist/.test(line) && /no answer within 15 min/.test(line) && /5 min ago/.test(line), String(line));
+  assert.ok(line && /Create event Dentist/.test(line) && /no answer within 24 h/.test(line) && /5 min ago/.test(line), String(line));
   assert.doesNotMatch(line ?? "", /more details|7001/);
   assert.ok(!factsFor(conv, now, false).status.some((s) => /lapsed unanswered/.test(s)), "pending while the first look has it");
   look.done({ ended: false, said: false });

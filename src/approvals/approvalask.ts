@@ -19,8 +19,7 @@ import { handoffFor } from "./handoff.ts";
 export const sameArgs = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => callKey("", a) === callKey("", b);
 
 // `scope`: the conversation the question is asked in (its Conversation.key): only an answer there applies. `source`: the audit label of
-// the asker. `mayPay`: the chat of the person whose card it is; a group never pays. Only a live chat turn asks: an unattended run never gets here (permissions.ts
-// UNATTENDED_SKIP; its approver asks nobody, approvers.ts). `request` and `compose` are the real ones unless a test supplies its own.
+// the asker. `mayPay`: the chat of the person whose card it is; a group never pays. Every run asks here, a background one too (approvers.ts holds its question through quiet hours). `request` and `compose` are the real ones unless a test supplies its own.
 export function makeApprove(send: (text: string) => Promise<number>, o: { scope: string; source: Source; mayPay?: boolean; request?: typeof approvals.request; compose?: typeof composeQuestion }): Approve {
   const { scope, source, mayPay = false, request = approvals.request, compose = composeQuestion } = o;
   const row = (tool: string, decision: string, meta: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, conv: scope, meta }); // (a tenant's rows carry no words: core/events.ts)

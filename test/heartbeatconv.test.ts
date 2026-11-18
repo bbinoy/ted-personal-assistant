@@ -100,7 +100,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   assert.ok(!Object.keys(o.experts!.setup.agents).some((a) => /daily-brief/.test(a)), "the brief is the owner's skill");
 });
 
-test("a friend's run passes the same permission path: it asks nobody, outside her tools nothing, the never-allowed set stays denied", async () => {
+test("a friend's run passes the same permission path: it asks her like her chat does, outside her tools nothing, the never-allowed set stays denied", async () => {
   const id = friend("Bea");
   const o = lookOptions(tenant(id), payerOf(id), { provenance: { kind: "standing", task: "T" } }, NOW);
   const asked: string[] = [];
@@ -111,13 +111,13 @@ test("a friend's run passes the same permission path: it asks nobody, outside he
   try {
     assert.equal((await can("mcp__google__search_gmail_messages", { query: "is:unread" }, { signal } as never)).behavior, "allow", "a read is free");
     const send = await can("mcp__google__send_gmail_message", { to: "carl@example.org", subject: "s", body: "b" }, { signal } as never);
-    assert.equal(send.behavior, "deny", "not certain enough: skipped");
-    assert.match((send as { message?: string }).message ?? "", /background work never asks/);
-    assert.equal(asked.length, 0, "her look asks nobody, not even her"); 
+    assert.equal(send.behavior, "deny", "asked, and she said no");
+    assert.match((send as { message?: string }).message ?? "", /declined/);
+    assert.equal(asked.length, 1, "her look asks her, in her own chat"); 
     assert.equal((await can("mcp__google__modify_gmail_message_labels", { message_id: "m", add_label_ids: ["TRASH"] }, { signal } as never)).behavior, "deny", "trash is never allowed");
     assert.equal((await can("mcp__mailbird__send_message_now", {}, { signal } as never)).behavior, "deny", "not a tool of hers");
     assert.equal((await can("Write", { file_path: join(T.tenantContext(T.tenantById(id)!).notesDir, "people-x.md"), content: "x" }, { signal } as never)).behavior, "allow", "her notes are hers to write, as in her chat: the judge and the floor judge what a run that reads mail DOES, not a second tool");
-    assert.equal(asked.length, 0);
+    assert.equal(asked.length, 1);
   } finally {
     on.autoApprove = was;
   }

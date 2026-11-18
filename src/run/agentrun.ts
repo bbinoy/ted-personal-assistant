@@ -110,7 +110,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
     gate: "helper", // (a child of a run that holds a place: queuing for a second one could deadlock the looks that browse, and make a chat turn wait behind them)
     signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
     stopScope: parent.stopScope, // and by "/stop" in the parent's conversation
-    kind: { who: "browse", attended: parent.attended ?? true }, // the worker of an unattended run asks nobody either
+    kind: { who: "browse", attended: parent.attended ?? true }, // the worker of an unattended run asks like any other
     systemPrompt: browseSystem(undefined, guard.profileKeys(), guard.cardInfo()),
     maxTurns: settings.browseMaxTurns,
     maxBudgetUsd: settings.browseMaxUsd,

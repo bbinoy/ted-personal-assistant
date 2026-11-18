@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { noteDone } from "../src/approvals/journalrender.ts";
 import { forgetSeen, rememberNames } from "../src/approvals/seennames.ts";
 import { forgetArmed } from "../src/core/sinks/journalsink.ts";
-import { makeCanUseTool, UNATTENDED_SKIP } from "../src/approvals/permissions.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
 import { ledgerEntries } from "../src/core/messages.ts";
@@ -64,7 +64,7 @@ test("an archive of several mails at once keeps every id, so one number restores
   assert.deepEqual(archiveItems(lines).map((i) => [i.n, i.ids, i.subject]), [[1, ["b-1", "b-2"], undefined]]);
 });
 
-test("an unattended look's archive the judge is not sure about is left in the inbox: skipped, no journal line, nobody asked", async () => {
+test("an unattended look's archive the judge is not sure about is left in the inbox and asked about: no journal line until a yes", async () => {
   forgetArmed();
   forgetSeen();
   const key = owner();
@@ -72,8 +72,8 @@ test("an unattended look's archive the judge is not sure about is left in the in
   rememberNames(key, JSON.stringify({ conversations: [{ conversationId: "a-9", subject: "Sale", from: "Shop" }] }));
   const asked: string[] = [];
   const r = (await look(key, "ask", asked)(`${MB}archive_conversation`, { conversationId: "a-9" }, opts)) as { behavior: string; message?: string };
-  assert.deepEqual([r.behavior, r.message], ["deny", UNATTENDED_SKIP]);
-  assert.deepEqual(asked, []);
+  assert.equal(asked.length, 1, "put to the owner like a chat turn's (the stub says yes)");
+  assert.equal(r.behavior, "allow");
   assert.equal(journal(key).length, before);
 });
 

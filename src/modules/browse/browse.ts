@@ -137,7 +137,7 @@ export interface BrowseContext {
   groupId?: string;
   tenant?: boolean; // a tenant's run: its audit rows carry no words (audit.ts wordless), and so do those of its guard and of the sub-run
   key?: string; // the conversation the run is for: its screenshots are kept for that turn only
-  attended?: boolean; // someone waits in the chat for this run (a message turn): only then does the owner's chat have her saved details and her card; an unattended run (a look) never does
+  attended?: boolean; // someone waits in the chat for this run (a message turn): kept for the slot only: the owner's chat has her saved details and her card in a look too (payment is her typed YES either way)
   // Runs the browse profile under this guard and gives back its structured output and cost. (agent.ts passes the run; no import cycle.)
   run: (prompt: string, guard: BrowseGuard) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
 }
@@ -235,8 +235,8 @@ export function sweepStaleRuns(now = Date.now(), root = instancePaths().browse):
 
 type BrowseOptions = { resolver?: Resolver; now?: number; status?: BrowseStatus; probe?: Probe; proxy?: Pick<EgressProxy, "port" | "close"> | null; startProxy?: typeof startEgressProxy; slots?: Slots; waitMs?: number; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe };
 
-// The owner's own attended chat: the one run that has her saved details and her card (payment only by a typed YES there, never in a look).
-const ownerChat = (ctx: Pick<BrowseContext, "mode" | "key" | "attended">): boolean => ctx.mode === "owner" && ctx.key === OWNER_KEY && ctx.attended !== false;
+// The owner's own conversation (a turn or a look of it): the one that has her saved details and her card (payment only by a typed YES in her chat).
+const ownerChat = (ctx: Pick<BrowseContext, "mode" | "key">): boolean => ctx.mode === "owner" && ctx.key === OWNER_KEY;
 
 export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptions = {}): Promise<string> {
   const task = clean1(rawTask, 2000);

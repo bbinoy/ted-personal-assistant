@@ -16,7 +16,7 @@ import type { Change } from "../policy/policy.ts";
 import type { RunProvenance } from "./autojudge.ts";
 import { prepareJudge } from "./approvaljudge.ts";
 
-// THE APPROVAL HAND-OFF (docs/SAFETY.md). A question that needs a person's yes used to hold its turn (and the conversation's queue) for up to 15 minutes. Now the question is composed, judge-checked
+// THE APPROVAL HAND-OFF (docs/SAFETY.md). A question that needs a person's yes used to hold its turn (and the conversation's queue) for up to its whole wait. Now the question is composed, judge-checked
 // and sent as before, a row is stored (pendingstore.ts), and the call is denied back to the run at once with "asked; it runs on their yes", so the turn ends and the queue is free. What the
 // question ends in is handled here, in code, whenever it comes:
 //   yes (any path: the phrase, the judge's reading, a reaction, a quoted reply, an approved edit)   a single-use grant for exactly this call, and a CONTINUATION turn in the same conversation, through
@@ -35,6 +35,8 @@ const callBlock = (tool: string, input: Record<string, unknown>) => fence("appro
 const changed = (changes?: readonly Change[]) => (changes?.length ? `They approved it with a change (${changes.map((c) => `${c.field} = ${c.value}`).join(", ")}); the arguments above already include it.\n` : "");
 const approvedPrompt = (tool: string, input: Record<string, unknown>, changes?: readonly Change[]) =>
   `The person you asked said yes in this conversation, so this call is approved:\n${callBlock(tool, input)}\n${changed(changes)}Run it now, exactly as given (one call, the same tool and arguments), unless a later message from the person cancels or changes it (then do not run it, and answer that message), then report the outcome in your own words, and carry on with what you were doing.`;
+const stalePrompt = (tool: string, input: Record<string, unknown>) =>
+  `The person you asked said yes to this call:\n${callBlock(tool, input)}\nBut it has changed since the question was sent (the object it names is gone or different, or the draft changed), so it was NOT run. Tell them so in one short line, and propose it again only if it still makes sense.`;
 const repliedPrompt = (tool: string, input: Record<string, unknown>, reply: string, failure?: string) =>
   `You asked the person to approve this call:\n${callBlock(tool, input)}\nThey did NOT approve it${failure ? ` (${failure})` : ""}. Nothing was executed. Their reply:\n${fence("their_reply", reply)}\nMake a new proposal now (call the tool again with the arguments changed as that reply asks; a fresh question is asked) if you still want to act, otherwise answer them. Do not repeat the original unchanged.`;
 
@@ -50,6 +52,8 @@ export function handoffFor(a: Asked, minutes: number): Handoff {
     if (d.superseded) return void closePending(a.conv, id, "superseded"); // a newer question about the same action replaced it: the run that asked it is still going
     if (d.approved) {
       const input = d.updatedInput ?? a.input;
+      // A yes may come a day late: the call is rendered again now, and it runs only if what the person was shown still holds (the object still there, the arguments and the draft unchanged).
+      if ((await renderHashOf(a.conv, a.tool, a.input)) !== a.renderHash) return void (closePending(a.conv, id, "declined"), row("ask-stale", { handoff: true }), proceed(a.conv, stalePrompt(a.tool, a.input), a.provenance as RunProvenance | undefined));
       const hash = d.updatedInput ? await renderHashOf(a.conv, a.tool, input) : a.renderHash; // (an edit is shown the way the run will call it)
       if (!hash || !grantPending(a.conv, id, input, a.tool, hash, Date.now() + GRANT_MINUTES * 60_000, d.changes && { changes: d.changes })) return void console.error("approvals: a yes could not be turned into a grant, nothing is run");
       clearDeclined(a.conv, a.tool, a.input, Date.now());

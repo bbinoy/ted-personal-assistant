@@ -43,6 +43,7 @@ import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
+import { submitPost } from "./heartbeat/notices.ts";
 import { createRegistrar, openRequestsFact } from "./approvals/registerask.ts";
 import { welcomeStart } from "./core/welcome.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
@@ -81,12 +82,12 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
   void compactIfNeeded(summarizeWithHaiku).catch((e) => console.error("messages: compaction failed:", e.message));
 }
 const out = createOutbound(messenger, (kind, ts, text, target) => record(target, kind, ts, text));
-// Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
-// runs (the heartbeat run: only an explicit yes / no or a reply to the question answers those, whatever else she types meanwhile is a chat message), a group in the group
+// Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her background
+// runs (the heartbeat run asks the same way, but waits through quiet hours), a group in the group
 // (any member may answer), a tenant in her own chat. approvals.ts scopes every question to its conversation, so an answer from another one (the admin's included) never applies.
 // This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
 wire({
-  approvers: createApprovers(out),
+  approvers: createApprovers(out, { hold: (key, text) => submitPost(key === OWNER_KEY ? owner() : isTenantKey(key) ? tenant(key.slice("tenant:".length)) : group(key), text, false, new Date()) === "held" }), // (a background question waits through quiet hours as a held post)
   continuation: (scope, prompt, provenance) => void pipeline.continuation(scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope), prompt, provenance).catch((e) => console.error("approved-call turn error:", e.message)),
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop

@@ -97,7 +97,7 @@ whole job and ask once:
 
 Never invite other people or change an event that has guests without asking; the "one yes" covers only a new entry on the owner's own calendar.
 
-**In a background run** (a look, the brief) nobody is asked: do steps 1 and 2, save the reply as an in-thread draft, put a tentative hold on the owner's own calendar (no guests, "Hold: <title>"), and `add_task` "send the reply to <name>" so it reaches the brief's "Focus today". The owner's later "send" is the only question.
+**In a background run** (a look, the brief) do not wait for an answer: do steps 1 and 2, save the reply as an in-thread draft, put a tentative hold on the owner's own calendar (no guests, "Hold: <title>"), and `add_task` "send the reply to <name>" so it reaches the brief's "Focus today". The owner's later "send" is the only question.
 
 ## The owner's own events, nobody else on them (in chat)
 
@@ -122,7 +122,7 @@ Before you act on an event, look it up by day and title (`list_events` for that 
 ## Guardrails
 
 - May, in any run: create, move or edit an event on the owner's own calendar with nobody invited and no notifications (bookings, holds, own plans), and mention it.
-- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting stays a question (and `delete_event` is never unattended).
+- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting asks the owner first, in a look too: the question goes to the chat and the run carries on.
 - The agent's policy (`src/policy/policy.ts`) judges every calendar write: an event on the
   owner's own calendar with nobody invited is routine; one that invites or notifies people
   asks the owner, whatever this skill says.

@@ -78,7 +78,7 @@ test("a question lapses after its timeout, a background one too, both SILENTLY; 
   const chat = askTs(false, 1401).then((d) => ((chatDone = true), d));
   const bg = askTs(true, 1402).then((d) => ((bgDone = true), d));
   assert.doesNotMatch(sent[0]!, /Approve\?|then I assume no|Reply yes or no/); // the message is the question as written, no header or footer
-  t.mock.timers.tick(15 * 60_000 - 1);
+  t.mock.timers.tick(24 * 3_600_000 - 1);
   await Promise.resolve();
   assert.equal(chatDone, false);
   t.mock.timers.tick(1);
@@ -93,7 +93,7 @@ test("a late yes to a question that timed out is told so, and runs nothing", asy
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const d = askTs(false, 1601);
   for (let k = 0; k < 6; k++) await Promise.resolve(); // (mock timers: settle() would wait on a real timer)
-  t.mock.timers.tick(15 * 60_000);
+  t.mock.timers.tick(24 * 3_600_000);
   assert.deepEqual(await d, { approved: false, expired: true });
   const r = await answer("yes", () => {}, { timestamp: 1601 }, never);
   assert.equal(r.outcome, "clarify");

@@ -44,6 +44,7 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
+  held?: true; // a background run's question that must wait for the end of quiet hours (approvers.ts): nothing was sent, nothing asked yet
   handedOff?: true; // the question is sent and kept in the database (handoff.ts): the turn does not wait for it, and the answer arrives as a grant and a turn of its own
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
@@ -70,8 +71,8 @@ interface Open {
   handedOff: boolean; // its turn is over (handoff.ts): a message that cannot be read must not close it
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
-// How long a question asked in a chat turn waits before it lapses (silently: a journal line). Unattended runs ask nobody; a stranger's registration waits a day.
-export const APPROVAL_TIMEOUT_MINUTES = 15;
+// How long a question (chat turn or background run alike) waits before it lapses: a day, since it no longer holds a turn (silently: a journal line). A background run's question waits the same; a stranger's registration waits a day.
+export const APPROVAL_TIMEOUT_MINUTES = 24 * 60;
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge

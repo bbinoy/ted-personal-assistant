@@ -4,7 +4,6 @@ import { standing } from "./util.ts";
 import { tick as settle } from "./util.ts";
 import { answer, answerReaction, request } from "./approvalrig.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
-import { NEVER_ASKS } from "../src/approvals/approvers.ts";
 import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool, type CallGuard, type GuardDecision } from "../src/approvals/permissions.ts";
@@ -93,14 +92,14 @@ test("typed yes: an ordinary approval is unchanged (👍 text, ok and the judge 
 
 // ---- who may be asked ----
 
-test("a payment is asked only in the owner's chat: a group's and a background run's approver refuse it without sending anything", async () => {
+test("a payment is asked only in the owner's chat: a group's approver refuses it without sending anything", async () => {
   let sent = 0;
   const send = async () => (sent++, 1);
   const never2 = (async () => assert.fail("no question must be written")) as never;
-  for (const approve of [makeApprove(send, { scope: "group-1", source: "group", compose: never2, request: never2 }), NEVER_ASKS]) {
+  for (const approve of [makeApprove(send, { scope: "group-1", source: "group", compose: never2, request: never2 })]) {
     const d = await approve("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
     assert.equal(d.approved, false);
-    assert.match(d.failure!, /owner's own chat|background work never asks/);
+    assert.match(d.failure!, /owner's own chat/);
   }
   assert.equal(sent, 0);
 });
