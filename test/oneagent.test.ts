@@ -107,14 +107,14 @@ test("a look that read a task made from mail is untrusted for that run only; the
   assert.equal(readSession(conv.convId).untrustedIn, undefined);
 });
 
-test("the owner's look gets browse like any look, but never her card or saved details: payment is a typed YES in her attended chat only", async () => {
+test("the owner's look gets browse like any look, but and her card like her chat: payment is her typed YES either way", async () => {
   const { browseToolText } = await import("../src/modules/browse/browse.ts");
   assert.match(browseToolText({ mode: "owner", key: "owner", attended: true }), /saved payment card/);
-  assert.doesNotMatch(browseToolText({ mode: "owner", key: "owner", attended: false }), /saved payment card/);
+  assert.match(browseToolText({ mode: "owner", key: "owner", attended: false }), /saved payment card/);
   assert.doesNotMatch(browseToolText({ mode: "group", key: "g", attended: true }), /saved payment card/);
 });
 
-test("a tool nobody declared asks the owner in a chat and is skipped in a look (never denied); a declared tool outside the run's set is denied", async () => {
+test("a tool nobody declared asks the owner in a chat and in a look (never denied); a declared tool outside the run's set is denied", async () => {
   const { classify } = await import("../src/policy/policy.ts");
   const { capabilitiesOf, toolsFor } = await import("../src/policy/capabilities.ts");
   const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
@@ -124,5 +124,5 @@ test("a tool nobody declared asks the owner in a chat and is skipped in a look (
   assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, { who: "owner", attended: false }, undefined, new Set(["Read"])), "deny");
   const can = makeCanUseTool(approve as never, { who: "owner", attended: false }, undefined, undefined, undefined, lookSet);
   const r = (await can("mcp__new_server__do_thing", {}, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
-  assert.match(r.message ?? "", /background work never asks/);
+  assert.match(r.message ?? "", /Asked|declined/);
 });

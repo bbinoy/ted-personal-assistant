@@ -1,12 +1,13 @@
 import { callKey } from "./permissions.ts";
 import { idsInCall } from "./created.ts";
+import { APPROVAL_TIMEOUT_MINUTES } from "./approvals.ts";
 
-// What the owner (or whoever may answer in a group) DECLINED, per conversation, in memory: the tool and a fingerprint of the call, for 30 minutes. A decline is final until
+// What the owner (or whoever may answer in a group) DECLINED, per conversation, in memory: the tool and a fingerprint of the call, for as long as a question waits (APPROVAL_TIMEOUT_MINUTES; a question nobody answered in that time counts as a decline). A decline is final until
 // the person asks again in a NEW message (conversation.ts calls forgetDeclined for it) or says yes to the same call. permissions.ts reads it for every call that is
 // asked about: the question and the judge are told "The owner declined this action N minutes ago.", and the judge can never auto-approve it. Code writes it, from the
-// outcome of an approval; a model, a mail, a page or an emoji never does. A restart forgets it (30 minutes; the run restarts rarely and a repeated question is the safe error).
+// outcome of an approval; a model, a mail, a page or an emoji never does. A restart forgets it (a day; the run restarts rarely and a repeated question is the safe error).
 
-const TTL_MS = 30 * 60_000;
+const ttlMs = () => APPROVAL_TIMEOUT_MINUTES * 60_000;
 const MAX_PER_CONVERSATION = 100;
 
 interface Entry {
@@ -41,7 +42,7 @@ function same(a: Entry, b: Entry): boolean {
 // Are two calls of one tool the same action (equal, or near-equal as above)?
 export const sameCall = (tool: string, a: Record<string, unknown>, b: Record<string, unknown>): boolean => same(print(tool, a, 0), print(tool, b, 0));
 
-const live = (list: Entry[], now: number): Entry[] => list.filter((e) => now - e.at < TTL_MS);
+const live = (list: Entry[], now: number): Entry[] => list.filter((e) => now - e.at < ttlMs());
 
 export function noteDeclined(conversation: string, tool: string, input: Record<string, unknown>, now = Date.now(), context?: string): void {
   const e = print(tool, input, now, context);
@@ -50,7 +51,7 @@ export function noteDeclined(conversation: string, tool: string, input: Record<s
   declined.set(conversation, list.slice(-MAX_PER_CONVERSATION));
 }
 
-// Milliseconds since the newest matching decline; undefined when there is none within 30 minutes.
+// Milliseconds since the newest matching decline; undefined when there is none within the approval window.
 export function declinedAgo(conversation: string, tool: string, input: Record<string, unknown>, now = Date.now(), context?: string): number | undefined {
   const e = print(tool, input, now, context);
   const hit = live(declined.get(conversation) ?? [], now).filter((x) => same(x, e)).map((x) => x.at).sort((a, b) => b - a)[0];

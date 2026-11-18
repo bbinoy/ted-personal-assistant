@@ -6,7 +6,7 @@ import * as approvals from "../src/approvals/approvals.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import { makeCanUseTool, renderHashOf, type Approve, type CallGuard } from "../src/approvals/permissions.ts";
 import { rehydrate, setContinuation } from "../src/approvals/handoff.ts";
-import { inFlight, isAsked, livePending, renderHash, savePending, takeGrant } from "../src/approvals/pendingstore.ts";
+import { inFlight, isAsked, livePending, savePending, takeGrant } from "../src/approvals/pendingstore.ts";
 import { lapsedIn } from "../src/approvals/approvals.ts";
 import { convDb } from "../src/core/convdb.ts";
 import { convIdOfKey, groupConvId } from "../src/core/convpaths.ts";
@@ -63,7 +63,7 @@ test("a question that needs a yes ends the turn at once: the call is denied with
   assert.match(r.message, HANDED);
   assert.equal(sent.length, before + 1, "the question went out once");
   assert.equal(approvals.openCount("owner"), 1);
-  assert.equal(inFlight("owner", Date.now()), true, "a look does not start meanwhile");
+  assert.equal(inFlight("owner", Date.now()), false, "a question still waiting holds nothing back: it may wait a day");
   assert.equal(isAsked("owner", CAL, input, (await renderHashOf("owner", CAL, input))!, Date.now()), true);
   // the model repeating the call asks nothing new and waits for nothing
   const again = (await can(CAL, input, opts)) as { behavior: string; message: string };
@@ -189,7 +189,8 @@ test("no and silence do nothing and say nothing: no grant, no continuation, a fa
 test("a restart keeps the question: it is open again with its time left, and a late answer works; a lapsed one is closed; a yes not yet used gets its turn", async () => {
   const scope = "group-restart-a";
   const input = { summary: "Standup", startTime: "2026-10-21T09:00:00", endTime: "2026-10-21T09:15:00" };
-  const base = { conv: scope, tool: CAL, input, callKey: callKey(CAL, input), renderHash: renderHash("d"), label: "Create event Standup", question: "Shall I add Standup?", untrusted: false, askedBy: "group", askedAt: Date.now() - 60_000 };
+  const real = (await renderHashOf(scope, CAL, input))!; // (a yes is checked against what the call renders now: handoff.ts)
+  const base = { conv: scope, tool: CAL, input, callKey: callKey(CAL, input), renderHash: real, label: "Create event Standup", question: "Shall I add Standup?", untrusted: false, askedBy: "group", askedAt: Date.now() - 60_000 };
   savePending({ ...base, id: "p-live", qTs: 777, expiresAt: Date.now() + 600_000 });
   savePending({ ...base, id: "p-old", qTs: 778, expiresAt: Date.now() - 1000 });
   const c0 = continued.length;
@@ -201,13 +202,13 @@ test("a restart keeps the question: it is open again with its time left, and a l
   await tick();
   assert.equal(continued.length, c0 + 1);
   assert.equal(continued.at(-1)!.scope, scope);
-  assert.ok(takeGrant(scope, CAL, input, renderHash("d"), Date.now()), "the answer after the restart made the grant");
+  assert.ok(takeGrant(scope, CAL, input, real, Date.now()), "the answer after the restart made the grant");
   // a yes given but not used before the stop is void (words may have come in that took it back): no turn, the next run is told
   savePending({ ...base, id: "p-granted", qTs: 779, expiresAt: Date.now() + 600_000 });
   convDb(convIdOfKey(scope)).run("UPDATE pending_actions SET status = 'granted' WHERE id = 'p-granted'");
   rehydrate();
   assert.equal(continued.length, c0 + 1);
-  assert.equal(takeGrant(scope, CAL, input, renderHash("d"), Date.now()), undefined);
+  assert.equal(takeGrant(scope, CAL, input, real, Date.now()), undefined);
   assert.ok(lapsedIn(scope).some((l) => l.outcome === "interrupted"));
   assert.equal(livePending(convDb(convIdOfKey(scope))).length, 0);
 });
@@ -230,7 +231,7 @@ test("an answer from another conversation, or a text a run relays, grants nothin
   answerReaction("👎", sent.at(-2)!.ts);
 });
 
-test("a payment and a guard step never hand off, and no grant can ever be made for them; a background run never asks and never uses a grant", async () => {
+test("a payment and a guard step never hand off, and no grant can ever be made for them; a background run's grant is used once like any other", async () => {
   // the approver is told to hand off only when no guard is involved
   const seen: (Record<string, unknown> | undefined)[] = [];
   const spy: Approve = async (_d, _c, _s, o) => (seen.push(o), { approved: false });
@@ -246,18 +247,16 @@ test("a payment and a guard step never hand off, and no grant can ever be made f
   const fake = (async (_s: unknown, _d: unknown, _c: unknown, _a: unknown, o: unknown) => (opened.push(o), { approved: false })) as never;
   await approverOf("owner", { request: fake })("Card payment", { tool: "pay", input: {} }, new AbortController().signal, { typedYes: true, handoff: { renderHash: "h" } });
   assert.equal((opened[0] as { handoff?: unknown }).handoff, undefined);
-  // a live grant is not consumed by a guard step, nor by an unattended run; the look is declined as always
+  // a live grant is not consumed by a guard step; a look of the same conversation may use it (every run is the same), once
   const input = event();
   await canOf()(CAL, input, opts);
   answerReaction("👍", sent.at(-1)!.ts);
   await tick();
-  const s0 = sent.length;
-  const look = (await canOf("owner", approverOf("owner"), OWNER_LOOK)(CAL, input, opts)) as { behavior: string; message: string };
-  assert.equal(look.behavior, "deny");
-  assert.match(look.message, /background work never asks/);
-  assert.equal(sent.length, s0, "nothing was asked");
-  assert.equal(rows("owner").at(-1)!.status, "granted", "the look did not use the yes");
-  assert.equal(((await canOf()(CAL, input, opts)) as { behavior: string }).behavior, "allow", "the chat run still can");
+  const look = (await canOf("owner", approverOf("owner"), OWNER_LOOK)(CAL, input, opts)) as { behavior: string };
+  assert.equal(look.behavior, "allow");
+  assert.equal(rows("owner").at(-1)!.status, "used", "the look used the yes");
+  assert.notEqual(((await canOf()(CAL, input, opts)) as { behavior: string }).behavior, "allow", "single use: the chat run cannot use it again");
+  answerReaction("👎", sent.at(-1)!.ts);
   // the table holds no row for a payment
   assert.equal(rows("owner").filter((r) => /browser_click|pay/.test(r.call_key)).length, 0);
 });
@@ -306,14 +305,14 @@ test("the continuation is an ordinary turn of the conversation: the same run, th
   assert.match(both.prompts[0]!.prompt, /^and one more thing\n\nThe person you asked said yes/);
 });
 
-test("while a question is open the conversation is free: another message gets its own turn at once, and a look is held off", async () => {
+test("while a question is open the conversation is free: another message gets its own turn at once, and a look is not held off", async () => {
   const { pipeline, prompts } = rig();
   const can = canOf();
   // turn one asks and ends
   await pipeline.handleIncoming(owner(), msg("add the dentist", 10));
   const asked = (await can(CAL, event(), opts)) as { message: string };
   assert.match(asked.message, HANDED);
-  assert.equal(pipeline.busy(owner()), true, "a pending question keeps a look away");
+  assert.equal(pipeline.busy(owner()), false, "a question still waiting (it may wait a day) keeps no look away; only a yes not yet used does");
   await pipeline.handleIncoming(owner(), msg("what is the weather", 11));
   assert.deepEqual(prompts.map((p) => p.prompt), ["add the dentist", "what is the weather"], "no waiting for the answer");
   answerReaction("👎", sent.at(-1)!.ts);

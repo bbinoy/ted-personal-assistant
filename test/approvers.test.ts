@@ -28,16 +28,27 @@ function rig(tenants: Record<string, string> = { mara: "to:mara-aci" }) {
 const ask = (approve: ReturnType<ReturnType<typeof rig>["approverFor"]>, what: string) => approve(what, call, new AbortController().signal);
 const judging = (target: string, outcome: "approve" | "decline" | "unrelated", seen: OpenView[][] = []) => ({ judge: async (_t: string, views: OpenView[]) => (seen.push(views), { target, outcome }), recent: () => [] }) as never;
 
-test("the owner's own turn asks in the owner's chat; her unattended runs (and a group's or a friend's) ask nobody", async () => {
+test("a background run asks in the same chat as a turn of that conversation would: the owner's, a friend's, a group's", async () => {
   const r = rig();
   const fg = ask(r.approverFor("owner"), "Create event one");
-  const bgs = await Promise.all(["owner", MARA, "group-1"].map((k) => ask(r.approverFor(k, { background: true }), "Create event two")));
+  const bgs = ["owner", MARA, "group-1"].map((k) => ask(r.approverFor(k, { background: true }), `Create event for ${k}`));
   await settle();
-  assert.deepEqual(r.sent.map((m) => m.to), [undefined]); // no group id: her chat; the background approvers sent nothing
-  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [["owner", "chat"]]);
-  assert.ok(bgs.every((d) => !d.approved && /background work never asks/.test(d.failure ?? "")));
+  assert.deepEqual(r.sent.map((m) => m.to), [undefined, undefined, "to:mara-aci", "group-1"]);
+  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [["owner", "chat"], ["owner", "chat"], [MARA, "tenant"], ["group-1", "group"]]);
   assert.equal(approvals.answerReaction("👍", r.sent[0]!.ts, "owner"), "approved");
   assert.equal((await fg).approved, true);
+  r.sent.slice(1).forEach((m, i) => approvals.answerReaction("👎", m.ts, ["owner", MARA, "group-1"][i]!));
+  assert.ok((await Promise.all(bgs)).every((d) => !d.approved));
+});
+
+test("a background question the hold keeps (quiet hours) sends nothing and says held; a turn's is never held", async () => {
+  const sent: string[] = [];
+  const held: string[] = [];
+  const approverFor = createApprovers({ reply: async (t: string) => (sent.push(t), 1) }, { hold: (_k, text) => (held.push(text), true), make: () => async () => ({ approved: false }) });
+  const d = await approverFor("owner", { background: true })("Create event", call, new AbortController().signal);
+  assert.deepEqual([d.held, d.approved, sent.length, held.length], [true, false, 0, 1]);
+  assert.equal((await approverFor("owner")("Create event", call, new AbortController().signal)).held, undefined);
+  assert.equal(held.length, 1);
 });
 
 test("a tenant's action asks in HER chat, never in the owner's; a group's in the group", async () => {
@@ -98,15 +109,15 @@ test("a relayed or quoted text approves nothing: a quote of an open question is 
   assert.equal((await g).approved, false);
 });
 
-test("a card payment is asked in the owner's own foreground chat only: a tenant's, a group's and the background approver refuse it without sending", async () => {
+test("a card payment is asked in the owner's own chat only: a tenant's and a group's refuse it without sending", async () => {
   const r = rig();
-  for (const approve of [r.approverFor(MARA), r.approverFor("group-1"), r.approverFor("owner", { background: true })]) {
+  for (const approve of [r.approverFor(MARA), r.approverFor("group-1")]) {
     const d = await approve("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
     assert.equal(d.approved, false);
-    assert.match(d.failure!, /owner's own chat|background work never asks/);
+    assert.match(d.failure!, /owner's own chat/);
   }
   assert.equal(r.sent.length, 0);
-  assert.deepEqual(r.made.map((m) => m.mayPay), [false, false]); // (the background approver is not even built: it asks nobody)
+  assert.deepEqual(r.made.map((m) => m.mayPay), [false, false]);
   // and in her chat a thumbs-up does not pay, only the typed word does
   const pay = r.approverFor("owner")("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
   await settle();

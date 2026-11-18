@@ -26,7 +26,7 @@ import { heldPath } from "../modules/send/shots.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
-// `o.typedYes`: a card payment, which only a typed yes from the owner's chat approves (approvals.ts); a group refuses it, and an unattended run never gets this far.
+// `o.typedYes`: a card payment, which only a typed yes from the card holder's own chat approves (approvals.ts), in a background run too; a group refuses it.
 export type Approve = (
   description: string,
   call: { tool: string; input: Record<string, unknown> },
@@ -39,8 +39,8 @@ export const DENY_ALL: Approve = async () => ({ approved: false });
 
 // One approver per conversation, keyed by Conversation.key (the owner's chat, a group id, "tenant:<id>"): a question goes to the
 // chat that triggered the action and only an answer there applies (approvals.ts scopes it); in a group any member may answer.
-// `background`: an unattended run of that conversation's own (a look, its expert, a routine, meeting prep): it never asks anyone (UNATTENDED_SKIP below), so its
-// approver asks nobody either (approvers.ts). Set by main.ts (approvers.ts); until then (and in tests) nobody is asked. Which tools a run has at all is policy.ts.
+// `background`: an unattended run of that conversation's own (a look, its expert, a routine, meeting prep): it asks in the same chat as a turn would, but its question
+// waits through quiet hours (approvers.ts). Set by main.ts (approvers.ts); until then (and in tests) nobody is asked. Which tools a run has at all is policy.ts.
 export interface ApproverOptions {
   background?: boolean;
 }
@@ -156,15 +156,9 @@ export interface JudgeSetup {
   restoreFree?: boolean; // the owner's own chat: putting mail back in the inbox (archivecap.ts restoredBy) undoes an archive and runs without the judge
 }
 
-// UNATTENDED RUNS NEVER ASK (the owner, 22 Oct: "act when it's sure and stay silent if it's not"). A run that answers no live message of a person (a heartbeat look of the
-// owner, a group or a friend, its expert, the routines it delegates, meeting prep, the browse worker of such a run) puts no question to anyone: a call that would lead to one
-// (the judge's ask, a floor that forces ask, a recent decline, a fix that may not be applied) is declined back to the run with this fixed text, audited `background-skip` with
-// the reason class only. No question, no approval-inbox item, no "waiting" line. Whether a run is unattended is one fact of the run (core/runkind.ts RunKind.attended), the same for
-// the owner's look, a group's and a friend's.
-export const UNATTENDED_SKIP = "Not done: not certain enough to act without asking, and background work never asks. Do not retry it: turn what needs the owner into what is allowed (a draft, or an add_task item) so the brief lists it; mention it only if it truly matters, as information.";
-// A card payment in an unattended run: refused like a never-allowed call, nobody is asked (only the owner's typed yes in her own chat pays).
-const PAYMENT_UNATTENDED = "A payment is never made by background work, and nobody is asked from here. Do not retry it: add_task an item for the owner so the brief lists it.";
-
+// EVERY RUN MAY ASK (the owner, 18 Nov: no difference between a background run and a chat turn for approvals). What the judge is unsure about is put to the conversation that triggered the
+// action through the one ask path below, and a background run does not wait: the question is handed off (handoff.ts), the run carries on, and a yes runs the call later as a grant. A background
+// question waits through quiet hours and /quiet (approvers.ts hold), and lapses like any other if nobody answers.
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
 
@@ -192,6 +186,7 @@ export async function renderHashOf(conversation: string, tool: string, input: Re
 
 // Said to the run when its call was asked and the turn must not wait for the answer (handoff.ts).
 const HANDED_OFF = `Asked ${OWNER}; it runs on their yes. The question already went to them as its own message: do not say that you asked, do not restate the action, do not wait or repeat it. Finish anything independent, then end your turn; if you have nothing else to tell them, answer [[silent]].`;
+const HELD_QUIET = `Not asked now: it is quiet hours, so the question to ${OWNER} waits and nothing ran. Do not retry it or ask again; the next check is told and puts it to them if it still matters.`;
 const ALREADY_ASKED = `${OWNER} was already asked about exactly this and has not answered yet. Do not ask again or wait; end your turn.`;
 
 export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
@@ -204,7 +199,6 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   const conversation = setup.conversation ?? UNSCOPED_KEY;
   const source = auditSource(run); // (the audit label)
   const knownAtStart = knownPeople(memoryDir); // the people notes of before this run: a note written during it (from mail it read) does not make an address known to the floor
-  const unattended = !run.attended;
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
   type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
   const baseLog: Log = (tool, decision, src, meta, ev) => emit({ type: "tool", tool, decision, source: src, conv: conversation, ...(setup.run ? { run: setup.run } : {}), friend: tenant, ...(meta ? { meta } : {}), ...ev });
@@ -295,7 +289,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     }
     // A yes the person gave to exactly this call (same tool, arguments and conversation, the draft unchanged since it was shown) lets it run once. Never for a guard step or a payment: they ask in the foreground.
     const shownHash = renderHash(rendered.description);
-    if (!g && !unattended) {
+    if (!g) {
       const granted = takeGrant(conversation, tool, input, shownHash, Date.now());
       if (granted) {
         log(tool, "granted-run", source, { grant: granted.id, ...idsOf(input) }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "approved", input, granted: granted.question }) } : undefined);
@@ -321,7 +315,6 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     }
     let judgeSaid: Verdict["decision"] | undefined;
     let judged: Verdict | undefined;
-    let skipWhy: string | undefined; // why an unattended run's call is skipped (the audit's reason class): the judge's ask, a fix that may not be applied, a decline that stands
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
@@ -345,13 +338,11 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
         if (!why) {
           fixes.set(tool, { n: fx.n + 1, keys: fx.keys.add(key) });
           log(tool, "judge-fix", source, { reason: judged.reason, mode: settings.autoApprove, count: fx.n + 1, ...g?.facts });
-          return { behavior: "deny", message: `Not run, nobody was asked: ${JSON.stringify(judged.reason)}. Correct the arguments and call the tool again, once. ${unattended ? "If you cannot tell the right value, leave it: background work never asks." : `If you cannot tell the right value, ask ${OWNER} in chat instead of guessing.`}` };
+          return { behavior: "deny", message: `Not run, nobody was asked: ${JSON.stringify(judged.reason)}. Correct the arguments and call the tool again, once. If you cannot tell the right value, ask ${OWNER} in chat instead of guessing.` };
         }
         judged = { decision: "ask", reason: judged.reason };
-        skipWhy = "fix";
         log(tool, "judge-ask", source, { reason: judged.reason, mode: settings.autoApprove, fix: why, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
-      if (judged.decision === "ask") skipWhy = declinedMs !== undefined ? "redeclined" : skipWhy === "fix" ? "fix" : "judge";
       if (mayAutoApprove(settings.autoApprove, judged)) {
         setup.triage?.judged(archivedBy(tool, input) ?? [], "allowed", judged.reason);
         log(tool, "auto-approved", source, { reason: judged.reason, ...publicArgs(tool, input) }, // (a page fetch: its address is in the audit)
@@ -364,25 +355,17 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       }
     }
     if (declinedMs !== undefined) log(tool, "redeclined", source, { minutes: declinedMinutes(declinedMs), ...(judgeSaid ? { judge: judgeSaid } : {}) });
-    // An unattended run asks nobody: what would be a question is declined back to it (UNATTENDED_SKIP). A payment is refused outright.
-    // The floor's reason class, when no judge verdict led here: no provenance, the judge switched off, a floor in code, a guard step that is never judged, or a call
-    // isJudgeable keeps from the judge (a send, a delete, an unknown tool, a create with no title...).
-    const floorWhy = (): string => (!provenance ? "no-provenance" : settings.autoApprove === "off" ? "judge-off" : outside.length ? "untrusted-recipient" : g?.kind === "ask" && g.judge !== true ? "guard-step" : "never-judged");
-    if (unattended) {
-      if (g?.payment) {
-        log(tool, "deny-payment-unattended", source);
-        return { behavior: "deny", message: PAYMENT_UNATTENDED };
-      }
-      log(tool, "background-skip", source, { skip: skipWhy ?? (declinedMs !== undefined ? "redeclined" : floorWhy()) });
-      setup.triage?.judged(archivedBy(tool, input) ?? [], "skipped", judged?.reason ?? skipWhy ?? floorWhy());
-      return { behavior: "deny", message: UNATTENDED_SKIP };
-    }
     if ((failures.get(memo)?.n ?? 0) >= MAX_FAILED_ASKS) {
       log(tool, "deny-reask-cap", source);
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
+    setup.triage?.judged(archivedBy(tool, input) ?? [], "asked", judged?.reason ?? "needs a yes");
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
     const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), ...(g ? {} : { handoff: { renderHash: shownHash, provenance: setup.provenance?.() } }), provenance, untrusted: isUntrusted() });
+    if (d.held) {
+      log(tool, "ask-held", source); // quiet hours: the wish waits as a held post for the next look (approvers.ts)
+      return { behavior: "deny", message: HELD_QUIET };
+    }
     if (d.handedOff) {
       log(tool, "ask-handed-off", source);
       return { behavior: "deny", message: HANDED_OFF };
@@ -406,7 +389,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       d.approved && !g?.resolve && journalable(tool, input) ? { call: { input, final: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance }) } : undefined,
     );
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
-    else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)
+    else if (!d.feedback && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a no or silence (not a reply, not an aborted turn)
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool, undefined, conversation)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);

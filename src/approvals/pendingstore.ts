@@ -72,10 +72,10 @@ export function isAsked(scope: string, tool: string, input: Record<string, unkno
   return !!d && d.num("SELECT COUNT(*) FROM pending_actions WHERE conv = ? AND call_key = ? AND render_hash = ? AND status = 'pending' AND expires_at > ?", scope, callKey(tool, input), hash, now) > 0;
 }
 
-/** A question waits for its yes, or a yes has not been used yet: a look does not start meanwhile (queue.ts busy). */
+/** A yes has not been used yet: a look does not start meanwhile (queue.ts busy). A question still waiting does not hold anything back: it may wait a day. */
 export function inFlight(scope: string, now: number): boolean {
   const d = peekConvDb(convIdOfKey(scope));
-  return !!d && d.num("SELECT COUNT(*) FROM pending_actions WHERE conv = ? AND status IN ('pending', 'granted') AND expires_at > ?", scope, now) > 0;
+  return !!d && d.num("SELECT COUNT(*) FROM pending_actions WHERE conv = ? AND status = 'granted' AND expires_at > ?", scope, now) > 0;
 }
 
 /** The rows to bring back after a restart in one conversation's database: every question still waiting, and every yes not yet used. */

@@ -23,3 +23,10 @@ function recentChat(current?: string, keep = 5, logFile?: string): Recent[] {
 export function recentIn(key: string, current?: string): Recent[] {
   return kindOfKey(key) === "group" ? [] : recentChat(current, 5, convPaths(convIdOfKey(key)).messages);
 }
+
+// When did Ted last say anything in this conversation (the timestamp of his newest message of any kind, a question included)? An unquoted "yes" answers a question only if it is
+// that message (approvals.ts); `skip`: timestamps left out (a registration question). undefined: nothing logged or the log cannot be read (the caller then fails closed). Every chat, a group and a friend's too, has its own log.
+export function latestSaid(key: string, skip: ReadonlySet<number> = new Set()): number | undefined {
+  const said = ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => kindIs(m.kind, "said") && !skip.has(m.ts));
+  return said[said.length - 1]?.ts;
+}

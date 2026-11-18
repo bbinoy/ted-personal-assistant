@@ -17,7 +17,7 @@ const opts = { signal: new AbortController().signal } as never;
 const at9 = { summary: "Coffee", startTime: "2026-10-21T09:00:00", endTime: "2026-10-21T10:00:00" };
 const at10 = { summary: "Coffee", startTime: "2026-10-21T10:00:00", endTime: "2026-10-21T11:00:00" };
 
-test("a decline matches the same call and a near-equal one, for 30 minutes, in its own conversation", () => {
+test("a decline matches the same call and a near-equal one, for the whole approval window, in its own conversation", () => {
   resetDeclined();
   const t0 = 1_000_000;
   noteDeclined("owner", CREATE, at10, t0);
@@ -27,7 +27,8 @@ test("a decline matches the same call and a near-equal one, for 30 minutes, in i
   assert.equal(declinedAgo("owner", CREATE, { ...at9, startTime: "2026-10-22T09:00:00" }, t0), undefined, "another day");
   assert.equal(declinedAgo("owner", DELETE, at10, t0), undefined, "another tool");
   assert.equal(declinedAgo("g1", CREATE, at10, t0), undefined, "another conversation");
-  assert.equal(declinedAgo("owner", CREATE, at10, t0 + 30 * 60_000), undefined, "expired");
+  assert.equal(declinedAgo("owner", CREATE, at10, t0 + 24 * 3_600_000 - 1) !== undefined, true, "still declined an hour short of the window");
+  assert.equal(declinedAgo("owner", CREATE, at10, t0 + 24 * 3_600_000), undefined, "expired");
   noteDeclined("owner", DELETE, { eventId: "abc123" }, t0);
   assert.notEqual(declinedAgo("owner", DELETE, { eventId: "ABC123", calendarId: "primary" }, t0), undefined, "the same id");
   assert.equal(declinedAgo("owner", DELETE, { eventId: "zzz" }, t0), undefined);
@@ -74,7 +75,7 @@ test("a declined create is never auto-approved by the judge: forced ask, audited
   assert.equal((await canUse(CREATE, { ...at9, description: "y" }, opts))!.behavior, "allow");
 });
 
-test("an approved call clears the decline, a reply (feedback) or silence is no decline", async () => {
+test("an approved call clears the decline, a reply (feedback) is no decline, silence for the window is one", async () => {
   resetDeclined();
   const conv = "owner-clear";
   const out = [{ approved: false, feedback: "make it 9" }, { approved: false, expired: true as const }, { approved: false }, { approved: true }];
@@ -82,7 +83,7 @@ test("an approved call clears the decline, a reply (feedback) or silence is no d
   await canUse(CREATE, at10, opts);
   assert.equal(declinedAgo(conv, CREATE, at10), undefined, "feedback");
   await canUse(CREATE, at10, opts);
-  assert.equal(declinedAgo(conv, CREATE, at10), undefined, "expired");
+  assert.notEqual(declinedAgo(conv, CREATE, at10), undefined, "silence for the whole window counts as a decline");
   await canUse(CREATE, at10, opts);
   assert.notEqual(declinedAgo(conv, CREATE, at10), undefined, "a no");
   assert.equal((await canUse(CREATE, at10, opts))!.behavior, "allow");

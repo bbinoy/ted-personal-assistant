@@ -36,7 +36,7 @@ const settle = async () => {
   await new Promise((r) => setImmediate(r));
   discardJudge();
 };
-const open = [{ id: "A1", background: false, ageMs: 1000, question: "Create event?" }];
+const open = [{ id: "A1", ageMs: 1000, question: "Create event?" }];
 const yes = { task: "answer", target: "A1", outcome: "approve" };
 const judge = (io: any, ms?: number) => judgeAnswer("yes", open, [], undefined, ms ? { ...io, timeoutMs: ms } : io);
 const input = { description: "Create event Pottery", provenance: { kind: "owner" as const, message: "put pottery in my calendar" } };

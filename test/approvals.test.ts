@@ -2,59 +2,125 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
 import { formatWait } from "../src/approvals/approvals.ts";
+import { mkdirSync, rmSync } from "node:fs";
 import { answer, answerReaction, request } from "./approvalrig.ts";
+import { latestSaid } from "../src/approvals/recentchat.ts";
+import { recordMessage } from "../src/core/messages.ts";
+import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
 
-// Background approvals (wake-ups, presets, the handler) must not swallow the owner's chat messages.
+// ONE answer rule for every question (look or chat turn alike): a quoted reply or a reaction answers it; an unquoted one only if nothing of Ted's came after the question.
 const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
-const ask = (background: boolean, ts = 500) => {
-  const asked = request(async () => ts, "Create event x", call, undefined, { background });
-  return asked;
-};
+const ask = (ts = 500, o: { typedYes?: boolean; scope?: string } = {}) => request(async () => ts, "Create event x", call, undefined, o);
 const never = { judge: async () => assert.fail("the judge must not be called"), recent: () => [] };
+const newest = (ts: number | undefined) => ({ ...never, latest: () => ts }); // the timestamp of Ted's last message in the chat
 
-test("background approval: a bare yes / no never answers it; a quoted reply does, without a judge call", async () => {
-  const d = ask(true, 500);
+test("an unquoted yes right after the question answers it (normal chat stays smooth)", async () => {
+  const d = ask(500);
   await settle();
-  assert.deepEqual(await answer("ok", () => {}, undefined, never), { outcome: "none" }); // an "ok" typed for something else
-  assert.deepEqual(await answer("Yes!", () => {}, undefined, never), { outcome: "none" });
-  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "none" });
-  assert.deepEqual(await answer("yes", () => {}, { timestamp: 9999 }, never), { outcome: "none" }); // a quote of some other message
-  assert.deepEqual(await answer("Yes!", () => {}, { timestamp: 500 }, never), { outcome: "approved" });
+  assert.deepEqual(await answer("ok", () => {}, undefined, newest(500)), { outcome: "approved" });
   assert.deepEqual(await d, { approved: true });
-  const n = ask(true, 501);
-  await settle();
-  assert.deepEqual(await answer("no", () => {}, { timestamp: 501 }, never), { outcome: "declined" });
-  assert.deepEqual(await n, { approved: false });
 });
 
-test("background approval: even the judge cannot answer it from a message that quotes nothing of it", async () => {
-  const bg = ask(true, 520);
-  const chat = ask(false, 521);
+test("an unquoted yes / no does not answer a question that Ted sent something after; a quoted one does, with no judge call", async () => {
+  const d = ask(510);
   await settle();
-  const offered: string[][] = [];
-  const judge = async (_t: string, views: readonly { id: string; question: string }[]) => (offered.push(views.map((v) => v.id)), { target: "A1", outcome: "approve" as const });
-  // one chat question is open besides the background one: a plain yes is for the chat one
-  assert.deepEqual(await answer("sure", () => {}, undefined, never), { outcome: "approved" });
-  assert.deepEqual(await chat, { approved: true });
-  // only the background one is left: a longer message is read by the judge, which picks it, and that is not an answer
-  assert.deepEqual(await answer("sure, sounds good, thanks", () => {}, undefined, { judge: judge as never, recent: () => [] }), { outcome: "none" });
-  assert.deepEqual(offered, [["A1"]]);
-  assert.equal(answerReaction("👍", 520), "approved");
-  assert.deepEqual(await bg, { approved: true });
+  const later = newest(900); // a reply, a notice or another question went out after it
+  assert.deepEqual(await answer("ok", () => {}, undefined, later), { outcome: "none" });
+  assert.deepEqual(await answer("Yes!", () => {}, undefined, later), { outcome: "none" });
+  assert.deepEqual(await answer("no", () => {}, undefined, later), { outcome: "none" });
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 9999 }, later), { outcome: "none" }); // a quote of some other message
+  assert.deepEqual(await answer("Yes!", () => {}, { timestamp: 510 }, later), { outcome: "approved" });
+  assert.deepEqual(await d, { approved: true });
 });
 
-test("background approval: a reaction on the approval message still answers it", async () => {
-  const d = ask(true, 777);
+test("the judge cannot answer a question from an unquoted message either, when Ted spoke after it", async () => {
+  const d = ask(520);
+  await settle();
+  assert.deepEqual(await answer("sure, sounds good, thanks", () => {}, undefined, { judge: async () => assert.fail("the judge must not be called"), recent: () => [], latest: () => 900 }), { outcome: "none" });
+  assert.equal(answerReaction("👍", 520), "approved"); // a reaction on it does
+  assert.deepEqual(await d, { approved: true });
+});
+
+test("a stray typed YES pays only when the payment question is Ted's latest message or is quoted", async () => {
+  const d = ask(530, { typedYes: true });
+  await settle();
+  assert.deepEqual(await answer("YES", () => {}, undefined, newest(900)), { outcome: "none" });
+  assert.deepEqual(await answer("YES", () => {}, undefined, newest(530)), { outcome: "approved" }); // (latest, and typed)
+  assert.deepEqual(await d, { approved: true });
+  const e = ask(531, { typedYes: true });
+  await settle();
+  assert.deepEqual(await answer("YES", () => {}, { timestamp: 531 }, newest(900)), { outcome: "approved" }); // quoted
+  assert.deepEqual(await e, { approved: true });
+  const f = ask(532, { typedYes: true });
+  await settle();
+  assert.deepEqual(await answer("ok", () => {}, { timestamp: 532 }, newest(900)).then((r) => r.outcome), "clarify"); // quoted but not typed: never pays
+  assert.equal(answerReaction("👍", 532), "needs_text");
+  answerReaction("👎", 532);
+  assert.deepEqual(await f, { approved: false });
+});
+
+test("a question of another conversation is never answered from this one", async () => {
+  const d = ask(540, { scope: "group-a" });
+  await settle();
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 540 }, never, { scope: "group-b" }), { outcome: "none" });
+  assert.deepEqual(await answer("yes", () => {}, undefined, newest(540), { scope: "group-a" }), { outcome: "approved" });
+  assert.deepEqual(await d, { approved: true });
+});
+
+test("a reaction on the approval message answers it, however much came after", async () => {
+  const d = ask(777);
   await settle();
   assert.equal(answerReaction("👍", 1), "ignored");
   assert.equal(answerReaction("👍", 777), "approved");
   assert.deepEqual(await d, { approved: true });
 });
 
+test("fail closed: when the log cannot say what Ted sent last, only the newest question is eligible for an unquoted answer", async () => {
+  const older = ask(550);
+  const newer = ask(551);
+  await settle();
+  const blind = { ...never, latest: () => undefined };
+  assert.deepEqual(await answer("ok", () => {}, undefined, blind), { outcome: "approved" });
+  assert.deepEqual(await newer, { approved: true });
+  assert.deepEqual(await answer("ok", () => {}, undefined, blind), { outcome: "approved" }); // the older one was still open, and is now the newest
+  assert.deepEqual(await older, { approved: true });
+});
+
+test("a registration question is answered only by a quote or a reaction, and never takes a bare yes from an older question", async () => {
+  const mine = ask(560);
+  const reg = request(async () => 561, "Approve x as a friend", { tool: "tenant_register", input: { id: "x" } }, undefined, { quoteOnly: true });
+  await settle();
+  const real = { ...never, latest: (_s: string, skip: ReadonlySet<number>) => (skip.has(561) ? 560 : 561) }; // Ted's newest message is the registration question, which does not count
+  assert.deepEqual(await answer("yes", () => {}, undefined, real), { outcome: "approved" });
+  assert.deepEqual(await mine, { approved: true });
+  assert.deepEqual(await answer("yes", () => {}, undefined, real), { outcome: "none" }, "nothing else open: a bare yes registers no one");
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 561 }, real), { outcome: "approved" });
+  assert.deepEqual(await reg, { approved: true });
+});
+
+test("latestSaid reads the chat log: newest message of Ted's, equal timestamps, skipped ones, empty and unreadable logs", () => {
+  const key = "g-latestsaid-test";
+  const file = convPaths(convIdOfKey(key)).messages;
+  assert.equal(latestSaid(key), undefined, "no log");
+  recordMessage("approval", 100, "q1", new Date(), file);
+  recordMessage("member", 150, "yes", new Date(), file); // not Ted's
+  recordMessage("chat", 120, "later reply", new Date(), file);
+  assert.equal(latestSaid(key), 120, "the last said line, not the largest number or an inbound one");
+  recordMessage("approval", 120, "q2", new Date(), file);
+  assert.equal(latestSaid(key), 120, "equal timestamps");
+  assert.equal(latestSaid(key, new Set([120])), 100, "a skipped message is left out");
+  const broken = "g-latestsaid-broken";
+  const bad = convPaths(convIdOfKey(broken)).messages;
+  rmSync(bad, { force: true });
+  mkdirSync(bad, { recursive: true }); // a directory where the log should be: unreadable
+  assert.equal(latestSaid(broken), undefined, "an unreadable log says nothing, and the caller fails closed");
+  rmSync(bad, { recursive: true, force: true });
+});
+
 // ---- several open approvals ----
 const sent: string[] = [];
-const askTs = (background: boolean, ts: number, desc = `Create event ${ts}`, signal?: AbortSignal) =>
-  request(async (t) => (sent.push(t), ts), desc, call, signal, { background });
+const askTs = (_bg: boolean, ts: number, desc = `Create event ${ts}`, signal?: AbortSignal) =>
+  request(async (t) => (sent.push(t), ts), desc, call, signal);
 
 test("three chat approvals: answered independently by reaction and quoted reply", async () => {
   const a = askTs(false, 1001);
@@ -70,7 +136,7 @@ test("three chat approvals: answered independently by reaction and quoted reply"
   assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "none" });
 });
 
-test("a question lapses after its timeout, a background one too, both SILENTLY; the message has no header or footer", async (t) => {
+test("a question lapses after its timeout, a second one too, both SILENTLY; the message has no header or footer", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   sent.length = 0;
   let chatDone = false;
@@ -78,7 +144,7 @@ test("a question lapses after its timeout, a background one too, both SILENTLY; 
   const chat = askTs(false, 1401).then((d) => ((chatDone = true), d));
   const bg = askTs(true, 1402).then((d) => ((bgDone = true), d));
   assert.doesNotMatch(sent[0]!, /Approve\?|then I assume no|Reply yes or no/); // the message is the question as written, no header or footer
-  t.mock.timers.tick(15 * 60_000 - 1);
+  t.mock.timers.tick(24 * 3_600_000 - 1);
   await Promise.resolve();
   assert.equal(chatDone, false);
   t.mock.timers.tick(1);
@@ -93,7 +159,7 @@ test("a late yes to a question that timed out is told so, and runs nothing", asy
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const d = askTs(false, 1601);
   for (let k = 0; k < 6; k++) await Promise.resolve(); // (mock timers: settle() would wait on a real timer)
-  t.mock.timers.tick(15 * 60_000);
+  t.mock.timers.tick(24 * 3_600_000);
   assert.deepEqual(await d, { approved: false, expired: true });
   const r = await answer("yes", () => {}, { timestamp: 1601 }, never);
   assert.equal(r.outcome, "clarify");
