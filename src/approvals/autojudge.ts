@@ -47,10 +47,10 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
 }
 
 // Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
-// or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
+// or pages may have had its recipient or guest steered, so permissions.ts hands this list to the judge as a fact (a standing go-ahead in the notes may cover it); it blocks nothing. A person counts as the person's when their words hold
 // the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Mara" covers the
 // Mara of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
-// have seen the exact address, and whether their reply approves it is the judge's call, the floor only stops blocking). Only that one message, never older ones. An address that is exactly one of the person's own mail accounts (`own`: what the mail provider itself reports, MailTools.ownAddresses) is known like a note from before the run. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
+// have seen the exact address, and whether their reply approves it is the judge's call, the judge reads it). Only that one message, never older ones. An address that is exactly one of the person's own mail accounts (`own`: what the mail provider itself reports, MailTools.ownAddresses) is known like a note from before the run. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
 // the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
 export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = [], own: readonly string[] = []): string[] {
   const text = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n");
@@ -128,6 +128,8 @@ export interface JudgeInput {
   provenance: Provenance;
   untrustedInput?: boolean; // the run has read raw mail or web pages (or is the mail handler, or the browse worker): its arguments may be steered by third-party text
   approved?: CarriedApproval; // a browse commit step: the plan the owner approved earlier in this run, offered by code (browseguard.ts)
+  notes?: string; // the conversation's notes index (judgecontext.ts)
+  outside?: readonly string[]; // recipients the person's words, contacts and accounts do not name (recipientsOutside), when the run read untrusted text
   now?: number;
 }
 
@@ -139,7 +141,7 @@ function approvedPlan(a: CarriedApproval, now: number): string {
 
 // Pure: the prompt. The provenance and the action are fenced as data.
 export function judgePrompt(i: JudgeInput): string {
-  return judgeContext({ details: i.description, provenance: i.provenance, untrusted: i.untrustedInput, extra: i.approved ? approvedPlan(i.approved, i.now ?? Date.now()) : "" });
+  return judgeContext({ details: i.description, provenance: i.provenance, untrusted: i.untrustedInput, notes: i.notes, outside: i.outside, extra: i.approved ? approvedPlan(i.approved, i.now ?? Date.now()) : "" });
 }
 
 // Pure: whatever came back, as a verdict. Anything but an exact "auto" or "fix" is "ask"; "fix" also needs a reason (the model is told it).
