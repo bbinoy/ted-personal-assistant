@@ -7,7 +7,7 @@ import { createFilesServer, openedBlocks, openNow, type AttachmentSource } from 
 import { OPEN_TOOL } from "../src/modules/files/module.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
-import { adoptFile, dropShots, heldPath, loadFile, MAX_FILES, withTempFile } from "../src/modules/send/shots.ts";
+import { adoptFile, endTurn, heldPath, loadFile, MAX_FILES, withTempFile } from "../src/modules/send/shots.ts";
 import { isPicture } from "../src/conversation/openbytes.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
@@ -74,14 +74,14 @@ test("files: ids are per conversation, counted from 1, kept across turns; the ca
   assert.equal((loadFile("g-b", "file1") as { file: { name: string } }).file.name, "two.pdf");
   assert.equal("problem" in loadFile("g-b", "file2"), true);
   for (const bad of ["../file1", "/etc/passwd", "file0", "shot1"]) assert.equal("problem" in loadFile("g-a", bad), true, bad);
-  dropShots("g-a"); // the turn is over: the files stay
+  endTurn("g-a"); // the turn is over: the files stay
   assert.equal((loadFile("g-a", "file1") as { file: { name: string } }).file.name, "one.pdf");
   assert.equal(adoptFile("g-a", pdf(), "again.pdf")!.id, "file3", "ids go on counting");
   assert.equal(adoptFile("g-a", pdf(), "again.pdf")!.id, "file3", "the same bytes under the same name are not stored twice");
   assert.equal(adoptFile("g-a", pdf(3), "again.pdf")!.name, "again-2.pdf", "a name is never shared");
   for (let i = 0; i < MAX_FILES; i++) adoptFile("g-c", pdf(i + 1), "x.pdf");
   assert.equal(adoptFile("g-c", pdf(99), "x.pdf"), undefined, "per-turn limit on new files");
-  dropShots("g-c");
+  endTurn("g-c");
   assert.equal(adoptFile("g-c", pdf(99), "x.pdf")!.id, "file11", "the next turn may keep more");
   assert.equal(adoptFile("g-c2", Buffer.alloc(0), "empty.pdf"), undefined);
   for (const k of ["g-a", "g-b", "g-c", "g-c2"]) dropFiles(k);
@@ -90,7 +90,7 @@ test("files: ids are per conversation, counted from 1, kept across turns; the ca
 test("files: a file kept in one turn is sendable and attachable in a later one, and a friend's or another group's turn cannot use it", async () => {
   const key = "tenant:mara-1";
   adoptFile(key, pdf(), "claim.pdf");
-  dropShots(key);
+  endTurn(key);
   const sent: Content[] = [];
   await withSend(key, async (c) => (sent.push(c), "ok"), async () => {
     assert.equal(await sendNow(key, { file: "file1" }), "ok");
@@ -112,7 +112,7 @@ test("send: a file goes out as a file attachment from a temp copy that is delete
   await withSend(OWNER_KEY, async (c) => (sent.push(c), "ok"), async () => {
     await openNow(OWNER_KEY, { messageId: 1, attachmentId: "a" }, source(pdf(), "pass.pdf"));
     assert.match(await sendNow(OWNER_KEY, { file: "file2" }), /No file "file2"/);
-    assert.match(await sendNow(OWNER_KEY, { file: "file1", picture: "shot1" }), /exactly one thing/);
+    assert.match(await sendNow(OWNER_KEY, { file: "file1", text: "x" }), /exactly one thing/);
     assert.equal(await sendNow(OWNER_KEY, { file: "file1", caption: "Here" }), "ok");
     const c = sent[0] as Extract<Content, { kind: "file" }>;
     assert.deepEqual([c.kind, c.id, c.held.name, c.caption], ["file", "file1", "pass.pdf", "Here"]);

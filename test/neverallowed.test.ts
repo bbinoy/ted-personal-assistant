@@ -283,10 +283,10 @@ test("instance/browse is not readable data, and stale browse run folders are swe
   assert.equal(classify("Read", { file_path: join(root, "run-fresh", "page.md") }, OWNER_CHAT), "deny");
   const tmp = mkdtempSync(join(tmpdir(), "browse-sweep-"));
   const old = Date.now() - 2 * 60 * 60_000;
-  for (const d of ["run-old", "run-new", join("shots", "run-old"), join("shots", "run-new"), "other"]) mkdirSync(join(tmp, d), { recursive: true });
-  for (const d of ["run-old", join("shots", "run-old"), "other"]) utimesSync(join(tmp, d), new Date(old), new Date(old));
-  assert.equal(sweepStaleRuns(Date.now(), tmp), 2);
-  assert.deepEqual([existsSync(join(tmp, "run-old")), existsSync(join(tmp, "run-new")), existsSync(join(tmp, "shots", "run-old")), existsSync(join(tmp, "shots", "run-new")), existsSync(join(tmp, "other"))], [false, true, false, true, true]);
+  for (const d of ["run-old", "run-new", "other"]) mkdirSync(join(tmp, d), { recursive: true });
+  for (const d of ["run-old", "other"]) utimesSync(join(tmp, d), new Date(old), new Date(old));
+  assert.equal(sweepStaleRuns(Date.now(), tmp), 1);
+  assert.deepEqual([existsSync(join(tmp, "run-old")), existsSync(join(tmp, "run-new")), existsSync(join(tmp, "other"))], [false, true, true]);
   assert.equal(sweepStaleRuns(Date.now(), join(tmp, "missing")), 0, "no folder yet is fine");
 });
 

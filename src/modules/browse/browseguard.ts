@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, statSync } from "node:fs";
 import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
 import { MAX_FILES } from "../send/shots.ts";
 import { join, resolve, sep } from "node:path";
@@ -52,7 +52,6 @@ export interface GuardOptions {
   probe?: Probe; // click mode: what is under a point of the page, looked up by code (browsecdp.ts)
   cdpPort?: number; // click mode: the browser's debugging port on loopback (browseserver.ts starts the browser with it)
   proxyPort?: number; // the run's egress proxy on loopback (browseproxy.ts): the browser is started with it (browseserver.ts); the guard only carries the number
-  shotsDir?: string; // where each screenshot is kept as a small jpeg, for the chat to pass on (shots.ts)
   profile?: Profile; // the owner's saved details (profile.ts): the owner's chat run only, a group's guard ignores it
   card?: CardAccess; // the owner's payment card (card.ts): the owner's chat run only, a group's guard ignores it
   frames?: FrameProbe; // the browser's own list of the page's frames (browsecdp.ts); without it a card is never typed into a frame
@@ -107,10 +106,9 @@ export class BrowseGuard {
   readonly proxyPort?: number;
   private readonly probe?: Probe;
   private shots = 0;
-  readonly shotsDir?: string;
   pdfs: HeldPdf[] = []; // the PDFs kept for the chat (a saved page, a download), real PDF bytes only
   private pdfsAsked = 0;
-  kept: { id: string; file: string; size: number }[] = []; // the screenshots kept for the chat, in order
+  kept: { id: string; bytes: Buffer }[] = []; // the screenshots kept for the chat (real jpeg bytes), in order, like the PDFs
   private pointClicks = 0;
   private approvedPlan?: CarriedApproval; // the owner's last approved browser question of this run (memory only; cleared when the site changes or the run ends)
   private approvedCount = 0;
@@ -152,7 +150,6 @@ export class BrowseGuard {
     this.probe = o.probe;
     this.cdpPort = o.cdpPort;
     this.proxyPort = o.proxyPort;
-    this.shotsDir = o.shotsDir;
     this.profile = o.mode === "owner" ? o.profile : undefined;
     this.card = o.mode === "owner" ? o.card : undefined;
     this.frames = o.frames;
@@ -233,19 +230,12 @@ export class BrowseGuard {
     return names.length ? `Controls on the page: ${names.join(", ")}` : "Controls on the page: none listed";
   }
 
-  // After a screenshot call succeeded: keeps its picture as a jpeg file (only real jpeg bytes, a size limit, a name code chooses) and returns its id.
+  // After a screenshot call succeeded: keeps its picture (only real jpeg bytes, a size limit) and returns its id for this run (shot1...).
   keepShot(response: unknown): string | undefined {
-    if (!this.shotsDir) return undefined;
     const bytes = imageBytes(response);
     if (!bytes || bytes.length > MAX_PICTURE_BYTES || !isJpeg(bytes)) return undefined;
     const id = `shot${this.kept.length + 1}`;
-    const file = join(this.shotsDir, `${id}.jpg`);
-    try {
-      writeFileSync(file, bytes, { mode: 0o600, flag: "wx" });
-    } catch {
-      return undefined;
-    }
-    this.kept.push({ id, file, size: bytes.length });
+    this.kept.push({ id, bytes: Buffer.from(bytes) });
     return id;
   }
 

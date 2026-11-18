@@ -167,12 +167,12 @@ test("the owner's runs, chat turn and look alike, are told the task page address
 });
 
 test("the conversation's held files are listed in the facts of a chat turn and of a look alike: the newest few, one line each, only its own", async () => {
-  const { adoptFile, dropShots } = await import("../src/modules/send/shots.ts");
+  const { adoptFile, endTurn } = await import("../src/modules/send/shots.ts");
   const conv = group(`facts-group-${++n}`);
   const other = group(`facts-group-${++n}`);
   for (let i = 1; i <= 10; i++) {
     adoptFile(conv.key, Buffer.from(`f${i}`), `doc${i}.txt`);
-    if (i === 5) dropShots(conv.key); // (a new turn: the per-turn cap is on new files)
+    if (i === 5) endTurn(conv.key); // (a new turn: the per-turn cap is on new files)
   }
   adoptFile(other.key, Buffer.from("x"), "theirs.txt");
   for (const attended of [true, false]) {

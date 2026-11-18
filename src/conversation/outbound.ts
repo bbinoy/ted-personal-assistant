@@ -140,7 +140,7 @@ export function createOutbound(
     return ts;
   }
 
-  // A picture (a screenshot kept by the browse tool, shots.ts) or a file (a mail attachment opened with open_file) with an optional caption, to the owner's chat or another conversation.
+  // A picture or a file (a mail attachment opened with open_file) with an optional caption, to the owner's chat or another conversation.
   async function sendAttachment(attachment: OutgoingAttachment, caption: string, opts: { quote?: Quote; kind?: MessageKind; target?: Target } = {}): Promise<number> {
     const r = caption ? renderMarkdown(clean("picture caption", caption, { max: 300 })) : { text: "", styles: [] };
     if (!opts.target && r.text) remember(`x:${r.text}`);
