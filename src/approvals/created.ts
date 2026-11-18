@@ -4,6 +4,7 @@
 
 import { clip } from "../core/sanitize.ts";
 import { whenOf } from "./format.ts";
+import { namesPeople } from "../policy/guests.ts";
 
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_PER_CONVERSATION = 500;
@@ -41,6 +42,16 @@ export function idsInCall(input: Record<string, unknown>): string[] {
   return [...out];
 }
 
+// The guest count of an event as text, for the "Named:" line (code writes the count only, never a name): the assistant's own words say the delete's reach.
+export const guestsText = (n: number): string => (n === 0 ? "no guests" : `${n} guest${n === 1 ? "" : "s"}`);
+
+// Pure. How many people a creating call invites: none when it names nobody, the length of its `attendees` list (the person themself, marked `self`, not counted), else unknown.
+function guestsOf(input: Record<string, unknown>): number | undefined {
+  if (!namesPeople(input)) return 0;
+  const a = input.attendees;
+  return Array.isArray(a) ? a.filter((x) => !(x && typeof x === "object" && (x as Record<string, unknown>).self === true)).length : undefined;
+}
+
 // Pure. What the creating call said the thing is: its title (summary, title, subject or name, wherever the call has one) and when it is, as in an approval text.
 const NAME_KEY = /^(summary|title|subject|name)$/i;
 export function callLabel(input: Record<string, unknown>): string | undefined {
@@ -55,7 +66,8 @@ export function callLabel(input: Record<string, unknown>): string | undefined {
   walk(input, 0);
   if (title === undefined) return undefined;
   const when = whenOf(input);
-  return `“${clip(title, 120)}”${when ? `, ${when}` : ""}`;
+  const guests = when ? guestsOf(input) : undefined; // (an event: a page or a draft has no guests)
+  return `“${clip(title, 120)}”${when ? `, ${when}` : ""}${guests !== undefined ? `, ${guestsText(guests)}` : ""}`;
 }
 
 export function noteCreated(conversation: string, ids: readonly string[], now = Date.now(), label?: string): void {

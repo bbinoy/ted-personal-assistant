@@ -101,7 +101,7 @@ test("through the permission path: classify asks, the judge sees the care line, 
 test("the judge's prompt: a delete is judged by bin and reach, not by who made it; never fix", () => {
   assert.match(SYSTEM, /Deleting is judged by reversibility and reach, not by who made the thing/);
   assert.match(SYSTEM, /"Delete:" line written by code/);
-  assert.match(SYSTEM, /A permanent delete is ask, even a draft nobody has seen/);
+  assert.match(SYSTEM, /Any other permanent delete is ask, even a draft nobody has seen/);
   assert.match(SYSTEM, /Never choose fix for a delete\./);
   assert.ok(!/Created by the assistant/.test(SYSTEM));
 });

@@ -4,12 +4,12 @@
 
 import { clip } from "../core/sanitize.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
-import { norm } from "./created.ts";
+import { guestsText, norm } from "./created.ts";
 import { whenOf } from "./format.ts";
 
 const TTL_MS = 24 * 3_600_000;
 const MAX_SEEN = 600;
-const seen = new Map<string, Map<string, { title: string; from?: string; when?: string; at: number }>>();
+const seen = new Map<string, Map<string, { title: string; from?: string; when?: string; guests?: number; at: number }>>();
 const people = new Map<string, Map<string, { name: string; at: number }>>(); // per conversation: address -> the name a read gave it
 export const forgetSeen = (): void => (seen.clear(), people.clear()); // tests
 
@@ -25,6 +25,10 @@ const textOf = (v: unknown): string | undefined => {
   return undefined;
 };
 
+// How many guests an event row shows (the person themself, a row marked `self`, is none): a count only, never a name. Undefined when the row has no attendees field: unknown, not "no guests".
+const guestCount = (o: Record<string, unknown>): number | undefined =>
+  Array.isArray(o.attendees) && whenOf(o) ? o.attendees.filter((a) => !(a && typeof a === "object" && (a as Record<string, unknown>).self === true)).length : undefined;
+
 export function rememberNames(conv: string, response: unknown, now = Date.now()): void {
   let root: unknown = response;
   const text = typeof response === "string" ? response : resultText(response);
@@ -35,14 +39,14 @@ export function rememberNames(conv: string, response: unknown, now = Date.now())
       return rememberPeople(conv, text, now); // (not JSON: a rendered list we cannot read ids from, but "Name <address>" can be read)
     }
   }
-  const found: [string, { title: string; from?: string; when?: string }][] = [];
+  const found: [string, { title: string; from?: string; when?: string; guests?: number }][] = [];
   const walk = (v: unknown, depth: number): void => {
     if (depth > 6 || !v || typeof v !== "object" || found.length > 200) return;
     if (Array.isArray(v)) return void v.forEach((x) => walk(x, depth + 1));
     const o = v as Record<string, unknown>;
     const title = TITLE_KEYS.map((k) => textOf(o[k])).find(Boolean);
     const id = ID_KEYS.map((k) => o[k]).find((x) => (typeof x === "string" && x) || typeof x === "number");
-    if (title && id !== undefined) found.push([norm(id as string | number), { title, from: Object.keys(o).filter((k) => FROM_KEY.test(k)).map((k) => textOf(o[k])).find(Boolean), when: whenOf(o) }]);
+    if (title && id !== undefined) found.push([norm(id as string | number), { title, from: Object.keys(o).filter((k) => FROM_KEY.test(k)).map((k) => textOf(o[k])).find(Boolean), when: whenOf(o), guests: guestCount(o) }]);
     for (const x of Object.values(o)) walk(x, depth + 1);
   };
   walk(root, 0);
@@ -93,5 +97,5 @@ export function peopleFor(conv: string, text: string, now = Date.now()): string[
 // “Title” from sender, or “Title”, Fri 21 Nov, 18:00–19:00: how a person knows the thing. Undefined when the run has not seen it.
 export const seenName = (conv: string, id: string | number): string | undefined => {
   const e = seen.get(conv)?.get(norm(id));
-  return e ? `“${clip(e.title, 120)}”${e.from ? ` from ${clip(e.from, 50)}` : ""}${e.when ? `, ${e.when}` : ""}` : undefined;
+  return e ? `“${clip(e.title, 120)}”${e.from ? ` from ${clip(e.from, 50)}` : ""}${e.when ? `, ${e.when}` : ""}${e.guests !== undefined ? `, ${guestsText(e.guests)}` : ""}` : undefined;
 };

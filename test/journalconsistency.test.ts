@@ -74,7 +74,7 @@ test("judge auto-approve: one 'auto-approved' audit row, one journal line that s
   const lines = journal(key).slice(before);
   assert.equal(lines.length, 1);
   assert.equal(lines[0]!.cat, "calendar");
-  assert.match(lines[0]!.text, /^Created calendar event: “Flight LHR-ZRH”, Sat 31 Oct, 17:10–20:00 \(Europe\/Zurich\)\. Why: /);
+  assert.match(lines[0]!.text, /^Created calendar event: “Flight LHR-ZRH”, Sat 31 Oct, 17:10–20:00 \(Europe\/Zurich\), no guests\. Why: /);
   assert.match(lines[0]!.text, /Why: your message at \d\d:\d\d; auto-approved by the safety check \(matches the request\)\./);
   assert.match(lines[0]!.text, /Undo: delete that event \(event id ev-77\)\.$/);
 });
