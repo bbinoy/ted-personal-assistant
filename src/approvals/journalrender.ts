@@ -104,7 +104,8 @@ interface Rendered {
 
 // The object's name where code can read it: a mail the run has seen, or the title the assistant gave a thing it created here, or the title the call itself carries.
 function named(conv: string, _tool: string, input: Record<string, unknown>): string | undefined {
-  return createdLabel(conv, input) ?? callLabel(input);
+  const id = idsInCall(input)[0];
+  return createdLabel(conv, input) ?? callLabel(input) ?? (id ? seenName(conv, id) : undefined);
 }
 
 // A task tool's line is what the store said about the change (the first line of the reply: "Added task #4 'Call Sam' (due Fri 24 Oct)"), written by code from the stored item; the undo is a sentence to say.
@@ -146,7 +147,7 @@ function render(conv: string, tool: string, input: Record<string, unknown>, resp
   const ids = idsInCall(input);
   const what = `${doneVerb(tool, input)}${label ? `: ${label}` : ids.length ? ` (${list(ids, 2)})` : ""}`;
   const made = e?.action === "calendar-write" && /create/.test(tool) ? idsInResult(response)[0] : undefined;
-  const undo = made ? `delete that event (event id ${made})` : confirmsDelete(tool, input) && moduleOf(tool)?.floor?.deleteToBin ? "restorable from the bin for about 30 days" : undefined;
+  const undo = made ? `delete that event (event id ${made})` : confirmsDelete(tool, input) && moduleOf(tool)?.floor?.deleteToBin ? "restorable from the bin for about 30 days" : confirmsDelete(tool, input) && label && /event/.test(tool) ? "create the event again from the title and time above" : undefined;
   return { what, cat, ...(undo ? { undo } : {}) };
 }
 

@@ -67,10 +67,10 @@ test("the Named line of a delete carries the count; a later write that names peo
   forgetCreated();
 });
 
-test("the judge's rule: only the owner's own message, now, and a guest count that reads 'no guests'", () => {
-  assert.match(SYSTEM, /only when .{1,30}'s own message asks to remove this event, now/);
+test("the judge's rule: an own guest-less event or unsent draft is auto by default, and a guest count that reads 'no guests'", () => {
+  assert.match(SYSTEM, /auto by default, with no request and no standing note needed/);
   assert.match(SYSTEM, /"Guests:" line written by code reads "none"/);
-  assert.match(SYSTEM, /a standing task or a look never makes it auto/);
+  assert.doesNotMatch(SYSTEM, /a standing task or a look never makes it auto/);
 });
 
 test("a time zone or a key with a line break cannot start a line of its own", () => {
