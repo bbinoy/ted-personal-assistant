@@ -31,7 +31,6 @@ export function createRegistrar(deps: {
     void request(send, `Approve ${shortId(r)} as a friend`, { tool: "tenant_register", input: { id: shortId(r) } }, undefined, {
       scope: OWNER_KEY,
       source: "chat",
-      background: true,
       question: questionFor(r),
       minutes: LAPSE_MINUTES, // it lapses silently (approvals.ts): the request stays open
     })

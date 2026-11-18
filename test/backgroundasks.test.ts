@@ -6,6 +6,7 @@ import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts"
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import * as approvals from "../src/approvals/approvals.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
+import { declinedAgo, resetDeclined } from "../src/approvals/declined.ts";
 import { createApprovers } from "../src/approvals/approvers.ts";
 import { handoffFor, setContinuation } from "../src/approvals/handoff.ts";
 import { runFor } from "../src/run/runoptions.ts";
@@ -14,7 +15,7 @@ import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { heldPosts, resetHeld, submitPost } from "../src/heartbeat/notices.ts";
 import { OWNER_CONV } from "../src/core/convpaths.ts";
 import { settings } from "../src/core/settings.ts";
-import { GROUP_LOOK, OWNER_LOOK } from "./runkinds.ts";
+import { FRIEND_LOOK, GROUP_LOOK, OWNER_LOOK } from "./runkinds.ts";
 import type { RunKind } from "../src/core/runkind.ts";
 
 // EVERY RUN MAY ASK (the owner, 18 Nov): a background run's judge-ask goes to the conversation's chat through the same ask path as a chat turn, handed off so the run carries on;
@@ -36,9 +37,9 @@ setContinuation((scope, prompt) => void continued.push({ scope, prompt }));
 const sent: { to?: string; text: string; ts: number }[] = [];
 const out = { reply: async (text: string, o: { plain: true; kind: "approval"; target?: string }) => (sent.push({ to: o.target, text, ts: ++ts }), ts) };
 const compose = async (q: { details: string }) => ({ text: `Shall I? ${q.details.split("\n")[0]}`, ms: 0 });
-const approverFor = (hold?: (key: string, text: string) => boolean) => createApprovers(out, { hold, make: (send, o) => makeApprove(send, { ...o, compose: compose as never }) });
+const approverFor = (hold?: (key: string, text: string) => boolean) => createApprovers(out, { hold, target: (id) => `+${id}`, make: (send, o) => makeApprove(send, { ...o, compose: compose as never }) });
 after(() => {
-  for (const m of sent) for (const scope of ["owner", "g-bgask"]) approvals.answerReaction("👎", m.ts, scope); // (no question stays open: its timer would keep the process alive)
+  for (const m of sent) for (const scope of ["owner", "g-bgask", "tenant:fr"]) approvals.answerReaction("👎", m.ts, scope); // (no question stays open: its timer would keep the process alive)
 });
 
 function rig(kind: RunKind, key: string, o: { judge?: Verdict["decision"]; guard?: CallGuard; tools?: ReadonlySet<string>; hold?: (key: string, text: string) => boolean } = {}) {
@@ -160,4 +161,60 @@ test("the stale check: a yes that comes after the call changed does not run it a
   assert.equal(continued.length, c0 + 1);
   assert.match(continued.at(-1)!.prompt, /has changed since the question was sent[\s\S]*NOT run/);
   assert.equal(readAudit((e) => e.decision === "ask-stale").length > 0, true);
+});
+
+test("a friend's look asks in her own chat only, and nowhere else", async () => {
+  const r = rig(FRIEND_LOOK, "tenant:fr", { tools: new Set([CAL]) });
+  const before = sent.length;
+  assert.match((await r.call(CAL, event())).message ?? "", /Asked/);
+  assert.deepEqual(sent.slice(before).map((m) => m.to), ["+fr"]);
+  assert.equal(approvals.answerReaction("👍", sent.at(-1)!.ts, "owner"), "ignored", "the owner's chat does not answer it");
+  approvals.answerReaction("👎", sent.at(-1)!.ts, "tenant:fr");
+});
+
+// One answer rule for a look's question and a chat turn's: both go through approvals.answer, and an unquoted yes needs the question to be Ted's newest message.
+test("a look's question: an unquoted yes after later messages does not answer it, a quoted one does, one right after does", async () => {
+  const r = rig(OWNER_LOOK, "owner");
+  const input = event();
+  await r.call(CAL, input);
+  const q = sent.at(-1)!.ts;
+  const none = { judge: async () => assert.fail("no judge"), recent: () => [], latest: () => q + 50 } as never; // Ted spoke again after the question
+  assert.deepEqual(await approvals.answer("yes", () => {}, undefined, none, { scope: "owner" }), { outcome: "none" });
+  assert.deepEqual(await approvals.answer("YES", () => {}, undefined, none, { scope: "owner" }), { outcome: "none" });
+  assert.equal(approvals.openCount("owner") > 0, true);
+  const c0 = continued.length;
+  assert.deepEqual(await approvals.answer("yes", () => {}, { timestamp: q }, none, { scope: "owner" }), { outcome: "approved" });
+  await tick();
+  assert.equal(continued.length, c0 + 1);
+  const r2 = rig(OWNER_LOOK, "owner");
+  await r2.call(CAL, event());
+  const q2 = sent.at(-1)!.ts;
+  const fresh = { judge: async () => assert.fail("no judge"), recent: () => [], latest: () => q2 } as never;
+  assert.deepEqual(await approvals.answer("ok", () => {}, undefined, fresh, { scope: "owner" }), { outcome: "approved" });
+});
+
+test("a decline blocks a re-ask for the whole window, and so does a question that lapsed", async () => {
+  resetDeclined();
+  const input = event();
+  const declineIt = async (r: ReturnType<typeof rig>) => {
+    await r.call(CAL, input);
+    approvals.answerReaction("👎", sent.at(-1)!.ts, "owner");
+    await tick();
+    await tick();
+  };
+  await declineIt(rig(OWNER_LOOK, "owner"));
+  const day = 24 * 3_600_000;
+  assert.notEqual(declinedAgo("owner", CAL, input, Date.now() + day - 60_000), undefined, "still declined 23 h 59 min later");
+  assert.equal(declinedAgo("owner", CAL, input, Date.now() + day + 60_000), undefined);
+  resetDeclined();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const r = rig(OWNER_LOOK, "owner");
+    await r.call(CAL, input);
+    mock.timers.tick(day + 1000);
+    for (let k = 0; k < 20; k++) await Promise.resolve(); // (mock timers: tick() would wait on a real timer)
+    assert.notEqual(declinedAgo("owner", CAL, input, Date.now()), undefined, "silence for the window counts as a decline");
+  } finally {
+    mock.timers.reset();
+  }
 });

@@ -282,7 +282,7 @@ Every tool call, in every conversation and run, goes through `src/approvals/perm
 - **Answers.** Only a message that arrives after the question, or a reaction on it, can answer. An exact yes or no for the single open question and 👍 / 👎 are matched by code; any other reply goes to the judge model with all open questions of that conversation (`approvalmodel.ts`, `approvalprompt.ts`). A failed reading approves nothing.
 - **Hand-off.** An ordinary ask does not hold the turn: after the question is sent, a `pending_actions` row is stored and the call is denied with "asked, it runs on their yes", so the turn ends and the queue is free. Every kind of yes (phrase, judge reading, reaction, quoted reply, allowed edit) makes one single-use grant for exactly that call and enters a *continuation* turn through the usual intake (`intake.ts continuation`, at the burst, so it merges with waiting messages); `permissions.ts` consumes the grant if the call, the conversation and the rendered details (the mail draft included) are unchanged. A no or silence leaves a fact for the next run. Payments and browse steps stay on the blocking ask. A look waits while a question is open (`queue.ts busy`); a restart brings the rows back (`handoff.ts rehydrate`). `approvals/` cannot import `conversation/`, so `main.ts` hands the continuation in (`wiring.ts`).
 - **One approver per conversation** (`approvers.ts`): the question goes to the conversation that triggered the action; an answer from anywhere else, the admin included, never applies. A stranger's registration asks the owner in her own chat (`registerask.ts`).
-- **Rules that persist.** A decline is final for 30 minutes for the same call (`declined.ts`). An expired question reaches the agent as "not answered in time", with a journal line and no chat message. A send is built from the draft read back from the mail client.
+- **Rules that persist.** A decline, or a question nobody answered, is final for the approval window (a day) for the same call (`declined.ts`). One rule answers every question, whoever asked it: a quoted reply or a reaction answers it, an unquoted message only if the question is the newest thing Ted sent in that chat (`recentchat.ts latestSaid`), a typed YES to a payment included. An expired question reaches the agent as "not answered in time", with a journal line and no chat message. A send is built from the draft read back from the mail client.
 
 Every ask and answer is audited; `npm run report` lists asks next to their arguments. Full rules: SAFETY.md ("Approvals").
 
@@ -590,7 +590,7 @@ src/approvals/pendingstore.ts  the stored question and single-use grant (pending
 src/approvals/auditargs.ts  a call's arguments for the audit, capped
 src/approvals/autojudge.ts  the judge's input and the vetoes before it
 src/approvals/created.ts  what the assistant itself made (24 hours), to name it in a question or the journal
-src/approvals/declined.ts  declines stay final for 30 minutes
+src/approvals/declined.ts  declines stay final for the approval window
 src/approvals/describe.ts  names an object known only by id
 src/approvals/seennames.ts  id to title (and time), address to name, from the run's own read results
 src/approvals/format.ts  readable approval text per tool call

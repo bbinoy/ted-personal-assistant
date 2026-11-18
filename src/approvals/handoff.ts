@@ -70,7 +70,7 @@ export function handoffFor(a: Asked, minutes: number): Handoff {
     row(d.expired ? "ask-expired" : "ask-declined", { handoff: true });
     row("approval-outcome", { approved: false, modified: false, argsEqual: true });
     closePending(a.conv, id, d.expired ? "expired" : "declined");
-    if (!d.expired) noteDeclined(a.conv, a.tool, a.input, Date.now()); // a plain no stands until they ask again (declined.ts)
+    noteDeclined(a.conv, a.tool, a.input, Date.now()); // a no, or silence for the whole window, stands for a window or until they ask again (declined.ts)
     noteLapsed(a.conv, a.label, formatWait(minutes), d.expired ? "lapsed" : "declined"); // silent: the next run is told as a fact
   }
   return {

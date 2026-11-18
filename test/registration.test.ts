@@ -56,7 +56,7 @@ test("a stranger gets one fixed line; the owner is asked with a sanitised name a
   assert.equal(T.tenantByAci(aci(1)), undefined, "not a tenant yet");
   assert.deepEqual(Reg.openRequests((NOW + 1_000)).map((r) => r.held.map((h) => h.text)), [[`${CANARY} hello`]]);
 
-  assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "none" }, "a bare yes never registers a stranger: only a reply to the question or a reaction on it does");
+  assert.deepEqual(await answer("yes", () => {}, undefined, { ...never, latest: () => 2000 }), { outcome: "none" }, "a bare yes does not register a stranger once Ted has said something since the question: only a reply to it or a reaction on it does");
   assert.deepEqual(await answer("yes", () => {}, { timestamp: 1001 }, never), { outcome: "approved" });
   await tick();
   const rec = T.tenantByAci(aci(1))!;

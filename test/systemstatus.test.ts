@@ -34,7 +34,7 @@ test("a background approval that lapsed is told to the next run once, with its a
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const conv = owner();
   const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
-  const asked = request(async () => 7001, "Create event Dentist\nmore details", call, undefined, { background: true });
+  const asked = request(async () => 7001, "Create event Dentist\nmore details", call, undefined);
   t.mock.timers.tick(24 * 3_600_000);
   assert.equal((await asked).expired, true);
   closeAllConvDbs(); // a restart: the entry is in the file

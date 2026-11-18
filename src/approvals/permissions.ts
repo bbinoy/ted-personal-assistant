@@ -388,7 +388,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       d.approved && !g?.resolve && journalable(tool, input) ? { call: { input, final: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance }) } : undefined,
     );
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
-    else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)
+    else if (!d.feedback && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a no or silence (not a reply, not an aborted turn)
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool, undefined, conversation)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);

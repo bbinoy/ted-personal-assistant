@@ -83,7 +83,7 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
 }
 const out = createOutbound(messenger, (kind, ts, text, target) => record(target, kind, ts, text));
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her background
-// runs (the heartbeat run asks the same way, but waits through quiet hours), a group in the group
+// runs (a look asks the same way, but waits through quiet hours), a group in the group
 // (any member may answer), a tenant in her own chat. approvals.ts scopes every question to its conversation, so an answer from another one (the admin's included) never applies.
 // This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
 wire({

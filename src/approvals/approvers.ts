@@ -5,13 +5,12 @@ import { isTenantKey, OWNER_KEY } from "../core/ownerkey.ts";
 import { targetOf } from "../tenants/tenants.ts";
 
 // The one place that decides where a question is asked: IN THE CONVERSATION THAT TRIGGERED THE ACTION, never anywhere else.
-//   the owner's chat   the owner's turns and her unattended runs (wake-ups, brief, radar, mail handler): her chat; a background question
-//                      only an explicit yes / no or a reply to it answers (approvals.ts)
+//   the owner's chat   the owner's turns and her unattended runs (wake-ups, brief, radar, mail handler): her chat
 //   a group            the group itself; any member may answer there
 //   "tenant:<id>"      that tenant's own chat, never the admin's: the admin's messages are another conversation and answer nothing here
 // A person who is gone (removed) cannot be asked anywhere: the question is not sent, and never falls back to the owner's chat.
 // A background run (`background`: a look of the owner, a group or a friend, its expert, a routine, meeting prep) asks in the same place and the same way as a chat turn, with one
-// difference of timing: while the conversation is being left alone (quiet hours, /quiet) `hold` keeps the wish for the conversation's next look (a held post, notices.ts) and
+// difference of timing (the answer rule is the same for every question, approvals.ts): while the conversation is being left alone (quiet hours, /quiet) `hold` keeps the wish for the conversation's next look (a held post, notices.ts) and
 // nothing is sent; that look puts it again if it still matters, so what has passed lapses.
 // A card payment is asked in the card holder's own chat only and needs her typed yes, whoever started it; a group and a tenant never pay.
 export function createApprovers(out: { reply(text: string, opts: { plain: true; kind: "approval"; target?: Target }): Promise<number> }, deps: { make?: typeof makeApprove; target?: (tenantId: string) => string | undefined; hold?: (key: string, text: string) => boolean } = {}): (key: string, o?: ApproverOptions) => Approve {

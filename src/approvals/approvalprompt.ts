@@ -41,7 +41,6 @@ interface Part {
 // What the judge needs to know about one open approval.
 export interface OpenView {
   id: string; // A1, A2...: the judge's name for it, mapped back by code
-  background: boolean;
   ageMs: number;
   question: string; // the exact text the owner was shown
   args?: Record<string, unknown>; // only for tools where an edit is allowed at all
@@ -58,7 +57,6 @@ export interface Recent {
 export function answerPrompt(reply: string, open: readonly OpenView[], recent: readonly Recent[], quote?: { id?: string; ended?: boolean; voice?: boolean }): string {
   const items = open.map((o) => ({
     id: o.id,
-    asked_by: o.background ? "an unattended job (the owner may not be expecting it)" : "the chat assistant",
     asked: agoText(o.ageMs),
     question_shown: o.question.slice(0, LIMITS.brief),
     ...(o.args ? { arguments: JSON.stringify(o.args).slice(0, LIMITS.brief) } : {}),
