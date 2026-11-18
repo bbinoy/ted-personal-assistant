@@ -21,7 +21,7 @@ const CAL = "mcp__mailbird__";
 const NOTION = "mcp__claude_ai_Notion__";
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
-type Seen = { description: string; provenance: { kind: string; message?: string; task?: string; source?: string }; untrustedInput?: boolean };
+type Seen = { description: string; provenance: { kind: string; message?: string; task?: string; source?: string }; untrustedInput?: boolean; outside?: readonly string[] };
 
 // A fake judge that records what it was shown and answers with a fixed verdict.
 const fake = (decision: Verdict["decision"], reason = "test") => {
@@ -244,7 +244,8 @@ test("mail handler: a run steered by injected mail text does not act, because th
   ];
   for (const [tool, input] of steered) assert.notEqual(((await canUse(tool, input, opts)) as Out).behavior, "allow", tool);
   assert.equal(asked, 4, "each steered call is put to the owner, who decides: nothing ran on its own");
-  assert.deepEqual(j.seen.map((s) => s.untrustedInput), [true], "only the page reached the judge, flagged (the send went to an address nobody wrote in an untrusted run, the others were stopped by the floor first)");
+  assert.deepEqual(j.seen.map((s) => s.untrustedInput), [true, true, true], "the send, the invite and the page reached the judge, flagged (the sharing is never judged); the send and the invite carried the outside recipients as a fact");
+  assert.deepEqual(j.seen.map((s) => s.outside), [["attacker@example.net"], ["attacker@example.net"], undefined]);
 });
 
 test("AUTO_APPROVE=off asks about everything that is not free, and calls no judge", async () => {
