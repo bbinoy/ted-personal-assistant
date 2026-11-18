@@ -47,14 +47,12 @@ export function journalable(tool: string, input?: Record<string, unknown>): bool
 function categoryOf(tool: string): string {
   const e = entryFor(tool);
   if (e?.action === "archive" || e?.action === "restore") return "archive";
+  if (e?.cap === "calendar") return "calendar"; // (whichever server holds the calendar: Mailbird's, Google's, a friend's)
   switch (e?.provider) {
     case "mailbird":
     case "gmail":
-      return "mail";
     case "google":
-      return e.cap === "calendar" ? "calendar" : "mail";
-    case "calendar":
-      return "calendar";
+      return "mail";
     case "notion":
       return "notion";
     case "drive":

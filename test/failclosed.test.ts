@@ -10,7 +10,7 @@ import { OWNER_CHAT } from "./runkinds.ts";
 // A check that fails for any reason denies the call.
 
 const MB = "mcp__mailbird__";
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
 type Seen = { description: string; provenance: { kind: string; by?: string; text?: string; message?: string; task?: string; browseTask?: string; assistantSaid?: string }; untrustedInput?: boolean };

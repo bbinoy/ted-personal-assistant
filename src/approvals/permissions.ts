@@ -311,7 +311,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     if (!g && declinedMs === undefined && description.includes(UNNAMED) && !unnamedSent.has(key)) {
       unnamedSent.add(key);
       log(tool, "judge-fix", source, { reason: "unnamed-object", count: unnamedSent.size });
-      return { behavior: "deny", message: "Not run, nobody was asked: this call names an object only by its id, and no question can be put to the person about an id. Look the object up first with a read tool (for a calendar event: get_event, or list_events for that day), so you know its title and time, then call this again. Name it by title and time in anything you say to the person." };
+      return { behavior: "deny", message: "Not run, nobody was asked: this call names an object only by its id, and no question can be put to the person about an id. Look the object up first with a read tool (for a calendar event: its day in the calendar; for a contact: search_contacts), so you know its title and time, then call this again. Name it by title and time in anything you say to the person." };
     }
     let judgeSaid: Verdict["decision"] | undefined;
     let judged: Verdict | undefined;

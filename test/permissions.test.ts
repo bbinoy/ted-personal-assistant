@@ -54,7 +54,7 @@ test("the same guard covers any approved call, not only sends, and an identical 
   const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   const call = { summary: "Dinner", startTime: "2026-10-20T19:00:00", attendees: ["a@example.com"] };
-  const tool = "mcp__claude_ai_Google_Calendar__create_event";
+  const tool = "mcp__mailbird__create_calendar_event";
   assert.equal((await canUse(tool, call, opts))!.behavior, "allow");
   assert.equal((await canUse(tool, { ...call }, opts))!.behavior, "deny");
   assert.equal((await canUse(tool, { ...call, startTime: "2026-10-21T19:00:00" }, opts))!.behavior, "allow", "different arguments are a different call");
@@ -68,7 +68,7 @@ test("opening the same page twice is not blocked", async () => {
 });
 
 test("calls that differ only in a nested field are different calls, and key order does not matter", async () => {
-  const tool = "mcp__claude_ai_Google_Calendar__create_event";
+  const tool = "mcp__mailbird__create_calendar_event";
   const a = { calendarId: "primary", summary: "Dentist", start: { dateTime: "2026-10-15T10:00:00" }, end: { dateTime: "2026-10-15T11:00:00" } };
   const b = { ...a, start: { dateTime: "2026-10-16T14:00:00" }, end: { dateTime: "2026-10-16T15:00:00" } };
   assert.notEqual(callKey(tool, a), callKey(tool, b));
@@ -92,10 +92,10 @@ test("remembered calls expire out of the map after the 30 minute window", async 
     const t0 = realNow();
     Date.now = () => t0;
     const before = doneCount();
-    for (let i = 0; i < 20; i++) await canUse("mcp__claude_ai_Google_Calendar__create_event", { summary: `old ${i}` }, opts);
+    for (let i = 0; i < 20; i++) await canUse("mcp__mailbird__create_calendar_event", { summary: `old ${i}` }, opts);
     assert.equal(doneCount(), before + 20);
     Date.now = () => t0 + 31 * 60_000;
-    await canUse("mcp__claude_ai_Google_Calendar__create_event", { summary: "new" }, opts);
+    await canUse("mcp__mailbird__create_calendar_event", { summary: "new" }, opts);
     assert.ok(doneCount() <= before + 1, "the old entries were dropped");
   } finally {
     Date.now = realNow;

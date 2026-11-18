@@ -1,32 +1,35 @@
-import { namesNoGuests, namesPeople } from "../policy/guests.ts";
+import { namesPeople, notifyLine } from "../policy/guests.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { rowsOf, type ToolModule } from "./types.ts";
+import { rowsOf, type ModuleFloor, type ToolModule } from "./types.ts";
 
-// Google Calendar, through the owner's claude.ai connector.
-const CAL = "mcp__claude_ai_Google_Calendar__";
+// The owner's calendar goes with the mail client (types.ts `withMail`): Mailbird's own calendar with Mailbird (mailbird/calendar.ts), and with Gmail or no mail
+// the owner's Google Calendar through the claude.ai connector, below (it reaches the one Google account the connector is signed in to). Both say the same about their
+// rows (`calendarFloor`) and are recorded as the connection "calendar".
 
 // The floor for events: a calendar write that names attendees, guests, invitees or recipients (whatever the field is called: attendees, attendeeEmails,
 // addedAttendees, addedAttendeeEmails, ...; guests.ts namesPeople) is judged like a mail send: in a run that read untrusted mail or pages, a guest the person's
-// words do not name is asked (permissions.ts). A delete that names guests is never judged, since it would email a cancellation. An EXISTING event may have guests
-// who would be emailed by an update even when the call names nobody, which is why the judge is told so in the Notifies line.
-;
+// words do not name is asked (permissions.ts). A delete that names guests or asks to notify them (notifyAttendees) would email a cancellation: never judged. An EXISTING
+// event may have guests who would be emailed by an update even when the call names nobody, which is why the judge is told so in the Notifies line.
+const notifies = (input: Record<string, unknown>): boolean => namesPeople(input) || input.notifyAttendees === true || input.notifyAttendees === "true";
+export const calendarFloor = (create: string): ModuleFloor => ({
+  judgeVeto: { [DELETE_CONFIRM]: (input) => !notifies(input) }, // a delete that emails guests a cancellation: the owner's call
+  creates: (name) => name === create, // (its result's event id names it in a later question and the journal)
+  noFix: ["calendar-respond"], // answering an invite is the owner's call, not a matter of wrong arguments
+  judgeNote: { "calendar-write": notifyLine, [DELETE_CONFIRM]: notifyLine },
+  editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event
+});
 
-// Pure: for a calendar write, one line for the judge (not the owner) saying whether this call names guests or asks for notifications. It only
-// reads the call's own arguments; whether an existing event has guests is not known here.
-const NOTIFY_FIELD = /^(notificationLevel|sendUpdates|send_updates|sendNotifications|notifyAttendees)$/i;
-export function notifyLine(input: Record<string, unknown>): string {
-  const notify = Object.entries(input).filter(([k]) => NOTIFY_FIELD.test(k)).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);
-  return `\nNotifies: ${namesPeople(input) ? "this call names guests" : "this call names no guests"}${notify.length ? `; ${notify.join(", ")}` : "; this call asks for no notifications"} (guests already on an existing event are not shown here)`;
-}
-
+// Google Calendar, through the owner's claude.ai connector (every MAIL_PROVIDER but mailbird).
+const CAL = "mcp__claude_ai_Google_Calendar__";
 const cal = rowsOf(CAL, "calendar", "calendar");
 
-export const calendarModule: ToolModule = {
+export const googleCalendarModule: ToolModule = {
   name: "calendar",
+  withMail: ["gmail", "none"],
   connection: { kind: "connector", key: "calendar", label: "Google Calendar", skipped: "the calendar review and the meeting list", server: /google calendar/i, prefix: CAL },
   rows: [
     ...cal("read", "list_calendars list_events get_event search_events suggest_time"),
-    ...cal("calendar-write", "create_event update_event"), // the guest floor is below
+    ...cal("calendar-write", "create_event update_event"), // the guest floor is calendarFloor
     ...cal("calendar-respond", "respond_to_event"),
     ...cal(DELETE_CONFIRM, "delete_event"), // a destructive action the judge handles with care (neverallowed.ts DELETE_CONFIRM)
   ],
@@ -37,13 +40,8 @@ export const calendarModule: ToolModule = {
     [`${CAL}respond_to_event`]: { icon: "📅", title: "Respond to invite" },
     [`${CAL}delete_event`]: { icon: "🗑️", title: "Delete calendar event", labels: { eventId: "Event", calendarId: "Calendar" } },
   },
-  floor: {
-    judgeVeto: { [DELETE_CONFIRM]: namesNoGuests }, // a delete that names guests would email a cancellation: the owner's call
-    creates: (name) => name === "create_event", // (its result's event id names it in a later question and the journal)
-    noFix: ["calendar-respond"], // answering an invite is the owner's call, not a matter of wrong arguments
-    judgeNote: { "calendar-write": notifyLine, [DELETE_CONFIRM]: notifyLine },
-    editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event
-  },
+  floor: calendarFloor("create_event"),
   skills: [{ name: "calendar", required: true }],
   setup: [{ file: "setup/calendars.md", label: "calendars (which to check, time zone)", needs: "calendar" }],
+  hide: { prefix: CAL, visible: "list_calendars list_events get_event search_events suggest_time create_event update_event respond_to_event delete_event".split(" "), valid: /^[a-z_]+$/, hint: "a Google Calendar tool name like list_events" }, // (the whole connector is hidden while MAIL_PROVIDER is mailbird)
 };

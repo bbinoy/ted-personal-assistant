@@ -141,7 +141,7 @@ your head: take what decides the case and move on.
      confirmation for something with a date still ahead (a ticket, an event or class
      order, a booking or reservation, an appointment, travel) is not handled until it
      is on the calendar: open it, check the calendar around that date
-     (`list_events` / `search_events`), and if it is missing add it as the calendar skill's
+     (`list_calendar_events`), and if it is missing add it as the calendar skill's
      "Bookings -> calendar" says, then archive and say what you added. No firm date or time: keep the mail and mention it.
    - **A completed task closes its mail.** When a task in the list is done and a mail
      belongs to it (the task's source mail, the same thread, or plainly the same
@@ -276,7 +276,7 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
   not retry a declined send. (A send that passes the checks needs no further question.)
   The only mail you may send without a question is the daily brief to the
   owner's own address, where the brief instructions say so.
-- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first, as your rules say. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
+- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first, as your rules say, then the address book (`search_contacts`). A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
 - **Never delete. Archive instead.** Never trash, delete permanently, mark spam or
   block a sender: use archive for anything the owner wants out of the inbox, even
   if they say "delete" or "trash" it. (The agent's policy blocks those anyway.)

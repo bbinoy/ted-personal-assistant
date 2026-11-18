@@ -42,7 +42,7 @@ Body: today's date; the channel (email, or chat only); the 3 to 5 headline items
 
 ## Sources of truth
 
-Always the live systems: `list_tasks` for tasks, Notion for meetings, the mail client for email, Google Calendar for events.
+Always the live systems: `list_tasks` for tasks, Notion for meetings, the mail client for email and the calendar tools for events.
 
 ## Steps
 

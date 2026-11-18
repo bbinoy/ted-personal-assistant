@@ -496,7 +496,7 @@ src/run/turncontext.ts  what a session is told at the start of a turn
 ```
 src/modules/archivecap.ts  archive cap per run; which calls archive or restore
 src/modules/builtin.ts  built-in tools: web search, fetch, notes files
-src/modules/calendar.ts  Google Calendar connector with the guests floor
+src/modules/calendar.ts  the guests floor of every calendar; Google Calendar connector (without Mailbird)
 src/modules/connectors.ts  which connectors the last run saw (doctor only)
 src/modules/drive.ts  Drive, Docs and Claude Docs connectors
 src/modules/ibkr.ts  Interactive Brokers: never allowed
@@ -536,6 +536,7 @@ src/modules/gmail/module.ts  Gmail connector (MAIL_PROVIDER=gmail)
 src/modules/google/googlemcp.ts  the pinned MCP server, one process per friend
 src/modules/google/module.ts  a friend's own Gmail and Calendar tools
 src/modules/mailbird/attachments.ts  an attachment from get_attachment_content, as bytes
+src/modules/mailbird/calendar.ts  Mailbird's calendar (the calendar of MAIL_PROVIDER=mailbird)
 src/modules/mailbird/mailbird.ts  MCP client for the local mail server
 src/modules/mailbird/module.ts  Mailbird (MAIL_PROVIDER=mailbird)
 src/modules/mailbird/proposals.ts  a draft read back; the send-approval text

@@ -20,6 +20,7 @@ Likes surf and long dinners. Her first child is due in November.
 - Start the page with the person and where they live, and put the same in its `description:`, because the index shows only that line. "Lives in: city, country" (plain words, as the owner would say them) is what you match places against; keep that phrase so a later look and the nightly dream find it. If the owner has not said where someone lives, leave it out; never guess from a name or a phone number.
 - The body says who they are, how close, how often the owner wants to be in touch (the owner's words), and what is going on in their life. Update the note when the owner tells you something new (a move, a baby, a new job). Use `expires:` only for something temporary.
 - Do not store what you read in a person's mail or messages. A note holds what the owner told you. Save an email address or a phone number only when the owner gave it to you for that person (find_person reads it back when a mail or an invitation needs it); never one you read in a mail or a message, and never an account detail.
+- For a person's address or phone that the notes lack, look in the owner's address book with `search_contacts` before you ask. Save someone there (`create_contact`, `update_contact`) only when the owner asks you to; a note is how you remember people.
 - Do NOT write "last spoke" into the note: it goes stale. Work it out when you need it (below).
 
 ## Where the owner is

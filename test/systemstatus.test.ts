@@ -33,7 +33,7 @@ test("a friend's broken connection says nothing in the owner's chat; it is held 
 test("a background approval that lapsed is told to the next run once, with its age: a chat turn is handed it as a look is", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const conv = owner();
-  const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };
+  const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
   const asked = request(async () => 7001, "Create event Dentist\nmore details", call, undefined, { background: true });
   t.mock.timers.tick(24 * 3_600_000);
   assert.equal((await asked).expired, true);

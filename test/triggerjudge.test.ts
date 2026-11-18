@@ -17,8 +17,8 @@ const fake = (decision: Verdict["decision"]) => {
 const setAuto = (mode: "auto" | "off") => void ((settings as { autoApprove: string }).autoApprove = mode);
 
 test("the same action, judged by the same fake judge, decides the same under a chat message, an owner wake-up, a group wake-up and a friend's wake-up; the judge sees the same action", async () => {
-  const CAL = "mcp__claude_ai_Google_Calendar__";
-  const tool = `${CAL}create_event`;
+  const CAL = "mcp__mailbird__";
+  const tool = `${CAL}create_calendar_event`;
   const input = { summary: "Pottery", startTime: "2026-10-21T15:00:00", endTime: "2026-10-21T16:00:00", calendarId: "primary" };
   const set = new Set([tool]);
   const cases = [

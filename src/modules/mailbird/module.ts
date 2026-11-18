@@ -44,6 +44,9 @@ export const mailbirdModule: ToolModule = {
     ...mb("read", "summarize_all_inboxes list_accounts list_folders list_conversations search_conversations get_message get_conversation list_attachments get_attachment_content get_send_status get_help get_ui_state"),
     ...mb("archive", "archive_conversation"),
     ...mb("restore", "move_conversation_to_inbox"),
+    // Takes a conversation out of one folder the user made (the undo of copy_conversation; Mailbird refuses the Inbox and a mail left in no folder): reversible filing, judged like any action.
+    // Not "restore", whose journal line says "back in the inbox" and which the owner's chat runs without asking.
+    ...mb("unfile", "remove_conversation_from_folder"),
     ...mb("select", "select_conversation"),
     // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS): trash, permanent delete of a conversation, spam, blocking a sender.
     ...mb("trash", "trash_conversation"),
@@ -61,9 +64,20 @@ export const mailbirdModule: ToolModule = {
     ...mb("send", "send_message_now", { view: "mbSend" }),
     // Mailbird's forward only saves a draft with no recipients (the skill: forward freely, never send_message_now unseen); the real send is send_message_now above.
     ...mb("draft", "forward_conversation", { view: "mbForward" }),
+    // The address book. A search is a read; saving or changing a contact is a routine write (judged, not free); deleting one syncs to the provider with no undo (the calendar's tools are mailbird/calendar.ts).
+    ...mb("read", "search_contacts"),
+    ...mb("contact-write", "create_contact update_contact"),
+    ...mb(DELETE_CONFIRM, "delete_contact"),
   ],
   free: ["read"],
-  titles: { [`${MB}discard_draft`]: { icon: "🗑️", title: "Delete draft", labels: { messageId: "Draft (message id)" } }, [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" } },
+  titles: {
+    [`${MB}discard_draft`]: { icon: "🗑️", title: "Delete draft", labels: { messageId: "Draft (message id)" } },
+    [`${MB}create_contact`]: { icon: "👤", title: "Save contact" },
+    [`${MB}update_contact`]: { icon: "👤", title: "Change contact", labels: { contactId: "Contact" } },
+    [`${MB}delete_contact`]: { icon: "🗑️", title: "Delete contact", labels: { contactId: "Contact" } },
+    [`${MB}remove_conversation_from_folder`]: { icon: "📁", title: "Take email out of folder", labels: { conversationId: "Email", folderId: "Folder" } },
+    [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" },
+  },
   untrustedPrefix: MB, // (mail is written by third parties: every read is untrusted by default)
   floor: {
     perRun: archiveGate, // at most ARCHIVE_MAX_PER_RUN archives per run (archivecap.ts)
@@ -80,11 +94,13 @@ export const mailbirdModule: ToolModule = {
       "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation",
       "list_attachments", "archive_conversation", "move_conversation_to_inbox", "select_conversation", "reply_to_conversation",
       "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
+      "list_calendars", "list_calendar_events", "create_calendar_event", "update_calendar_event", "respond_to_calendar_event", "delete_calendar_event", // (the calendar skill; create_calendar, update_calendar and delete_calendar stay hidden)
+      "search_contacts", "create_contact", "update_contact", // (delete_contact is left to MAILBIRD_TOOLS)
     ],
     valid: /^[a-z_]+$/,
     hint: "a Mailbird tool name like get_message",
   },
-  known: "archive_conversation copy_conversation create_draft delete_conversation_permanently discard_draft forward_conversation get_attachment_content get_conversation get_help get_message get_send_status get_ui_state list_accounts list_attachments list_conversations list_folders mark_all_as_read move_conversation move_conversation_to_inbox reply_all_to_conversation reply_to_conversation search_conversations select_conversation send_message_now send_self_briefing set_conversation_important set_conversation_read set_conversation_spam set_conversation_starred set_sender_blocked show_notification snooze_conversation summarize_all_inboxes trash_conversation unsubscribe_from_newsletter update_draft"
+  known: "archive_conversation copy_conversation create_calendar create_calendar_event create_contact create_draft delete_calendar delete_calendar_event delete_contact delete_conversation_permanently discard_draft forward_conversation get_attachment_content get_conversation get_help get_message get_send_status get_ui_state list_accounts list_attachments list_calendar_events list_calendars list_conversations list_folders mark_all_as_read move_conversation move_conversation_to_inbox remove_conversation_from_folder reply_all_to_conversation reply_to_conversation respond_to_calendar_event search_contacts search_conversations select_conversation send_message_now send_self_briefing set_conversation_important set_conversation_read set_conversation_spam set_conversation_starred set_sender_blocked show_notification snooze_conversation summarize_all_inboxes trash_conversation unsubscribe_from_newsletter update_calendar update_calendar_event update_contact update_draft"
     .split(" ")
     .map((t) => `${MB}${t}`),
   mail,

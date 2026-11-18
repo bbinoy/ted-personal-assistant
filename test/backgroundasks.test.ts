@@ -24,7 +24,7 @@ const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
 
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const sig = () => ({ signal: new AbortController().signal }) as never;
 const says = (decision: Verdict["decision"]) => async (): Promise<Verdict> => ({ decision, reason: "test" });
 const BROWSE_BG: RunKind = { who: "browse", attended: false };

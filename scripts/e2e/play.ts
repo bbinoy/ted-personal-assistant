@@ -122,7 +122,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const rec = new Recorder();
   const cal = new FakeCalendar(rec, o.zone, OWNER_EMAIL, world.calendar, () => nowMs, world.slowMs);
   const notion = new FakeNotion(rec, world.notion, world.notionPages);
-  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown, (world.mailAccounts ?? []).map((email) => ({ email })));
+  const mail = new FakeMail(rec, { email: OWNER_EMAIL, displayName: settings.owner }, world.mail, world.mailDown, (world.mailAccounts ?? []).map((email) => ({ email })), cal.defs); // (Mailbird holds the calendar too)
   const guard = newGuardState();
   blockRealMailbird(Mailbird, guard);
   // open_file's own connection to Mailbird (runtime.ts) is the one real-client call a run may make: its get_attachment_content is answered from the fake (any other call stays blocked and counted).
@@ -178,8 +178,8 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   }));
   setContinuation((_scope, prompt, provenance) => void continuations.push({ prompt, provenance }));
 
-  const fakes = { [cal.service.server]: cal.service.config, [mail.service.server]: mail.service.config, [notion.service.server]: notion.service.config };
-  const fakeTools = new Set([...cal.service.tools, ...mail.service.tools, ...notion.service.tools, ...(fb ? ["mcp__browse__browse"] : []), ...(world.mail?.some((m) => m.attachments?.length) ? ["mcp__files__open_file"] : [])]); // (open_file reads the fake's attachments, above)
+  const fakes = { [mail.service.server]: mail.service.config, [notion.service.server]: notion.service.config };
+  const fakeTools = new Set([...mail.service.tools, ...notion.service.tools, ...(fb ? ["mcp__browse__browse"] : []), ...(world.mail?.some((m) => m.attachments?.length) ? ["mcp__files__open_file"] : [])]); // (open_file reads the fake's attachments, above)
   const conv = owner();
   const turns: PlayResult["turns"] = [];
   const snapshots: Outcome["turns"] = [];
@@ -206,7 +206,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         turn = rec.turn = n;
       },
       tool: async (full, args) => {
-        const svc = [cal.service, mail.service, notion.service, ...(fb ? [fb.service] : [])].find((s) => s.tools.includes(full));
+        const svc = [mail.service, notion.service, ...(fb ? [fb.service] : [])].find((s) => s.tools.includes(full));
         if (!svc) throw new Error(`no fake has ${full}`);
         const r = await svc.call(full.slice(full.lastIndexOf("__") + 2), args);
         if (r.isError) throw new Error(r.text);

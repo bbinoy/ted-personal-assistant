@@ -14,7 +14,7 @@ test("a failed approval (no question, unreadable reply) is returned to the agent
   let asked = 0;
   const canUse = makeCanUseTool(async () => (asked++, { approved: false, failure: "no question could be written" }), OWNER_CHAT, undefined, noJudge);
   const call = { summary: "Dinner", startTime: "2026-11-20T19:00:00", attendees: ["a@example.com"] };
-  const tool = "mcp__claude_ai_Google_Calendar__create_event";
+  const tool = "mcp__mailbird__create_calendar_event";
   for (let i = 0; i < 2; i++) {
     const r = (await canUse(tool, call, opts)) as { behavior: string; message: string };
     assert.equal(r.behavior, "deny");
@@ -30,7 +30,7 @@ test("a failed approval (no question, unreadable reply) is returned to the agent
 
 test("the owner's words come back with a failed reading, so the agent can act on them", async () => {
   const canUse = makeCanUseTool(async () => ({ approved: false, feedback: "sounds fine, hmm", failure: "the owner's reply could not be read as a yes or no" }), OWNER_CHAT, undefined, noJudge);
-  const r = (await canUse("mcp__claude_ai_Google_Calendar__create_event", { summary: "Tea", startTime: "2026-11-21T15:00:00", attendees: ["b@example.com"] }, opts)) as { behavior: string; message: string };
+  const r = (await canUse("mcp__mailbird__create_calendar_event", { summary: "Tea", startTime: "2026-11-21T15:00:00", attendees: ["b@example.com"] }, opts)) as { behavior: string; message: string };
   assert.equal(r.behavior, "deny");
   assert.match(r.message, /sounds fine, hmm/);
 });

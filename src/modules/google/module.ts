@@ -1,8 +1,7 @@
-import { namesNoGuests } from "../../policy/guests.ts";
+import { namesNoGuests, notifyLine } from "../../policy/guests.ts";
 import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
 import { nativeView } from "../../policy/mailview.ts";
 import { archiveGate } from "../archivecap.ts";
-import { notifyLine } from "../calendar.ts";
 import { named } from "../gmail/module.ts";
 import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "../types.ts";
 

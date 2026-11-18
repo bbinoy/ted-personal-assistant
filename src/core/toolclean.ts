@@ -31,6 +31,14 @@ function inZone(o: Record<string, unknown>, zone: string): Record<string, unknow
   }
 }
 
+// Pure: a Mailbird event row (startUtc, endUtc, isAllDay) with `start` and `end` added: the wall times in `zone` with their offset, or plain dates for an all-day event (whose UTC
+// midnight is the date itself, not shifted). startUtc and endUtc stay: they are what the write tools take back.
+function withWall(o: Record<string, unknown>, zone: string): Record<string, unknown> {
+  if (typeof o.startUtc !== "string" || typeof o.endUtc !== "string") return o;
+  const wall = (v: string): string => (o.isAllDay === true ? v.slice(0, 10) : String(inZone({ dateTime: v }, zone).dateTime));
+  return { ...o, start: wall(o.startUtc), end: wall(o.endUtc) };
+}
+
 const countable = (key: string) => !["data", "base64", "type", "mimeType"].includes(key); // (binary content, and the tags that say what a block is)
 
 // Pure: a result whose text (every string but binary fields, in reading order) is longer than `max` characters keeps its first `max` characters; the last string of the result
@@ -70,7 +78,8 @@ const TOOL_OUTPUT_MAX_CHARS = 60_000;
 export function cleanToolOutput(tool: string, output: unknown, max: number = TOOL_OUTPUT_MAX_CHARS, zone?: string): ToolClean | undefined {
   const mail = MAIL_TOOL.test(tool);
   const gmail = /gmail/i.test(tool);
-  const shape = zone && CALENDAR_TOOL.test(tool) ? zone : undefined; // calendar results: every event time in the conversation's zone
+  const shape = zone && CALENDAR_TOOL.test(tool) ? zone : undefined; // Google calendar results: every event time in the conversation's zone
+  const wall = zone && /^mcp__mailbird__list_calendar_events$/.test(tool) ? zone : undefined; // Mailbird calendar rows: wall times in the conversation's zone beside the UTC ones
   const t = { removed: 0, cut: 0, hidden: 0 };
 
   const text = (s: string): string => {
@@ -108,7 +117,7 @@ export function cleanToolOutput(tool: string, output: unknown, max: number = TOO
         const stripped = o.attachments.map((a) => (a && typeof a === "object" ? Object.fromEntries(Object.entries(a).map(([k, x]) => [k, k === "content" || k === "data" ? "[attachment content withheld]" : x])) : a));
         return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, k === "attachments" ? walk(stripped, k) : walk(x, k)]));
       }
-      return Object.fromEntries(Object.entries(shape ? inZone(o, shape) : o).map(([k, x]) => [k, walk(x, k)]));
+      return Object.fromEntries(Object.entries(wall ? withWall(o, wall) : shape ? inZone(o, shape) : o).map(([k, x]) => [k, walk(x, k)]));
     }
     return v;
   };

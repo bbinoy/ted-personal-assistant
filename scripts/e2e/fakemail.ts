@@ -92,7 +92,8 @@ export class FakeMail {
 
   readonly accounts: Person[]; // account n is accounts[n - 1]
 
-  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = [], down = false, extra: Person[] = []) {
+  // `more`: tools of the same server (the calendar and the contacts, fakecalendar.ts); when the connector is down they error too.
+  constructor(rec: Recorder, owner: Person, seed: SeedMail[] = [], down = false, extra: Person[] = [], more: Record<string, ToolDef> = {}) {
     this.owner = owner;
     this.accounts = [owner, ...extra];
     for (const s of seed) {
@@ -252,6 +253,7 @@ export class FakeMail {
         },
       },
     };
+    Object.assign(defs, more);
     if (down) for (const d of Object.values(defs)) d.run = () => { throw new Error("MCP server mailbird is not connected"); }; // (the connector is down: every call errors)
     this.service = fakeService(MAILBIRD_SERVER, rec, defs);
   }

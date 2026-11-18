@@ -40,7 +40,7 @@
 - **Routines: one schedule mechanism.** Besides the morning brief, Ted sends a short evening wrap on weekdays (18:30: what got done, tomorrow, what still waits on you) and a weekly review on Fridays (16:30: wins, what slipped, next week, who to follow up); read-only, each a skill with a `schedule:` line, on/off with `ROUTINES_OFF`. You, a friend or a group can also ask in chat for your own ("every Monday at 9 summarise my week"): Ted saves it as a note with a `when:` line and tells you when it first runs. Code decides what is due and that it happens once; if your Mac slept through the time, it catches up when it wakes or skips and says so. `/status` shows every scheduled item's next run.
 - **Newsletter digest.** The top three nuggets, based on your preferences, in the daily brief.
 
-Meeting prep and the calendar need the Notion and Google Calendar connectors (the task list does not). Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
+Meeting prep needs the Notion connector and the calendar needs Mailbird (its calendar covers every account you have in it) or, without Mailbird, the Google Calendar connector; the task list needs neither. Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
 
 ## Setup
 

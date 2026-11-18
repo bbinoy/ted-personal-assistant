@@ -84,7 +84,7 @@ test("typed yes: the judge's own 'approve' is not enough, a doubtful reply stays
 });
 
 test("typed yes: an ordinary approval is unchanged (👍 text, ok and the judge still work)", async () => {
-  const d = request(async () => 500, "Create event", { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } }, undefined, {});
+  const d = request(async () => 500, "Create event", { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } }, undefined, {});
   await settle();
   assert.deepEqual(await answer("ok", () => {}, undefined, never), { outcome: "approved" });
   assert.deepEqual(await d, { approved: true });
@@ -150,7 +150,7 @@ test("the question must carry the merchant, the card host, the total with curren
 
 test("typed yes: with a payment and a calendar question open, a bare YES that the answer model aims at the payment pays nothing; the owner is asked which one", async () => {
   const pay = ask(600, true);
-  const cal = request(async () => 601, "Move the dentist", { tool: "mcp__claude_ai_Google_Calendar__update_event", input: { eventId: "e1" } }, undefined, {});
+  const cal = request(async () => 601, "Move the dentist", { tool: "mcp__mailbird__update_calendar_event", input: { eventId: "e1" } }, undefined, {});
   let paid = false;
   let moved = false;
   void pay.then((d) => (paid = d.approved));
@@ -174,8 +174,8 @@ test("typed yes: with a payment and a calendar question open, a bare YES that th
 });
 
 test("approvals are keyed by conversation: the same timestamp in another conversation is another question", async () => {
-  const a = request(async () => 700, "Create event A", { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "a" } }, undefined, { scope: "owner" });
-  const b = request(async () => 700, "Create event B", { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "b" } }, undefined, { scope: "group-9" });
+  const a = request(async () => 700, "Create event A", { tool: "mcp__mailbird__create_calendar_event", input: { summary: "a" } }, undefined, { scope: "owner" });
+  const b = request(async () => 700, "Create event B", { tool: "mcp__mailbird__create_calendar_event", input: { summary: "b" } }, undefined, { scope: "group-9" });
   await settle();
   assert.equal(answerReaction("👍", 700, "group-9"), "approved");
   assert.deepEqual(await b, { approved: true });

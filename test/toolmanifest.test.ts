@@ -17,7 +17,7 @@ const MANIFEST = allRows();
 const MAIL_PROVIDERS = mailProviders();
 const MB = "mcp__mailbird__";
 const GM = "mcp__claude_ai_Gmail__";
-const CAL = "mcp__claude_ai_Google_Calendar__";
+const CAL = "mcp__mailbird__";
 const N = "mcp__claude_ai_Notion__";
 
 test("manifest: a tool name appears in one entry only, and every entry names a provider and an action", () => {
@@ -32,7 +32,7 @@ test("manifest: a tool name appears in one entry only, and every entry names a p
 
 test("manifest: every entry classifies the same way for every run: not there (deny), free (allow) or judged (ask); the active mail provider only", () => {
   for (const e of MANIFEST) {
-    if (MAIL_PROVIDERS.includes(e.provider) && e.provider !== settings.mailProvider) continue;
+    if ((MAIL_PROVIDERS.includes(e.provider) && e.provider !== settings.mailProvider) || !entryFor(e.tool)) continue; // (a row of a module that is not loaded: Gmail's, Google Calendar's under Mailbird)
     for (const run of [OWNER_CHAT, OWNER_LOOK, BROWSE_RUN]) { // (a group's and a friend's have their own rules: capabilities.ts, below)
       const there = presentFor(e, run);
       assert.equal(availableFor(e.tool, run), there, `${e.tool} (${name(run)})`);
@@ -56,10 +56,10 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
     [`${MB}send_self_briefing`]: "judged",
     [`${MB}send_message_now`]: "judged",
     [`${MB}forward_conversation`]: "judged",
-    [`${CAL}list_events`]: "free",
-    [`${CAL}create_event`]: "judged",
-    [`${CAL}update_event`]: "judged",
-    [`${CAL}respond_to_event`]: "judged",
+    [`${CAL}list_calendar_events`]: "free",
+    [`${CAL}create_calendar_event`]: "judged",
+    [`${CAL}update_calendar_event`]: "judged",
+    [`${CAL}respond_to_calendar_event`]: "judged",
     "mcp__claude_ai_Google_Drive__share_file": "judged",
     [`${N}notion-fetch`]: "free",
     [`${N}notion-create-pages`]: "judged",
@@ -78,7 +78,7 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
     assert.ok(KINDS.some((k) => availableFor(tool, k)), tool);
   }
   // no per-run table: the web tools, the browse entry, send, draw and voice exist in every run of a conversation (its capabilities decide who has them), the notes' file tools too
-  for (const run of KINDS) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", "mcp__send__send", "mcp__draw__draw", "mcp__voice__voice", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, run), `${t} (${name(run)})`);
+  for (const run of KINDS) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", "mcp__send__send", "mcp__draw__draw", "mcp__voice__voice", `${MB}archive_conversation`, `${CAL}update_calendar_event`]) assert.ok(availableFor(t, run), `${t} (${name(run)})`);
   for (const run of KINDS) assert.ok(availableFor("Write", run), `Write (${name(run)})`);
 });
 
@@ -88,7 +88,7 @@ test("manifest: only the browse run has the browser's tools; reading mail or a p
   assert.ok(readsUntrusted("WebFetch"));
   assert.ok(readsUntrusted("mcp__browser__browser_snapshot"));
   assert.ok(readsUntrusted(`${MB}get_new_thing`)); // a read verb of the mail connector counts
-  assert.ok(readsUntrusted(`${CAL}list_events`), "every read is untrusted by default: an event's text is written by whoever invited the owner");
+  assert.ok(readsUntrusted(`${CAL}list_calendar_events`), "every read is untrusted by default: an event's text is written by whoever invited the owner");
   assert.ok(readsUntrusted(`${N}notion-fetch`) && readsUntrusted("mcp__claude_ai_Google_Drive__read_file_content") && readsUntrusted("mcp__claude_ai_Google_Docs__read_doc"));
   assert.ok(!readsUntrusted("mcp__weather__get_forecast"), "a module opts out: public data");
   assert.ok(!readsUntrusted(`${MB}archive_conversation`));
@@ -143,7 +143,7 @@ test("manifest: same action, same behaviour across mail providers", () => {
 
 test("manifest: every connector tool the model is given by default (a module's `hide.visible`) has an entry", () => {
   const hiding = registered().filter((m) => m.hide);
-  assert.deepEqual(hiding.map((m) => m.name).sort(), ["docs", "drive", "gmail", "mailbird", "notion"]);
+  assert.deepEqual(hiding.map((m) => m.name).sort(), ["calendar", "docs", "drive", "gmail", "mailbird", "notion"]);
   for (const m of hiding) for (const t of m.hide!.visible) assert.ok(allRows().some((r) => r.tool === m.hide!.prefix + t), `${m.name}: ${t}`);
 });
 
@@ -152,7 +152,7 @@ test("manifest: the group's rules are not flags and stay as they were", () => {
   assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
   assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "ask");
   assert.equal(classify(`${MB}send_message_now`, {}, GROUP_CHAT), "deny");
-  assert.equal(classify(`${CAL}create_event`, {}, GROUP_CHAT), "deny");
+  assert.equal(classify(`${CAL}create_calendar_event`, {}, GROUP_CHAT), "deny");
   assert.equal(classify("Read", { file_path: `${dir}/x.md` }, GROUP_CHAT), "deny");
 });
 

@@ -19,7 +19,7 @@ import { BROWSE_RUN, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "shell", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "files", "weather", "draw", "tasks", "voice", "memory", "people", "meetings", "shell", "browse", "browser", "intake", "tenants", "builtin", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -33,7 +33,9 @@ test("modules: names are unique, a tool belongs to one module, and a row carries
 test("modules: every module but the mail providers is always loaded; in the mail slot only the one MAIL_PROVIDER names, none for none", () => {
   for (const provider of ["mailbird", "gmail", "none"]) {
     const l = names(loaded(provider));
-    assert.deepEqual(l.filter((n) => !mailProviders().includes(n)), CORE, provider);
+    // the calendar goes with the mail client: Mailbird's own with Mailbird, the Google Calendar connector with Gmail or without mail
+    const withCalendar = [...CORE.slice(0, CORE.indexOf("builtin") + 1), provider === "mailbird" ? "mailbird-calendar" : "calendar", ...CORE.slice(CORE.indexOf("builtin") + 1)];
+    assert.deepEqual(l.filter((n) => !mailProviders().includes(n)), withCalendar, provider);
     assert.deepEqual(l.filter((n) => mailProviders().includes(n)), provider === "none" ? [] : [provider], provider);
   }
   assert.deepEqual(mailProviders(), ["mailbird", "gmail"]);
@@ -48,7 +50,9 @@ test("modules: the manifest is the rows of the loaded modules; a provider that i
   assert.equal(entryFor(`${MB}get_message`, "none"), undefined);
   assert.ok(entryFor(`${GM}reply`, "gmail"));
   assert.deepEqual(manifest("none").filter((e) => e.provider === "mailbird" || e.provider === "gmail"), []);
-  assert.equal(manifest("mailbird").length + allRows().filter((e) => e.provider === "gmail").length, allRows().length);
+  const googleCalendar = allRows().filter((e) => e.tool.startsWith("mcp__claude_ai_Google_Calendar__"));
+  assert.ok(googleCalendar.length && manifest("gmail").some((e) => googleCalendar.includes(e)) && manifest("none").some((e) => googleCalendar.includes(e)) && !manifest("mailbird").some((e) => googleCalendar.includes(e)), "the Google calendar rows load without Mailbird only");
+  assert.equal(manifest("mailbird").length + allRows().filter((e) => e.provider === "gmail").length + googleCalendar.length, allRows().length);
   assert.equal(classify(`${GM}reply`, {}, OWNER_CHAT), "ask"); // the default provider is Mailbird: the Gmail connector's tools are unlisted
 });
 
@@ -132,7 +136,7 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review", "workbench"].map(P);
+  const mailbird = ["daily-brief", "mail", "mailbird", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review", "expenses", "workbench"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("mail"), P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));

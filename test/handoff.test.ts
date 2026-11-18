@@ -29,7 +29,7 @@ import { BROWSE_RUN, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 // The approval hand-off (docs/SAFETY.md): a question that needs a yes does not hold its turn. Fakes only: no model, a temporary data folder (test/setup.ts).
 (settings as { warm: boolean }).warm = false;
 
-const CAL = "mcp__claude_ai_Google_Calendar__create_event";
+const CAL = "mcp__mailbird__create_calendar_event";
 const SEND = "mcp__mailbird__send_message_now";
 const opts = { signal: new AbortController().signal } as never;
 const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test" });

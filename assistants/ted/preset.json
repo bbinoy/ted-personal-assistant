@@ -15,6 +15,7 @@
       { "name": "stay-in-touch" },
       { "name": "evening-wrap" },
       { "name": "weekly-review" },
+      { "name": "expenses" },
       { "name": "setup", "required": true }
     ],
     "order": ["daily-brief", "mail", "mailbird", "gmail", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "how-ted-works", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]
