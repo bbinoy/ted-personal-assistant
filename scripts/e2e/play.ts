@@ -356,6 +356,13 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
         await fireReminders(pipeline as never, conv, o.now); // (the wake tick claims a reminder that came due, which is what wakes the look with its reason)
         const outcome = await hb.look(conv, lookState(ledgerEntries(conv.logFile)), o.now);
         if (outcome !== "silent" && outcome !== "posted") error = `the look ended ${outcome}`;
+        // A question the look asked and the owner answered with a yes ends in a continuation turn, as in a chat (handoff.ts).
+        for (;;) {
+          await Promise.all([...inflight]);
+          const next = continuations.shift();
+          if (!next) break;
+          await chat("", next.prompt, next);
+        }
         snapshot("(a look)");
       } else {
         for (const [i, message] of c.turns.entries()) {
