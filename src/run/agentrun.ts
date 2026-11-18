@@ -20,8 +20,10 @@ import { failure } from "../tenants/errors.ts";
 import { isNotePath, noteSavedHint, writeIndex } from "../memory/notes.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
-import { createsOf } from "../policy/toolmanifest.ts";
-import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
+import { createsOf, entryFor } from "../policy/toolmanifest.ts";
+import { forgetGuests } from "../approvals/seennames.ts";
+import { namesPeople } from "../policy/guests.ts";
+import { callGuests, callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
 import { approveIn, editedNote, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
@@ -147,7 +149,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
         writeIndex(notes, new Date(), opts.memory?.zone); // a note changed: the index is code's, made again from the notes (whatever the model wrote there is replaced)
       }
     }
-    if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input), callGuests(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    if (/^calendar-/.test(entryFor(tool)?.action ?? "") && namesPeople(input)) forgetGuests(conversation, input); // a write that names people on an event: its recorded guest count is stale
     void noteDone({ conv: conversation, run, source: auditSource(opts.kind), tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
   };

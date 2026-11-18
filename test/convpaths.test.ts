@@ -51,7 +51,7 @@ test("layout: every conversation has the same files in one folder; instance and 
     assert.ok(!Object.values(L.conv(id)).some((p) => p.includes(GROUP_ID)));
   }
   assert.deepEqual(Object.fromEntries(names("owner")), {
-    dir: "", db: "assistant.db", dbDamaged: "assistant.db.damaged", messages: "messages.jsonl", notes: "notes", notesBackup: "notes-backup", search: "search.sqlite", voices: "voices",
+    dir: "", db: "assistant.db", dbDamaged: "assistant.db.damaged", messages: "messages.jsonl", notes: "notes", notesBackup: "notes-backup", search: "search.sqlite", voices: "voices", files: "files",
     tenantJson: "tenant.json", meta: "meta.json",
   });
   for (const [k, v] of Object.entries(L.instance)) if (!["installed", "openbao", "ttsQwen"].includes(k)) assert.ok(v === L.instance.dir || v.startsWith(L.instance.dir + sep), `${k} is in instance/`);

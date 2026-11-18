@@ -23,7 +23,7 @@ A throwaway Linux box (a small virtual machine) for the work that words and read
 
 ## How
 
-1. Put the input in the box: files you opened with `open_file` (file1, file2...) are already in `/work/in`; text from the chat or a mail you write there with a heredoc (`cat > /work/in/data.csv <<'EOF'`).
+1. Put the input in the box: files you kept in this turn are already in `/work/in`; a file you hold from an earlier turn (the status lists them) goes there when your command names its id (`# file3` in the command is enough); text from the chat or a mail you write there with a heredoc (`cat > /work/in/data.csv <<'EOF'`).
 2. Look before you compute: `head`, `file`, `pdftotext | head`. Then run the real command. Several short commands beat one long script you cannot check. A command is stopped after 120 s and long output is cut (print a summary, not the whole file).
 3. Results: a number or a table goes in your answer in words. A file goes in `/work/out`; it comes back with an id (file3...) and you send it with `send(file: "file3", caption)`. To look at a PDF or picture yourself (a chart you made, a form you filled), run with `show: "<path>"`.
 4. Check the result against the source (does the total equal what the document says, did the page count change) before you report it. Never report a figure the box did not compute.

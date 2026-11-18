@@ -297,13 +297,13 @@ async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, d
     // The screenshots move into the turn of the conversation that asked (removed when it ends); a wake-up has none to give them to.
     const shots = ctx.key ? adoptShots(ctx.key, guard.kept, shotCaptions(r.structured)) : [];
     if (shots.length) result.shots = shots.map((s) => ({ id: s.id, caption: s.caption }));
-    // The PDFs the worker kept (and listed with a caption) move in as files of the turn (file1...), like a mail attachment opened with open_file.
+    // The PDFs the worker kept (and listed with a caption) move in as files of the conversation (file1...), like a mail attachment opened with open_file.
     const captions = fileCaptions(r.structured);
     const names = fileNames(r.structured);
     const files = ctx.key ? guard.pdfs.flatMap((p) => { const h = p.id in captions ? adoptFile(ctx.key!, p.bytes, names[p.id] ?? p.name) : undefined; return h ? [{ id: h.id, caption: captions[p.id]!, name: h.name }] : []; }) : [];
     if (files.length) result.files = files;
     const dropped = Object.keys(captions).filter((id) => guard.pdfs.some((p) => p.id === id)).length - files.length;
-    if (dropped > 0) result.answer = clean1(`${result.answer} (${dropped} more PDF${dropped === 1 ? "" : "s"} could not be kept: a turn holds at most ${MAX_FILES} files. Send or attach these, then ask again for the rest.)`, ANSWER_MAX);
+    if (dropped > 0) result.answer = clean1(`${result.answer} (${dropped} more PDF${dropped === 1 ? "" : "s"} could not be kept: a turn keeps at most ${MAX_FILES} new files. Send or attach these, then ask again for the rest.)`, ANSWER_MAX);
     log("browse_run", result.status, "browse", { mode: ctx.mode, costUsd: r.costUsd, seconds: Math.round((Date.now() - started) / 1000), steps: guard.steps, commits: guard.commits, denied: guard.denied });
     return resultMessage(result);
   } catch (e) {

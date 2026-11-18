@@ -10,6 +10,7 @@ import { PLUGIN } from "../core/preset.ts";
 import { takeWelcome } from "../core/welcome.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
+import { HELD_FILE_DAYS, listHeld } from "../modules/send/shots.ts";
 import { brokenText, scheduledIn } from "../modules/tasks/routinelist.ts";
 
 import { reminderFacts } from "../tasks/remind.ts";
@@ -60,6 +61,16 @@ function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): strin
   if (posts.length === 0) return "";
   const lines = posts.map((e) => `[${dayIn(new Date(e.at), zone)} ${timeIn(new Date(e.at), zone)}] ${oneLine(e.text, OWN_POST_CHARS)}`);
   return `Your own posts here in the last ${OWN_POSTS_DAYS} days (newest first):\n${fence("own_posts", lines.join("\n"))}\nDo not repeat a fact, joke, quote or idea you posted in the last ${OWN_POSTS_DAYS} days; a recurring post (daily fact, pep talk) must be new each time.`;
+}
+
+// The files the conversation holds (modules/send/shots.ts), the newest FILES_MAX, one line each: the id the send tool and a mail draft take, the name, the size and when it was kept. "" when none.
+const FILES_MAX = 8;
+function heldFilesBlock(key: string, zone: string): string {
+  const all = listHeld(key);
+  if (!all.length) return "";
+  const kb = (n: number) => (n < 1000 ? `${n} B` : n < 1_000_000 ? `${Math.round(n / 1000)} kB` : `${(n / 1_000_000).toFixed(1)} MB`);
+  const lines = all.slice(-FILES_MAX).reverse().map((f) => `${f.id} "${f.name}" ${kb(f.size)}, kept ${dayIn(new Date(f.at), zone)} ${timeIn(new Date(f.at), zone)}`);
+  return `Files you hold in this conversation (${HELD_FILE_DAYS} days; send(file: id), an id in a mail draft's attachments, or an id named in a workbench command):\n${lines.join("\n")}${all.length > FILES_MAX ? `\n(${all.length - FILES_MAX} older ones not listed)` : ""}`;
 }
 
 // Questions that were declined or lapsed unanswered (approvals.ts lapsedIn: background ones, and every question the hand-off left to the database, handoff.ts) and were not yet told to a run of this conversation: one line each, with how long ago (the label is the action as the approval details describe it).
@@ -160,7 +171,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts].filter(Boolean);
-  const status = [looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), settings.tasksPageUrl && capabilitiesOf(conv).has("login") ? `Your owner's task page (tasks grouped like /tasks, with tick-off): ${settings.tasksPageUrl}` : "", routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), looker.own ? loginExpiryFact(now, zone, FIXES.login.fix) : "", lapsed].filter(Boolean);
+  const status = [heldFilesBlock(conv.key, zone), looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), settings.tasksPageUrl && capabilitiesOf(conv).has("login") ? `Your owner's task page (tasks grouped like /tasks, with tick-off): ${settings.tasksPageUrl}` : "", routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), looker.own ? loginExpiryFact(now, zone, FIXES.login.fix) : "", lapsed].filter(Boolean);
   let settled = false;
   return {
     blocks,

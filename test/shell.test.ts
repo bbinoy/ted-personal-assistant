@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Box, BOX_PREFIX, OUT_CUT, sweepBoxes, toolboxCheck, TOOLBOX_IMAGE, type Ran, type Runner } from "../src/modules/shell/box.ts";
 import { runNow, stopBox } from "../src/modules/shell/shelltool.ts";
 import { delegationHook, expertSetup } from "../src/run/delegation.ts";
-import { adoptFile, heldFiles, loadFile } from "../src/modules/send/shots.ts";
+import { adoptFile, listHeld, loadFile } from "../src/modules/send/shots.ts";
 import { withSend } from "../src/modules/send/send.ts";
 import { classify } from "../src/policy/policy.ts";
 import { readsUntrusted } from "../src/policy/toolmanifest.ts";
@@ -131,7 +131,7 @@ test("run: the held files go in, a command runs, new files come out as file ids 
     const again = (await runNow(key, { command: "true" }, vm.runner)).content.at(-1) as { text: string };
     assert.doesNotMatch(again.text, /file3|put in/);
     assert.equal(vm.calls.filter((c) => c[0] === "run").length, 1);
-    assert.equal(heldFiles(key).length, 2);
+    assert.equal(listHeld(key).length, 2);
   });
   assert.ok(vm.calls.some((c) => c[0] === "stop"), "the box ends with the turn");
   const rows = readAudit((e) => e.tool === "shell");
@@ -139,6 +139,18 @@ test("run: the held files go in, a command runs, new files come out as file ids 
   const meta = rows[0]!.meta as Record<string, unknown>;
   assert.deepEqual(Object.keys(meta).sort(), ["conversation", "exit", "filesIn", "filesOut", "killed", "ms", "outBytes"]);
   assert.ok(!JSON.stringify(rows).includes(secret), "the command text is never audited");
+});
+
+test("run: a file kept in an earlier turn is put in the box when the command names its id, and only then", async () => {
+  const key = "shell-later";
+  adoptFile(key, Buffer.from("old"), "claim.txt"); // (an earlier turn: no withSend, the turn's list is cleared by the next turn's end)
+  await withSend(key, async () => "ok", async () => undefined);
+  const vm = fakeVm({ say: () => text("ok\n") });
+  await withSend(key, async () => "ok", async () => {
+    assert.doesNotMatch(((await runNow(key, { command: "ls /work/in" }, vm.runner)).content.at(-1) as { text: string }).text, /put in/);
+    assert.match(((await runNow(key, { command: "cat /work/in/claim.txt # file1" }, vm.runner)).content.at(-1) as { text: string }).text, /put in \/work\/in: claim\.txt \(file1\)/);
+    assert.equal(vm.files.get("/work/in/claim.txt")?.toString(), "old");
+  });
 });
 
 test("run: output files are held under the turn's one cap (10 files, 20 MB each); past it the result says so plainly", async () => {
@@ -153,7 +165,7 @@ test("run: output files are held under the turn's one cap (10 files, 20 MB each)
     assert.match(t, /file10: ok\.txt/);
     vm.out.set("late.txt", Buffer.from("y"));
     const full = ((await runNow(key, { command: "true" }, vm.runner)).content.at(-1) as { text: string }).text;
-    assert.match(full, /late\.txt: not kept, this turn already holds 10 files .*another turn/);
+    assert.match(full, /late\.txt: not kept, this turn already kept 10 new files .*another turn/);
   });
 });
 

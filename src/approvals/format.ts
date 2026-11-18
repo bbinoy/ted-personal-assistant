@@ -30,7 +30,7 @@ function stamp(value: unknown): Stamp | undefined {
 function when(start: unknown, end: unknown, zone: unknown): string | undefined {
   const s = stamp(start);
   const e = stamp(end);
-  const tz = typeof zone === "string" && zone ? ` (${zone})` : "";
+  const tz = typeof zone === "string" && zone ? ` (${clip(zone, 60)})` : ""; // (clipped to one line: a zone is call or invite data, and the lines below it are code's)
   if (!s) return e ? `ends ${e.day}${e.time ? `, ${e.time}${tz}` : ""}` : undefined; // a change that moves only the end
   if (!s.time) return e && e.day !== s.day ? `${s.day} to ${e.day}, all day` : `${s.day}, all day`;
   if (!e) return `${s.day}, ${s.time}${tz}`;
@@ -157,7 +157,7 @@ export function describeCall(tool: string, input: Record<string, unknown>, draft
     if (typeof value === "string" && SKIP_VALUES.has(value)) continue;
     if (value === false && SKIP_WHEN_FALSE.has(key)) continue;
     if (Array.isArray(value) && value.length === 0) continue;
-    lines.push(`${meta?.labels?.[key] ?? LABELS[key] ?? key}: ${show(key, value)}`);
+    lines.push(`${meta?.labels?.[key] ?? LABELS[key] ?? clip(key, 60)}: ${show(key, value)}`);
   }
   return lines.join("\n");
 }

@@ -94,8 +94,8 @@ const failed = (key: string) => {
   for (const [k, f] of failures) if (now - f.at >= DONE_WINDOW_MS) failures.delete(k);
   failures.set(key, { n: (failures.get(key)?.n ?? 0) + 1, at: now });
 };
-// A mail draft's `attachments: ["file1"]` names a file of THIS turn (open_file, a browse run's PDF), never a path (paths stay never-allowed). Only after every check, the id becomes the
-// turn folder's copy of that file, which the mail client reads; an id that is not this turn's is left as it is (the client refuses it).
+// A mail draft's `attachments: ["file1"]` names a file THIS conversation holds (open_file, a browse run's PDF, a workbench output, what the person sent), never a path (paths stay never-allowed).
+// Only after every check, the id becomes the stored file's own path, which the mail client reads; an id the conversation does not hold is left as it is (the client refuses it).
 const withHeldFiles = (conversation: string, input: Record<string, unknown>): Record<string, unknown> =>
   Array.isArray(input.attachments) && input.attachments.some((a) => typeof a === "string" && /^file[1-9]\d*$/.test(a))
     ? { ...input, attachments: input.attachments.map((a) => (typeof a === "string" && /^file[1-9]\d*$/.test(a) ? (heldPath(conversation, a) ?? a) : a)) }
