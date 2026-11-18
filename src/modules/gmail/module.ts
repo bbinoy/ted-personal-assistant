@@ -34,6 +34,7 @@ const briefHow = (): string =>
 const mail: MailSlot = {
   brief: { how: briefHow, tool: () => (settings.briefEmail && settings.mailSelfAddress ? `${GMAIL_PREFIX}send_message` : undefined) },
   chat: { skill: "ted-personal-assistant:gmail", name: "Gmail", find: "its id is the draftId", send: "send_message with that draftId, or reply / forward with the exact text", edit: "update_draft" },
+  ownAddresses: async () => (settings.mailSelfAddress ? [settings.mailSelfAddress] : []), // the owner's address, set in the .env (settings.ts)
   readBack: async (kind, input) => {
     if (kind === "gmSend" && typeof input.draftId === "string" && readers) return readers.draft(input.draftId).catch(() => undefined);
     if (kind === "gmReply" && typeof input.messageId === "string" && readers) return readers.original(input.messageId).catch(() => undefined);

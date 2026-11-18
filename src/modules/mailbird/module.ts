@@ -13,6 +13,9 @@ const mb = rowsOf(MB, "mailbird", "mail");
 // Set by runtime.ts when the app starts: reads a draft back from Mailbird, for the approval of a send.
 let draftReader: ((messageId: number) => Promise<DraftView | undefined>) | undefined;
 export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn);
+// Set by runtime.ts: the person's own accounts (cached list_accounts), for the recipient floor.
+let accountsReader: (() => Promise<readonly string[]>) | undefined;
+export const setAccountsReader = (fn: typeof accountsReader) => void (accountsReader = fn);
 
 const mail: MailSlot = {
   brief: { tool: () => `${MB}send_self_briefing`, how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
@@ -22,6 +25,7 @@ const mail: MailSlot = {
     // An unreadable draft refuses the send (permissions.ts), so the reason is logged here: the owner sees "could not be read back", the log says why.
     return kind === "mbSend" && draftReader && Number.isFinite(id) ? draftReader(id).catch((e) => (console.error(`mailbird: draft ${id} could not be read back: ${(e as Error)?.message?.slice(0, 200)}`), undefined)) : undefined;
   },
+  ownAddresses: async () => (await accountsReader?.()) ?? [],
   views: {
     mbSend: (_i, draft) => draft && { action: "send", ...draft }, // a send of an existing draft has no content in its input: it is shown from the draft as read back, or not at all
     mbDraft: (i) => nativeView("draft", i),

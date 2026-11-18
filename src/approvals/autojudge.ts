@@ -50,15 +50,16 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
 // or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
 // the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Mara" covers the
 // Mara of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
-// have seen the exact address, and whether their reply approves it is the judge's call, the floor only stops blocking). Only that one message, never older ones. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
+// have seen the exact address, and whether their reply approves it is the judge's call, the floor only stops blocking). Only that one message, never older ones. An address that is exactly one of the person's own mail accounts (`own`: what the mail provider itself reports, MailTools.ownAddresses) is known like a note from before the run. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
 // the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
-export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = []): string[] {
+export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = [], own: readonly string[] = []): string[] {
   const text = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n");
   const shown = p?.kind === "owner" || p?.kind === "member" ? p.repliedTo ?? "" : "";
   const words = `${text}\n${shown}`.toLowerCase();
   const byName = addressesNamedIn(text, known);
   const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
-  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !words.includes(a) && !byName.has(a) && !(view.action === "reply" && !named.has(a)));
+  const mine = new Set(own.map((a) => a.toLowerCase()));
+  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !mine.has(a.toLowerCase()) && !words.includes(a) && !byName.has(a) && !(view.action === "reply" && !named.has(a)));
 }
 
 // Pure: does this mode let a verdict skip the phone?
