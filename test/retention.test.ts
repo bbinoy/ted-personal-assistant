@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { layout, type Layout } from "../src/core/convpaths.ts";
 import { clearRetention, isDue, readRetentionState, registerRetention, retentionRules, retentionSummary, retentionTrigger, runRetention } from "../src/core/retention.ts";
-import { auditRule, expiredNotesRule, expiryOf, notesBackupRule, openbaoRule, pruneAuditText, shoreRule, signalAttachmentRule, tmpRule } from "../src/heartbeat/retentionrules.ts";
+import { auditRule, expiredNotesRule, heldFilesRule, expiryOf, notesBackupRule, openbaoRule, pruneAuditText, shoreRule, signalAttachmentRule, tmpRule } from "../src/heartbeat/retentionrules.ts";
 import { snapshotsOf, undoLatest } from "../src/memory/dreamapply.ts";
 import { loadSettings } from "../src/core/settings.ts";
 
@@ -347,4 +347,23 @@ test("settings: the windows have the documented defaults and RETENTION=off", () 
   const t = loadSettings({ RETENTION: "off", AUDIT_RETENTION_DAYS: "30", SIGNAL_ATTACHMENT_DAYS: "14" });
   assert.deepEqual([t.retention, t.auditRetentionDays, t.signalAttachmentDays], [false, 30, 14]);
   assert.throws(() => loadSettings({ AUDIT_RETENTION_DAYS: "0" }), /AUDIT_RETENTION_DAYS/);
+});
+
+test("held files: swept by age in every conversation's own folder, nothing else", () => {
+  const { L } = root();
+  const own = (conv: string) => L.conv(conv).files;
+  const old = put(join(own("owner"), "file1", "old.pdf"), "x", 40);
+  const young = put(join(own("owner"), "file2", "young.pdf"), "x", 10);
+  const friendOld = put(join(own("friend-mara"), "file1", "old.pdf"), "xy", 40);
+  const notes = put(join(L.conv("owner").notes, "n.md"), "x", 400);
+  utimesSync(join(own("owner"), "file1"), ago(40), ago(40));
+  utimesSync(join(own("owner"), "file2"), ago(10), ago(10));
+  utimesSync(join(own("friend-mara"), "file1"), ago(40), ago(40));
+  const rule = heldFilesRule(() => L);
+  assert.equal(rule.run(NOW, { dryRun: true }).removed, 2);
+  assert.equal(existsSync(old), true);
+  const r = rule.run(NOW, { dryRun: false });
+  assert.deepEqual([r.removed, r.freedBytes], [2, 3]);
+  assert.deepEqual([old, friendOld].map(existsSync), [false, false]);
+  assert.deepEqual([young, notes].map(existsSync), [true, true]);
 });

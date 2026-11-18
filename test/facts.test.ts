@@ -165,3 +165,21 @@ test("the owner's runs, chat turn and look alike, are told the task page address
     s.tasksPageUrl = undefined;
   }
 });
+
+test("the conversation's held files are listed in the facts of a chat turn and of a look alike: the newest few, one line each, only its own", async () => {
+  const { adoptFile, dropShots } = await import("../src/modules/send/shots.ts");
+  const conv = group(`facts-group-${++n}`);
+  const other = group(`facts-group-${++n}`);
+  for (let i = 1; i <= 10; i++) {
+    adoptFile(conv.key, Buffer.from(`f${i}`), `doc${i}.txt`);
+    if (i === 5) dropShots(conv.key); // (a new turn: the per-turn cap is on new files)
+  }
+  adoptFile(other.key, Buffer.from("x"), "theirs.txt");
+  for (const attended of [true, false]) {
+    const block = F.factsFor(conv, new Date(NOW), attended).status.find((b) => /Files you hold/.test(b))!;
+    assert.match(block, /file10 "doc10\.txt" 3 B, kept /);
+    assert.match(block, /\(2 older ones not listed\)/);
+    assert.ok(!/theirs\.txt|doc1\.txt|file2 /.test(block), block);
+    assert.equal(block.split("\n").length, 1 + 8 + 1, "capped: a few lines");
+  }
+});

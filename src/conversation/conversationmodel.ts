@@ -94,7 +94,7 @@ export const tenant = (id: string): Conversation => {
 // ---- what a conversation may do: capabilities.ts capabilitiesOf (its record, the instance's switches and what is set up), not its kind ----
 // (the `login` capability says it runs on the instance's own Claude login; speakerOf and zoneOf: tenants/tenants.ts)
 
-// A message with its picture or document, once prepared (the bytes are held for this turn only; src/run/image.ts).
+// A message with its picture or document, once prepared (the bytes go to the model for this turn; keepSent in modules/files also keeps them as a file of the conversation; src/run/image.ts).
 export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; document?: Document; edit?: { before?: string } }; // voice: the text is a transcript of a voice message (set by hear); edit: an edit of a message that was answered already, with the version it replaces
 
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };
