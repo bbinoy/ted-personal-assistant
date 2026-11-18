@@ -70,6 +70,7 @@ export interface ConvPaths {
   notesBackup: string; // snapshots of the notes made by the dream
   search: string; // the search index (a cache, rebuilt when wrong)
   voices: string; // cloned voices (<voices>/<name>/, active.json: packages/speech scopeRoot)
+  files: string; // the files Ted holds for the conversation (file<N>/<name>: a mail attachment, a saved page, a workbench output, what the person sent), swept by age (modules/send/shots.ts)
   tenantJson: string; // a friend's typed overrides
   meta: string; // a GROUP's id and name: the only place the raw id is written (the folder name is its hash); identity, not state, so it stays a file when assistant.db is set aside
 }
@@ -157,6 +158,7 @@ export function layout(root: string): Layout {
         notesBackup: join(dir, "notes-backup"),
         search: join(dir, "search.sqlite"),
         voices: join(dir, "voices"),
+        files: join(dir, "files"),
         tenantJson: join(dir, "tenant.json"),
         meta: join(dir, "meta.json"),
       };

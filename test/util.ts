@@ -1,5 +1,8 @@
 // Small helpers several test files used to define for themselves.
 
+import { rmSync } from "node:fs";
+import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
+import { dropShots } from "../src/modules/send/shots.ts";
 import type { RunKind } from "../src/core/runkind.ts";
 import { availableFor, isFree, type MailProvider } from "../src/policy/toolmanifest.ts";
 import type { JudgeSetup } from "../src/approvals/permissions.ts";
@@ -26,3 +29,9 @@ export const CHAT: JudgeSetup = { provenance: scopeOf("owner").read, conversatio
 
 // The provenance of a job with fixed text (RunOptions.provenance).
 export const standing = (task: string): JudgeSetup["provenance"] => () => ({ kind: "standing", task });
+
+// A conversation starts clean: no held files (its folder under the data root) and no pictures of a turn.
+export const dropFiles = (key: string): void => {
+  rmSync(convPaths(convIdOfKey(key)).files, { recursive: true, force: true });
+  dropShots(key);
+};

@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { PDFDocument, PDFHexString, PDFName, StandardFonts } from "pdf-lib";
 import { documentNote, prepareFile, type AudioTools } from "../src/conversation/document.ts";
 import { PDF_WINDOW_PAGES } from "../src/conversation/pdfdoc.ts";
-import { createFilesServer, keepLargePdfs, openedBlocks, openNow } from "../src/modules/files/filetool.ts";
+import { createFilesServer, keepSent, openedBlocks, openNow } from "../src/modules/files/filetool.ts";
 import { fetchPublic, type Fetch } from "../src/modules/files/webfile.ts";
-import { dropShots, loadFile } from "../src/modules/send/shots.ts";
+import { loadFile } from "../src/modules/send/shots.ts";
+import { dropFiles } from "./util.ts";
 import { userInput } from "../src/run/image.ts";
 
 // open_file for every source and size of PDF: PDFs are generated here with pdf-lib (no fixtures). A short one is read whole, a long one gives facts, a search and page ranges.
@@ -49,7 +50,7 @@ test("a short PDF is read whole, as before: one line, then the swap gives the wh
   assert.match(text(r), /^file1: small\.pdf, PDF, 3 pages\. Send it/);
   const blocks = (await openedBlocks(KEY, text(r))) as { type: string; source?: { data: string } }[];
   assert.equal(await pageCount(Buffer.from(blocks[0]!.source!.data, "base64")), 3);
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 test("a long PDF gives facts and an outline, not the document; nothing is swapped in", async () => {
@@ -61,7 +62,7 @@ test("a long PDF gives facts and an outline, not the document; nothing is swappe
   assert.match(t, /Annex B Energy - page 33/);
   assert.match(t, /<pdf_outline>/);
   assert.equal(await openedBlocks(KEY, t), undefined);
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 test("search finds the right pages, case-insensitive, several words, capped, with snippets fenced", async () => {
@@ -78,7 +79,7 @@ test("search finds the right pages, case-insensitive, several words, capped, wit
   const wide = await makePdf(40, Object.fromEntries(Array.from({ length: 40 }, (_, i) => [i + 1, "the word tea"])));
   await openNow(KEY, { url: "https://example.org/w.pdf" }, undefined, web(wide));
   assert.match(text(await openNow(KEY, { file: "file2", query: "tea" })), /40 pages match, the best 15 shown/);
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 test("a page range returns a document of only those pages; bad ranges are refused", async () => {
@@ -92,20 +93,20 @@ test("a page range returns a document of only those pages; bad ranges are refuse
   assert.equal(await pageCount(Buffer.from(((await openedBlocks(KEY, text(again))) as { source: { data: string } }[])[0]!.source.data, "base64")), 1);
   for (const bad of ["0-3", "5-2", "58-61", "abc", `1-${PDF_WINDOW_PAGES + 1}`]) assert.equal((await openNow(KEY, { file: "file1", pages: bad })).isError, true, bad);
   assert.equal((await openNow(KEY, { file: "file9", pages: "1" })).isError, true, "no such file");
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 test("a scanned-like PDF (no text) says so, and a search says to read page ranges", async () => {
   const r = await openNow(KEY, { url: "https://example.org/scan.pdf" }, undefined, web(await makePdf(PDF_WINDOW_PAGES + 5)));
   assert.match(text(r), /Text layer: none \(scanned/);
   assert.match(text(await openNow(KEY, { file: "file1", query: "anything" })), /no text layer/);
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 test("the word search and pages only work on a PDF", async () => {
   await openNow(KEY, { url: "https://example.org/n.txt" }, undefined, web(Buffer.from("plain words"), "n.txt"));
   assert.match(text(await openNow(KEY, { file: "file1", query: "plain" })), /not a PDF/);
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
 // ---- the web ----
@@ -179,21 +180,26 @@ test("chat: a PDF over the window is not put in the prompt; it becomes file1 wit
   const doc = await prepareFile(onDisk(await longPdf()), "Report.pdf", audio);
   assert.equal(doc.kind, "pdf");
   assert.ok(doc.kind === "pdf" && doc.large && doc.pages === LONG);
-  assert.match(documentNote(doc), /60 pages: too long to attach.*file for this turn/);
-  const told = await keepLargePdfs(KEY, [doc]);
+  assert.match(documentNote(doc), /60 pages: too long to attach.*kept as a file of this conversation/);
+  const told = await keepSent(KEY, [doc]);
   assert.match(told, /^file1 is a large PDF.*"Report\.pdf", 60 pages/);
   assert.match(text(await openNow(KEY, { file: "file1", query: "stoves" })), /page 34/);
   const input = userInput("question", [], [doc]);
   assert.equal(input, "question", "no document block");
-  dropShots(KEY);
+  dropFiles(KEY);
 });
 
-test("chat: a short PDF still goes whole into the prompt, and keepLargePdfs leaves it alone", async () => {
+test("chat: what the person sends (a short PDF, a text file, a picture) still goes to the model as before and is also kept as a file of the conversation", async () => {
   const doc = await prepareFile(onDisk(await makePdf(3, { 1: "hi" })), "Short.pdf", audio);
   assert.ok(doc.kind === "pdf" && !doc.large && doc.data.length > 0);
-  assert.equal(await keepLargePdfs(KEY, [doc]), "");
+  const note = await prepareFile(onDisk(Buffer.from("a,b\n1,2\n")), "table.csv", audio);
+  const png = { mediaType: "image/png", data: Buffer.from("PNGDATA").toString("base64") };
+  const told = await keepSent(KEY, [doc, note], [png]);
+  assert.match(told, /^file1: "Short\.pdf", the PDF just sent, kept: send it on or attach it to a mail by this id\.\nfile2: "table\.csv", the text file.*\nfile3: "picture\.png", the picture/);
   assert.notEqual(typeof userInput("q", [], [doc]), "string");
-  assert.equal("problem" in loadFile(KEY, "file1"), true);
+  assert.equal((loadFile(KEY, "file3") as { file: { bytes: Buffer } }).file.bytes.toString(), "PNGDATA");
+  assert.equal(await keepSent(KEY, [doc], []), told.split("\n")[0], "the same message again is not stored twice");
+  dropFiles(KEY);
 });
 
 test("the tool offers the mail attachment parameters only to a run that has a mail source (a group or a friend cannot name a message)", () => {

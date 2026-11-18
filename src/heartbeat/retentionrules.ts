@@ -13,6 +13,7 @@ import { dayAt } from "../core/timezone.ts";
 import { layoutOf as openbaoLayout } from "../secrets/openbaoadmin.ts";
 import { NOTES_BACKUP_KEEP, snapshotsOf } from "../memory/dreamapply.ts";
 import { forgetNote, NOTE_PATH, walkNotes } from "../memory/notes.ts";
+import { HELD_FILE_DAYS } from "../modules/send/shots.ts";
 import { MAX_AGE_MS as VOICE_SOURCE_WINDOW_MS } from "../modules/voice/voicenote.ts";
 
 // The file-based retention rules (core/retention.ts says how they run). Each is a factory over a data layout and its window, so a test gives a temp folder and a fake clock; `fileRules()` is the set
@@ -213,6 +214,22 @@ export function notesBackupRule(L: () => Layout, keep: () => number): RetentionR
   };
 }
 
+// A conversation's held files (modules/send/shots.ts: <conversation>/files/file<N>/), each swept HELD_FILE_DAYS after it was kept.
+export function heldFilesRule(L: () => Layout): RetentionRule {
+  return {
+    name: "held-files",
+    everyHours: 24,
+    run(now, o) {
+      const results: RetentionResult[] = [];
+      for (const conv of names(L().conversations)) {
+        const dir = isConvId(conv) ? L().conv(conv).files : "";
+        for (const f of dir ? names(dir) : []) if (now.getTime() - mtimeOf(join(dir, f)) > HELD_FILE_DAYS * DAY) results.push({ removed: 1, freedBytes: drop(join(dir, f), o) });
+      }
+      return { ...total(results), notes: `held files kept more than ${HELD_FILE_DAYS} days ago` };
+    },
+  };
+}
+
 // ---- OpenBao: logs and raft snapshots (state/openbao) ----
 
 export function openbaoRule(L: () => Layout, logMb: () => number, keepBackups: () => number): RetentionRule {
@@ -297,6 +314,7 @@ export function registerFileRules(): void {
     // an expired note is set aside in notes-backup/expired/; deleted for good this many days after its expiry
     expiredNotesRule(L, () => 30),
     notesBackupRule(L, () => NOTES_BACKUP_KEEP),
+    heldFilesRule(L),
     // OpenBao's logs are rotated at this many MB (2 generations kept); raft snapshots kept
     openbaoRule(L, () => 20, () => 7),
     // cached shore outlines kept (newest by mtime)
