@@ -34,8 +34,9 @@ import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
 import { setAccountsReader, setDraftReader } from "./mailbird/module.ts";
 import { cachedAccounts } from "./mailbird/accounts.ts";
 
-const ACCOUNTS_TTL_MS = 10 * 60_000; // how long Mailbird's account list is kept for the recipient floor
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
+
+const ACCOUNTS_TTL_MS = 10 * 60_000; // how long Mailbird's account list is kept for the recipient floor
 
 // The code the tool modules wrap, bound to them by name. The declarations (this folder's other files) are read by nearly everything, so they import nothing
 // of the application; what they start, and the mail clients they talk to, is here, and only the places that start things import this file: agentrun.ts

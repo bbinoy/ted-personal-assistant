@@ -9,16 +9,22 @@ export function accountAddresses(list: unknown): string[] {
   return [...new Set(found.map((a) => a.toLowerCase()))];
 }
 
-// The accounts change rarely: one answer is kept for `ttlMs`. A failed read gives none (the floor then treats the address as outside) and is tried again at the next call.
-export function cachedAccounts(read: () => Promise<unknown>, ttlMs: number, now: () => number = Date.now): () => Promise<readonly string[]> {
+// The accounts change rarely: a non-empty answer is kept for `ttlMs`. An empty or failed read gives none (the floor then treats the address as outside) and is not
+// kept; after a failure the next `retryMs` give none at once, so a hung client does not hold up every send.
+export function cachedAccounts(read: () => Promise<unknown>, ttlMs: number, now: () => number = Date.now, retryMs = 60_000): () => Promise<readonly string[]> {
   let kept: { at: number; list: string[] } | undefined;
+  let failedAt: number | undefined;
   return async () => {
     if (kept && now() - kept.at < ttlMs) return kept.list;
+    if (failedAt !== undefined && now() - failedAt < retryMs) return [];
     try {
-      kept = { at: now(), list: accountAddresses(await read()) };
-      return kept.list;
+      const list = accountAddresses(await read());
+      kept = list.length ? { at: now(), list } : undefined;
+      failedAt = list.length ? undefined : now();
+      return list;
     } catch {
       kept = undefined;
+      failedAt = now();
       return [];
     }
   };
