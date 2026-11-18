@@ -44,7 +44,7 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
-  held?: true; // a background run's question that must wait for the end of quiet hours (approvers.ts): nothing was sent, nothing asked yet
+  held?: true; // a look's question that must wait for the end of quiet hours (approvers.ts): nothing was sent, nothing asked yet
   handedOff?: true; // the question is sent and kept in the database (handoff.ts): the turn does not wait for it, and the answer arrives as a grant and a turn of its own
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
@@ -68,16 +68,17 @@ interface Open {
   source: Source;
   scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies, whoever gives it (the admin included)
   handedOff: boolean; // its turn is over (handoff.ts): a message that cannot be read must not close it
+  quoteOnly: boolean; // a stranger's registration: only a quote of it or a reaction on it answers it (SAFETY.md)
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
-// How long a question (chat turn or background run alike) waits before it lapses: a day, since it no longer holds a turn (silently: a journal line). A background run's question waits the same; a stranger's registration waits a day.
+// How long a question (any run alike) waits before it lapses: a day, since it no longer holds a turn (silently: a journal line). A look's question waits the same; a stranger's registration waits a day.
 export const APPROVAL_TIMEOUT_MINUTES = 24 * 60;
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
-let openChat = 0; // open approvals (background ones too): they share the one warm judge
+let openChat = 0; // open approvals (every run's): they share the one warm judge
 const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
 
-// Questions that were declined or that nobody answered in time (background ones, and every question handed off, handoff.ts), kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
+// Questions that were declined or that nobody answered in time (every question handed off, handoff.ts, and any other that lapsed), kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
 // next look is told about (heartbeat/facts.ts lapsedFact).
 export interface Lapsed { seq: number; at: number; label: string; wait: string; outcome: "lapsed" | "declined" | "interrupted" }
 export const lapsedIn = (scope: string): Lapsed[] => convDb(convIdOfKey(scope)).all<Lapsed>("SELECT seq, at, label, wait, outcome FROM lapsed_approvals ORDER BY seq");
@@ -137,7 +138,7 @@ export function answerReaction(emoji: string, targetTimestamp: number, scope: st
 export interface AnswerDeps {
   judge?: typeof judgeAnswer;
   recent?: (reply: string) => Recent[];
-  latest?: (scope: string) => number | undefined; // the timestamp of the last message Ted sent in the chat (default: its log)
+  latest?: (scope: string, skip: ReadonlySet<number>) => number | undefined; // the timestamp of the last message Ted sent in the chat, leaving out those of `skip` (default: its log)
 }
 // `scope`: the conversation the message arrived in; only approvals asked there can be answered. `by`: who wrote it (audit).
 // `voice`: the text is an automatic transcript of a voice message.
@@ -174,8 +175,11 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   // ONE RULE FOR EVERY QUESTION, whoever asked it: a reply that quotes a question answers it, a reaction on it answers it, and an unquoted message answers one only if that question is the
   // newest thing Ted sent in this chat (nothing of his came after it: no reply, notice or other question). Otherwise an unquoted "yes" is about something else and never reaches it,
   // neither on the fast path nor through the judge, a typed YES to a payment included.
-  const latest = (deps.latest ?? latestSaid)(ctx.scope);
-  const eligible = quoted ? [quoted] : live.filter((o) => latest === undefined || o.ts >= latest);
+  // A stranger-registration question (`quoteOnly`: it grants a person access) is answered only by a quote or a reaction, and is never the message that takes a bare yes away from an older question.
+  // When the log cannot say what Ted sent last (unreadable, empty), only the newest question is eligible: it fails toward not answering.
+  const plain = live.filter((o) => !o.quoteOnly);
+  const latest = (deps.latest ?? latestSaid)(ctx.scope, new Set(live.filter((o) => o.quoteOnly).map((o) => o.ts))) ?? plain[plain.length - 1]?.ts;
+  const eligible = quoted ? [quoted] : plain.filter((o) => latest !== undefined && o.ts >= latest);
   const direct = quoted && !quoted.done ? quoted : eligible.length === 1 && !quote ? eligible[0] : undefined;
   // Nothing it can answer: a chat message for something else, no judge call for it.
   if (eligible.length === 0) return { outcome: "none" };
@@ -310,7 +314,7 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; question?: string; typedYes?: boolean; minutes?: number; handoff?: Handoff; resumed?: boolean },
+  opts: { scope: string; source: Source; quoteOnly?: boolean; question?: string; typedYes?: boolean; minutes?: number; handoff?: Handoff; resumed?: boolean },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const minutes = opts.minutes ?? APPROVAL_TIMEOUT_MINUTES;
@@ -334,7 +338,7 @@ export function request(
       resolve(d);
       if (opts.handoff && entry.ts) opts.handoff.decided(d);
     };
-    const entry: Open = { resolve: finish, label, call, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, handedOff: !!opts.handoff, typedYes: !!opts.typedYes };
+    const entry: Open = { resolve: finish, label, call, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, handedOff: !!opts.handoff, quoteOnly: !!opts.quoteOnly, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
     const timer = setTimeout(() => {
       finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}`);

@@ -2,7 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
 import { formatWait } from "../src/approvals/approvals.ts";
+import { mkdirSync, rmSync } from "node:fs";
 import { answer, answerReaction, request } from "./approvalrig.ts";
+import { latestSaid } from "../src/approvals/recentchat.ts";
+import { recordMessage } from "../src/core/messages.ts";
+import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
 
 // ONE answer rule for every question (look or chat turn alike): a quoted reply or a reaction answers it; an unquoted one only if nothing of Ted's came after the question.
 const call = { tool: "mcp__mailbird__create_calendar_event", input: { summary: "x" } };
@@ -69,6 +73,48 @@ test("a reaction on the approval message answers it, however much came after", a
   assert.equal(answerReaction("👍", 1), "ignored");
   assert.equal(answerReaction("👍", 777), "approved");
   assert.deepEqual(await d, { approved: true });
+});
+
+test("fail closed: when the log cannot say what Ted sent last, only the newest question is eligible for an unquoted answer", async () => {
+  const older = ask(550);
+  const newer = ask(551);
+  await settle();
+  const blind = { ...never, latest: () => undefined };
+  assert.deepEqual(await answer("ok", () => {}, undefined, blind), { outcome: "approved" });
+  assert.deepEqual(await newer, { approved: true });
+  assert.deepEqual(await answer("ok", () => {}, undefined, blind), { outcome: "approved" }); // the older one was still open, and is now the newest
+  assert.deepEqual(await older, { approved: true });
+});
+
+test("a registration question is answered only by a quote or a reaction, and never takes a bare yes from an older question", async () => {
+  const mine = ask(560);
+  const reg = request(async () => 561, "Approve x as a friend", { tool: "tenant_register", input: { id: "x" } }, undefined, { quoteOnly: true });
+  await settle();
+  const real = { ...never, latest: (_s: string, skip: ReadonlySet<number>) => (skip.has(561) ? 560 : 561) }; // Ted's newest message is the registration question, which does not count
+  assert.deepEqual(await answer("yes", () => {}, undefined, real), { outcome: "approved" });
+  assert.deepEqual(await mine, { approved: true });
+  assert.deepEqual(await answer("yes", () => {}, undefined, real), { outcome: "none" }, "nothing else open: a bare yes registers no one");
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 561 }, real), { outcome: "approved" });
+  assert.deepEqual(await reg, { approved: true });
+});
+
+test("latestSaid reads the chat log: newest message of Ted's, equal timestamps, skipped ones, empty and unreadable logs", () => {
+  const key = "g-latestsaid-test";
+  const file = convPaths(convIdOfKey(key)).messages;
+  assert.equal(latestSaid(key), undefined, "no log");
+  recordMessage("approval", 100, "q1", new Date(), file);
+  recordMessage("member", 150, "yes", new Date(), file); // not Ted's
+  recordMessage("chat", 120, "later reply", new Date(), file);
+  assert.equal(latestSaid(key), 120, "the last said line, not the largest number or an inbound one");
+  recordMessage("approval", 120, "q2", new Date(), file);
+  assert.equal(latestSaid(key), 120, "equal timestamps");
+  assert.equal(latestSaid(key, new Set([120])), 100, "a skipped message is left out");
+  const broken = "g-latestsaid-broken";
+  const bad = convPaths(convIdOfKey(broken)).messages;
+  rmSync(bad, { force: true });
+  mkdirSync(bad, { recursive: true }); // a directory where the log should be: unreadable
+  assert.equal(latestSaid(broken), undefined, "an unreadable log says nothing, and the caller fails closed");
+  rmSync(bad, { recursive: true, force: true });
 });
 
 // ---- several open approvals ----
