@@ -2,7 +2,7 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import type { Source } from "../core/audit.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emit, type Why } from "../core/events.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, mentions, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines, UNNAMED } from "./describe.ts";
@@ -13,6 +13,8 @@ import { mailSlot, registered } from "../modules/index.ts";
 import { archivedBy, restoredBy } from "../modules/archivecap.ts";
 import { tasksNote } from "../modules/tasks/taskfacts.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
+import { typedByPerson } from "./recentchat.ts";
+import { indexText } from "../memory/notes.ts";
 import { knownPeople } from "../modules/people/people.ts";
 import { peopleIn } from "../policy/guests.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
@@ -198,6 +200,8 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   };
   const conversation = setup.conversation ?? UNSCOPED_KEY;
   const source = auditSource(run); // (the audit label)
+  const notesAtStart = memoryDir ? indexText(memoryDir) : ""; // the judge reads the notes as they were when the run began: a rule a mail-steered run saves mid-run never counts for its own calls
+  const typedAtStart = conversation === UNSCOPED_KEY ? "" : typedByPerson(conversation); // what the person typed here before the run began (a message logged during it does not count)
   const knownAtStart = knownPeople(memoryDir); // the people notes of before this run: a note written during it (from mail it read) does not make an address known to the floor
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
   type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
@@ -318,14 +322,15 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
-    // A floor in code on top of isJudgeable, for what third-party text may have steered: a send, or an event's guests, reaching someone the person's words and the thread do not
-    // account for, in a run that has read untrusted mail or pages. The owner is asked.
+    // A fact for the judge, not a floor: a send, or an event's guests, reaching someone the person's words, contacts and accounts do not account for, in a run that has read
+    // untrusted mail or pages. The judge weighs it with the person's standing rules in the notes; it fails toward asking.
     const reached = view && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? view : entryFor(tool)?.action === "calendar-write" ? { action: "send" as const, to: peopleIn(input), cc: [], bcc: [] } : undefined;
     const own = reached && isUntrusted() ? await mailToolsOf(tool)?.ownAddresses?.(conversation).catch(() => []) : undefined; // the person's own mail accounts as the provider reports them; unconfirmed: none
     const outside = reached && isUntrusted() ? recipientsOutside(reached, input, provenance, knownAtStart, own ?? []) : [];
-    if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
-    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+    const typed = outside.filter((a) => mentions(typedAtStart, a));
+    if (outside.length) log(tool, "judge-fact", source, { reason: "recipients-outside", recipients: outside.length });
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried, notes: notesAtStart || undefined, ...(reached && isUntrusted() ? { outside, typed } : {}) });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
         judged = { decision: "ask", reason: judged.reason };
