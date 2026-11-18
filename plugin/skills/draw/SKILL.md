@@ -15,7 +15,7 @@ Choose the format that serves the answer best, and reach for a picture when it w
 
 1. Call `draw` with the full SVG. Start with `<svg viewBox="0 0 800 600" width="800" height="600">` (pick a size that fits the content; 800 wide is a good default for a phone).
 2. Look at the preview you get back. If text overlaps, is cut off or too small, fix the SVG and call `draw` once more. Do not loop more than once or twice.
-3. Send it with `send(picture: "img1", caption: "...")`, then say in your reply what it shows. A drawing goes only to this conversation.
+3. Send it with `send(file: "file1", caption: "...")`, then say in your reply what it shows. A drawing goes only to this conversation.
 
 ## What makes a good drawing
 

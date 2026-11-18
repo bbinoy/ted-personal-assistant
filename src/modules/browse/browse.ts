@@ -16,7 +16,7 @@ import { loadProfile, type Profile } from "./profile.ts";
 import { OWNER_KEY } from "../../core/ownerkey.ts";
 import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
 import { safeName } from "../../conversation/document.ts";
-import { adoptFile, adoptShots, MAX_FILES, newShotsDir } from "../send/shots.ts";
+import { adoptFile, MAX_FILES } from "../send/shots.ts";
 import { OWNER, settings } from "../../core/settings.ts";
 import { instancePaths } from "../../core/convpaths.ts";
 
@@ -136,7 +136,7 @@ export interface BrowseContext {
   mode: BrowseMode;
   groupId?: string;
   tenant?: boolean; // a tenant's run: its audit rows carry no words (audit.ts wordless), and so do those of its guard and of the sub-run
-  key?: string; // the conversation the run is for: its screenshots are kept for that turn only
+  key?: string; // the conversation the run is for: its files it lists are kept for the conversation
   attended?: boolean; // someone waits in the chat for this run (a message turn): kept for the slot only: the owner's chat has her saved details and her card in a look too (payment is her typed YES either way)
   // Runs the browse profile under this guard and gives back its structured output and cost. (agent.ts passes the run; no import cycle.)
   run: (prompt: string, guard: BrowseGuard) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
@@ -206,28 +206,26 @@ export function startRefusal(ctx: Pick<BrowseContext, "mode">, now = Date.now(),
   return undefined;
 }
 
-// A run that never ended (a crash, a kill) leaves its page views (instance/browse/run-*) and its screenshots (instance/browse/shots/run-*) on disk. Swept at start-up:
+// A run that never ended (a crash, a kill) leaves its page views (instance/browse/run-*, also a send's temporary copy) on disk. Swept at start-up:
 // folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read the data folder, so they must not pile up
 // (policy.ts also hides instance/ from it).
 const STALE_RUN_MS = 60 * 60_000;
 export function sweepStaleRuns(now = Date.now(), root = instancePaths().browse): number {
   let removed = 0;
-  for (const dir of [root, join(root, "shots")]) {
-    let names: string[] = [];
+  let names: string[] = [];
+  try {
+    names = readdirSync(root);
+  } catch {
+    return 0; // no folder yet
+  }
+  for (const n of names.filter((x) => x.startsWith("run-"))) {
     try {
-      names = readdirSync(dir);
-    } catch {
-      continue; // no folder yet
-    }
-    for (const n of names.filter((x) => x.startsWith("run-"))) {
-      try {
-        if (now - statSync(join(dir, n)).mtimeMs > STALE_RUN_MS) {
-          rmSync(join(dir, n), { recursive: true, force: true });
-          removed++;
-        }
-      } catch {
-        // gone already
+      if (now - statSync(join(root, n)).mtimeMs > STALE_RUN_MS) {
+        rmSync(join(root, n), { recursive: true, force: true });
+        removed++;
       }
+    } catch {
+      // gone already
     }
   }
   return removed;
@@ -284,26 +282,26 @@ async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, d
   const card = ownerChat(ctx) ? (o.card === undefined ? await openCardAccess({ onProblem: (reason) => log("browse_run", "card-unavailable", "browse", { reason: reason.slice(0, LIMITS.reason) }) }) : (o.card ?? undefined)) : undefined;
   card?.ledger.recover(); // a payment clicked in a run that never ended is unconfirmed now
   const cdpPort = await freePort(); // the guard looks up what is under a point, and a card run reads the browser's own list of frames, through it
-  const shotsDir = newShotsDir(o.now);
   // The owner's saved details go to the owner's chat run only: not a group, not a wake-up. A profile that cannot be read is left out (and audited).
   const profile = ownerChat(ctx) ? (o.profile === undefined ? await loadProfile(undefined, (reason) => log("browse_run", "profile-unavailable", "browse", { reason: reason.slice(0, LIMITS.reason) })) : (o.profile ?? undefined)) : undefined;
-  const guard = new BrowseGuard({ mode: ctx.mode, tenant: ctx.tenant, task, outDir, resolver: o.resolver, shotsDir, profile, card, frames: o.frames ?? (card ? cdpFrames(cdpPort) : undefined), cdpPort, ...(proxyPort ? { proxyPort } : {}), probe: o.probe ?? cdpProbe(cdpPort) });
+  const guard = new BrowseGuard({ mode: ctx.mode, tenant: ctx.tenant, task, outDir, resolver: o.resolver, profile, card, frames: o.frames ?? (card ? cdpFrames(cdpPort) : undefined), cdpPort, ...(proxyPort ? { proxyPort } : {}), probe: o.probe ?? cdpProbe(cdpPort) });
   const started = Date.now();
   try {
     const r = await ctx.run(browsePrompt(task), guard);
     const result = sanitizeResult(r.structured, r.text, guard);
     const paid = guard.finishPayment(); // what the owner must know about a payment, from code and first, so a long answer cannot cut it
     if (paid) result.answer = clean1(`${paid} ${result.answer}`, ANSWER_MAX);
-    // The screenshots move into the turn of the conversation that asked (removed when it ends); a wake-up has none to give them to.
-    const shots = ctx.key ? adoptShots(ctx.key, guard.kept, shotCaptions(r.structured)) : [];
-    if (shots.length) result.shots = shots.map((s) => ({ id: s.id, caption: s.caption }));
-    // The PDFs the worker kept (and listed with a caption) move in as files of the conversation (file1...), like a mail attachment opened with open_file.
+    // The PDFs and screenshots the worker kept AND listed (with a caption) move in as files of the conversation (file1...), like a mail attachment opened with open_file; the rest go with the run.
+    // A wake-up has no conversation to give them to.
     const captions = fileCaptions(r.structured);
     const names = fileNames(r.structured);
+    const shotCaps = shotCaptions(r.structured);
     const files = ctx.key ? guard.pdfs.flatMap((p) => { const h = p.id in captions ? adoptFile(ctx.key!, p.bytes, names[p.id] ?? p.name) : undefined; return h ? [{ id: h.id, caption: captions[p.id]!, name: h.name }] : []; }) : [];
+    const shots = ctx.key ? guard.kept.flatMap((k) => { const h = k.id in shotCaps ? adoptFile(ctx.key!, k.bytes, "screenshot.jpg") : undefined; return h ? [{ id: h.id, caption: shotCaps[k.id]! }] : []; }) : [];
     if (files.length) result.files = files;
-    const dropped = Object.keys(captions).filter((id) => guard.pdfs.some((p) => p.id === id)).length - files.length;
-    if (dropped > 0) result.answer = clean1(`${result.answer} (${dropped} more PDF${dropped === 1 ? "" : "s"} could not be kept: a turn keeps at most ${MAX_FILES} new files. Send or attach these, then ask again for the rest.)`, ANSWER_MAX);
+    if (shots.length) result.shots = shots;
+    const dropped = Object.keys(captions).filter((id) => guard.pdfs.some((p) => p.id === id)).length + Object.keys(shotCaps).filter((id) => guard.kept.some((k) => k.id === id)).length - files.length - shots.length;
+    if (dropped > 0) result.answer = clean1(`${result.answer} (${dropped} more file${dropped === 1 ? "" : "s"} could not be kept: a turn keeps at most ${MAX_FILES} new files. Send or attach these, then ask again for the rest.)`, ANSWER_MAX);
     log("browse_run", result.status, "browse", { mode: ctx.mode, costUsd: r.costUsd, seconds: Math.round((Date.now() - started) / 1000), steps: guard.steps, commits: guard.commits, denied: guard.denied });
     return resultMessage(result);
   } catch (e) {
@@ -317,7 +315,6 @@ async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, d
     guard.finishPayment(); // the card is dropped whatever happened (the notes above are for the owner)
     guard.endRun(); // so is an approved plan carried for the later steps
     rmSync(outDir, { recursive: true, force: true });
-    if (shotsDir) rmSync(shotsDir, { recursive: true, force: true });
   }
 }
 

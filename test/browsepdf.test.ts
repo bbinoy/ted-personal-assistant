@@ -7,7 +7,7 @@ import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
 import { fileCaptions, fileNames } from "../src/modules/browse/browse.ts";
 import { browserServer } from "../src/modules/browse/browseserver.ts";
 import { HIDDEN_BROWSER_TOOLS, isAllowedBrowserTool } from "../src/modules/browse/browserules.ts";
-import { adoptFile, dropShots, heldPath, MAX_FILES } from "../src/modules/send/shots.ts";
+import { adoptFile, endTurn, heldPath, MAX_FILES } from "../src/modules/send/shots.ts";
 import { dropFiles } from "./util.ts";
 
 // The worker saves a page as a PDF (browser_pdf_save) and keeps a PDF a site downloads; code chooses the name, reads the bytes back, keeps real PDFs only.
@@ -81,7 +81,7 @@ test("adoption: kept PDFs become file ids of the conversation, listed ones only,
     assert.deepEqual(readFileSync(path), PDF);
     assert.equal(heldPath("g-other", "file1"), undefined, "another conversation has no such file");
     assert.equal(heldPath(key, "file9"), undefined);
-    dropShots(key);
+    endTurn(key);
     assert.equal(existsSync(path), true, "the mail client reads it after the turn: it outlives the turn");
     assert.deepEqual(readFileSync(path), PDF);
   } finally {

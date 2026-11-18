@@ -1,18 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
-import { sanitizeResult, shotCaptions } from "../src/modules/browse/browse.ts";
+import { browse, sanitizeResult, shotCaptions } from "../src/modules/browse/browse.ts";
 import { createPipeline, group, owner } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { classify } from "../src/policy/policy.ts";
-import { adoptFile, adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/modules/send/shots.ts";
+import { adoptFile, listHeld } from "../src/modules/send/shots.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
-import { access } from "./util.ts";
+import { access, dropFiles } from "./util.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
@@ -23,8 +23,7 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(
 const jpegResponse = (b: Buffer) => ({ content: [{ type: "text", text: "### Result" }, { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b.toString("base64") } }] });
 
 function shotsFrom(files: Buffer[]) {
-  const dir = newShotsDir();
-  const guard = new BrowseGuard({ mode: "owner", task: "t", outDir: dir, shotsDir: dir });
+  const guard = new BrowseGuard({ mode: "owner", task: "t", outDir: tmpdir() });
   for (const f of files) guard.keepShot(jpegResponse(f));
   return guard;
 }
@@ -32,9 +31,7 @@ function shotsFrom(files: Buffer[]) {
 test("send_picture: the guard keeps only real jpeg bytes, under names code chooses", () => {
   const g = shotsFrom([JPEG, Buffer.from("not a picture at all"), JPEG]);
   assert.deepEqual(g.kept.map((k) => k.id), ["shot1", "shot2"]);
-  assert.equal(new BrowseGuard({ mode: "owner", task: "t", outDir: "/tmp" }).keepShot(jpegResponse(JPEG)), undefined); // no shots folder: nothing kept
 });
-
 
 test("send: manifest and policy: free in a chat turn and in every conversation's look, the same floor", () => {
   assert.equal(access(TOOL, OWNER_CHAT), "free");
@@ -64,10 +61,10 @@ test("send: the sink is found by conversation while the turn runs, and only then
   assert.equal(await sendNow("g-x", { text: "hi" }), "Nobody to send it to right now.");
 });
 
-test("send: exactly one kind of content per call; voice goes with text, caption with a picture, react is one emoji", async () => {
+test("send: exactly one kind of content per call; voice goes with text, caption with a file, react is one emoji", async () => {
   const got: Content[] = [];
   await withSend(OWNER_KEY, async (c) => (got.push(c), "ok"), async () => {
-    for (const bad of [{}, { text: "a", react: "👍" }, { text: "a", picture: "shot1" }, { voice: true }, { react: "👍", caption: "x" }, { text: "a", caption: "x" }, { react: "👍👍" }, { react: "hi" }]) {
+    for (const bad of [{}, { text: "a", react: "👍" }, { text: "a", file: "file1" }, { voice: true }, { react: "👍", caption: "x" }, { text: "a", caption: "x" }, { react: "👍👍" }, { react: "hi" }]) {
       assert.notEqual(await sendNow(OWNER_KEY, bad), "ok", JSON.stringify(bad));
     }
     assert.equal(await sendNow(OWNER_KEY, { text: "a", voice: true }), "ok");
@@ -76,50 +73,24 @@ test("send: exactly one kind of content per call; voice goes with text, caption 
   assert.deepEqual(got, [{ kind: "text", text: "a", voice: true }, { kind: "reaction", emoji: "👍" }]);
 });
 
-test("send: an id of this turn is sent; another id, a path and a traversal are refused; the files go when the turn ends", async () => {
-  const g = shotsFrom([JPEG]);
+test("send: a held id is sent as a picture (a jpeg) with its caption; another id, a path and a traversal are refused; it stays held after the turn", async () => {
   const sent: Content[] = [];
-  let file = "";
-  await withSend(OWNER_KEY, async (c) => (sent.push(c), c.kind === "picture" && (file = c.file), "ok"), async () => {
-    const shots = adoptShots(OWNER_KEY, g.kept, { shot1: "the seat map" });
-    assert.deepEqual(shots.map((s) => [s.id, s.caption]), [["shot1", "the seat map"]]);
-    for (const bad of ["shot2", "../shot1", "/etc/passwd", "shot1.jpg", "../../x", "SHOT1"]) assert.match(await sendNow(OWNER_KEY, { picture: bad }), /No screenshot/, bad);
-    assert.equal(await sendNow(OWNER_KEY, { picture: "shot1", caption: "Here" }), "ok");
-    assert.deepEqual(sent.map((c) => c.kind === "picture" && [c.id, c.caption, c.size > 0]), [["shot1", "Here", true]]);
-    assert.equal(existsSync(file), true);
+  let id = "";
+  await withSend(OWNER_KEY, async (c) => (sent.push(c), "ok"), async () => {
+    id = adoptFile(OWNER_KEY, JPEG, "screenshot.jpg")!.id;
+    for (const bad of ["file99", "../file1", "/etc/passwd", "file1.jpg", "../../x", "FILE1", "shot1", "img1"]) assert.match(await sendNow(OWNER_KEY, { file: bad }), /No file/, bad);
+    assert.equal(await sendNow(OWNER_KEY, { file: id, caption: "Here" }), "ok");
+    assert.deepEqual(sent.map((c) => c.kind === "file" && [c.id, c.caption, c.size > 0]), [[id, "Here", true]]);
   });
-  assert.equal(existsSync(file), false);
-  assert.match(await sendNow(OWNER_KEY, { picture: "shot1" }), /Nobody to send/);
+  assert.match(await sendNow(OWNER_KEY, { file: id }), /Nobody to send/);
+  await withSend(OWNER_KEY, async (c) => (sent.push(c), "ok"), async () => assert.equal(await sendNow(OWNER_KEY, { file: id }), "ok", "a later turn can send it"));
+  dropFiles(OWNER_KEY);
 });
 
-test("send: another conversation's screenshots are not reachable", async () => {
-  const g = shotsFrom([JPEG]);
-  await withSend("g-a", async () => "ok", async () => {
-    adoptShots("g-a", g.kept, {});
-    await withSend("g-b", async () => assert.fail("must not send"), async () => assert.match(await sendNow("g-b", { picture: "shot1" }), /No screenshot available/));
-  });
-});
-
-test("send: a symlink or a non-jpeg file in place of the screenshot is refused", async () => {
-  const outside = join(mkdtempSync(join(tmpdir(), "outside-")), "secret.jpg");
-  writeFileSync(outside, JPEG);
-  const g = shotsFrom([JPEG, JPEG]);
-  await withSend(OWNER_KEY, async () => assert.fail("must not send"), async () => {
-    const [a, b] = adoptShots(OWNER_KEY, g.kept, {});
-    writeFileSync(a!.file, "GIF89a not a jpeg");
-    assert.match(await sendNow(OWNER_KEY, { picture: "shot1" }), /not a jpeg/);
-    rmSync(b!.file);
-    symlinkSync(outside, b!.file);
-    assert.match(await sendNow(OWNER_KEY, { picture: "shot2" }), /cannot be used/);
-  });
-});
-
-test("send: old screenshot folders are swept after the TTL", () => {
-  const dir = newShotsDir();
-  sweepShots(Date.now());
-  assert.equal(existsSync(dir), true);
-  sweepShots(Date.now() + SHOT_TTL_MS + 60_000);
-  assert.equal(existsSync(dir), false);
+test("send: another conversation's files are not reachable", async () => {
+  const id = adoptFile("g-a", JPEG, "screenshot.jpg")!.id;
+  await withSend("g-b", async () => assert.fail("must not send"), async () => assert.match(await sendNow("g-b", { file: id }), /No file/));
+  dropFiles("g-a");
 });
 
 test("browse result: captions are cleaned and cut, odd ids dropped", () => {
@@ -200,17 +171,16 @@ test("send: a heartbeat run (outside the queue) speaks through the same delivery
 
 test("send: text, voice note, reaction and picture, several in order, then the final reply still goes out; typing resumes after each", async () => {
   const r = rig({ speech: true });
-  const g = shotsFrom([JPEG]);
   const told: string[] = [];
   const res = await r.pipeline.runTurn(owner(), {
     announce: false,
     target: TARGET,
     run: async () => {
-      adoptShots(OWNER_KEY, g.kept, {});
+      adoptFile(OWNER_KEY, JPEG, "screenshot.jpg");
       told.push(await sendNow(OWNER_KEY, { text: "On it, checking." }));
       told.push(await sendNow(OWNER_KEY, { text: "Spoken words here.", voice: true }));
       told.push(await sendNow(OWNER_KEY, { react: "👍" }));
-      told.push(await sendNow(OWNER_KEY, { picture: "shot1", caption: "  The map " }));
+      told.push(await sendNow(OWNER_KEY, { file: "file1", caption: "  The map " }));
       told.push(await sendNow(OWNER_KEY, { text: "[[silent]]" }), await sendNow(OWNER_KEY, { text: "   " }));
       told.push(await sendNow(OWNER_KEY, { text: "A third message, no cap." }));
       return { text: "The result." };
@@ -219,9 +189,11 @@ test("send: text, voice note, reaction and picture, several in order, then the f
   assert.deepEqual(r.sent.map((s) => [s.text, s.attachments?.length ?? 0]), [["On it, checking.", 0], ["", 1], ["The map", 1], ["A third message, no cap.", 0], ["The result.", 0]]);
   assert.deepEqual(r.spoken, ["Spoken words here."]);
   assert.deepEqual(r.reacted.filter((x) => x.emoji !== "👀").map((x) => [x.emoji, x.target]), [["👍", TARGET]]); // the default target: the message being answered; the final ✅ does not replace it
-  assert.deepEqual(told.map((t) => t.slice(0, 7)), ["Sent. C", "Sent as", "Reacted", "Sent sh", "Nothing", "Nothing", "Sent. C"]);
+  assert.deepEqual(told.map((t) => t.slice(0, 7)), ["Sent. C", "Sent as", "Reacted", "Sent fi", "Nothing", "Nothing", "Sent. C"]);
+  assert.deepEqual(r.kinds.slice(-1), ["picture"], "a jpeg goes out as a picture");
   assert.equal(res.spoke, true);
   assert.equal(r.typing.filter((s) => !s).length >= 6, true);
+  dropFiles(OWNER_KEY);
   assert.equal(r.typing[r.typing.length - 1], true);
 });
 
@@ -270,41 +242,41 @@ test("send: the final reply keeps its markers and is delivered through the same 
 
 test("send: a group turn sends everything to that group, with the group's quote rule; a reaction goes on the answered message", async () => {
   const r = rig({ speech: true });
-  const g = shotsFrom([JPEG]);
   const quote = { text: "q", author: "+2", timestamp: 77 };
   await r.pipeline.runTurn(group("g1"), {
     announce: false,
     target: TARGET,
     threadUnder: quote as any,
     run: async () => {
-      adoptShots("g1", g.kept, {});
+      adoptFile("g1", JPEG, "screenshot.jpg");
       await sendNow("g1", { text: "Checking that for you." });
       await sendNow("g1", { text: "Voice words", voice: true });
-      await sendNow("g1", { picture: "shot1" });
+      await sendNow("g1", { file: "file1" });
       await sendNow("g1", { react: "🙏" });
       return { text: "[[silent]]" };
     },
   });
   assert.deepEqual(r.sent.map((s) => [s.groupId, !!s.quote]), [["g1", true], ["g1", false], ["g1", true]]);
   assert.deepEqual(r.reacted.filter((x) => x.emoji !== "👀").map((x) => [x.emoji, x.groupId]), [["🙏", "g1"]]);
+  dropFiles("g1");
 });
 
 test("send: a reaction or wake-up turn is given no way to send", async () => {
   const r = rig();
   for (const kind of [{ reaction: true }, { background: true }]) {
-    const g = shotsFrom([JPEG]);
     let told = "";
     await r.pipeline.runTurn(owner(), {
       announce: false,
       target: TARGET,
       ...kind,
       run: async () => {
-        adoptShots(OWNER_KEY, g.kept, {});
-        told = await sendNow(OWNER_KEY, { picture: "shot1" });
+        adoptFile(OWNER_KEY, JPEG, "screenshot.jpg");
+        told = await sendNow(OWNER_KEY, { file: "file1" });
         return { text: "" };
       },
     });
     assert.match(told, /Nobody to send/);
+    dropFiles(OWNER_KEY);
   }
   assert.equal(r.sent.length, 0);
 });
@@ -315,4 +287,23 @@ test("send: a reaction with nobody to react to says so; the turn still answers",
   await r.pipeline.runTurn(owner(), { announce: false, run: async () => ((told = await sendNow(OWNER_KEY, { react: "👍" })), { text: "ok" }) });
   assert.match(told, /Nothing to react to/);
   assert.deepEqual(sentOf(r), ["ok"]);
+});
+
+test("browse: a screenshot the worker lists becomes a held file, sendable in a later turn; unlisted ones are not kept", async () => {
+  const key = "g-shots";
+  const other = Buffer.concat([JPEG, Buffer.from("2")]);
+  const run = async (_prompt: string, guard: BrowseGuard) => {
+    for (const f of [JPEG, other, JPEG]) guard.keepShot(jpegResponse(f));
+    return { text: "", structured: { status: "done", answer: "seats", sources: [], shots: [{ id: "shot2", caption: "the seat map" }] } };
+  };
+  try {
+    const out = await browse({ mode: "group", groupId: "g", key, run }, "look up the seat map", { status: { ok: true, cli: "cli.js", exe: "chrome" }, proxy: null, card: null, profile: null });
+    assert.match(out, /"id": "file1",\s+"caption": "the seat map"/);
+    assert.deepEqual(listHeld(key).map((h) => [h.id, h.size]), [["file1", other.length]], "only the listed screenshot is kept");
+    const sent: Content[] = [];
+    await withSend(key, async (c) => (sent.push(c), "ok"), async () => assert.equal(await sendNow(key, { file: "file1", caption: "Seats" }), "ok"));
+    assert.deepEqual(sent.map((c) => c.kind === "file" && [c.id, c.held.name, c.held.bytes.equals(other)]), [["file1", "screenshot.jpg", true]]);
+  } finally {
+    dropFiles(key);
+  }
 });

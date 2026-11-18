@@ -556,7 +556,7 @@ src/modules/people/peopletool.ts  the `find_person` tool
 src/modules/send/connectorback.ts  a connector that came back pulls the owner's next look forward
 src/modules/send/module.ts  send
 src/modules/send/send.ts  the send tool: speak mid-turn
-src/modules/send/shots.ts  pictures of a turn; the conversation's held files (files/ in its folder), delivered via send
+src/modules/send/shots.ts  the conversation's held files (screenshots a browse run listed and drawings included) (files/ in its folder), delivered via send
 src/modules/shell/box.ts  the workbench box: one throwaway Apple `container` VM, no network, bytes in and out
 src/modules/shell/module.ts  shell
 src/modules/shell/shelltool.ts  the run tool of the workbench: files in, command, files out

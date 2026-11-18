@@ -98,13 +98,6 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         state.reacted = true;
         state.pieces++;
         told = "Reacted.";
-      } else if (c.kind === "picture") {
-        const caption = c.caption.trim();
-        await out.sendAttachment({ file: c.file, kind: "picture" }, isSilent(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target });
-        state.spoke = true;
-        state.pieces++;
-        console.log(`${conv.kind} picture sent (${c.id}, ${c.size} bytes)`);
-        told = `Sent ${c.id} as a picture.`;
       } else if (c.kind === "file") {
         const caption = c.caption.trim();
         await withTempFile(c.held, (file) => out.sendAttachment({ file, kind: isPicture(c.held.bytes) ? "picture" : "file" }, isSilent(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target })); // (the temp copy signal-cli reads is deleted right after)
