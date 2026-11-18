@@ -178,3 +178,33 @@ test("a page about a person written during an untrusted run does not make its ad
   await run(dir)(CAL, event("zed@evil.example", 2), opts);
   assert.equal(asked, 1, "the next run knows Zed from the note: no question");
 });
+
+// ---- the person's own mail accounts are known to the floor ----
+
+test("recipientsOutside: the person's own mail accounts are known; exact addresses only; others still flagged", () => {
+  const own = ["me@work.example.com"];
+  const v = { action: "send" as const, to: ["ME@work.example.com"], cc: ["boss@example.org"], bcc: ["x.me@work.example.com"] };
+  assert.deepEqual(recipientsOutside(v, {}, owner("send it"), [], own), ["boss@example.org", "x.me@work.example.com"], "case-insensitive exact match; cc and a lookalike stay outside");
+  assert.deepEqual(recipientsOutside(v, {}, owner("send it"), [], []), ["ME@work.example.com", "boss@example.org", "x.me@work.example.com"], "no accounts known: nothing changes");
+});
+
+test("the floor asks nobody about a send to the person's own account; another provider's accounts do not count; an unreadable list changes nothing", async () => {
+  setDraftReader(async () => ({ to: ["me@work.example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
+  let judged = 0;
+  const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "fine" });
+  const can = () => makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, { provenance: scopeOf("own").read, conversation: "own", untrusted: true });
+  scopeOf("own").say("send them to me");
+  const { mailbirdModule } = await import("../src/modules/mailbird/module.ts");
+  const { setAccountsReader } = await import("../src/modules/mailbird/module.ts");
+  assert.ok(mailbirdModule.mail?.ownAddresses);
+  setAccountsReader(async () => ["me@work.example.com"]);
+  await can()(SEND, { messageId: 1101, confirm: true }, opts);
+  assert.equal(judged, 1, "own account: judged, no floor");
+  setAccountsReader(async () => ["someone.else@example.net"]);
+  await can()(SEND, { messageId: 1102, confirm: true }, opts);
+  assert.equal(judged, 1, "another person's accounts: the floor asks, no judge");
+  setAccountsReader(async () => { throw new Error("down"); });
+  await can()(SEND, { messageId: 1103, confirm: true }, opts);
+  assert.equal(judged, 1, "a failing read: outside");
+  setAccountsReader(undefined);
+});

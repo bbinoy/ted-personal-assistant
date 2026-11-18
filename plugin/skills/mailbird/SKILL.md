@@ -24,6 +24,10 @@ holds what is particular to Mailbird.
   else is refused) and an id like `file1`. A long PDF comes back as an outline: search it with `query`, read just the `pages` you need. To send it to the
   owner, `send` with `file: "file1"` (a picture goes out as a picture; add a short caption). Only when the task needs
   the content, not for routine triage.
+- **One attachment per draft.** Mailbird (4.38.1) loses all but one file of a draft with
+  several attachments, and the send then fails. Until that is fixed, a draft carries at
+  most one attachment: several receipts or tickets go as one email each (same recipient,
+  a subject that names each one).
 - **Archive** is `archive_conversation` (reversible: `npm run restore <id>`). Never
   `trash_conversation` or `delete_conversation_permanently`, never spam or block.
   A conversation id changes when it changes folder: re-list before acting on it.

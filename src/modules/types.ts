@@ -160,6 +160,9 @@ export interface MailTools {
   // conversation whose tools these are ("tenant:<id>"), for a module whose client is per conversation.
   readBack: (kind: ViewKind | undefined, input: Record<string, unknown>, conversation?: string) => Promise<DraftView | undefined>;
   views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
+  // The person's own mail addresses, as the provider itself reports them (never from a mail or the model): the recipient floor (autojudge.ts recipientsOutside) counts them as known.
+  // Lower case. It fails closed: an address that cannot be confirmed is left out (an empty list).
+  ownAddresses?: (conversation?: string) => Promise<readonly string[]>;
 }
 
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);

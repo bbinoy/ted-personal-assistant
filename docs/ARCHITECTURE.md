@@ -535,6 +535,7 @@ src/modules/gmail/gmailrules.ts  Gmail floor rules a flag cannot say
 src/modules/gmail/module.ts  Gmail connector (MAIL_PROVIDER=gmail)
 src/modules/google/googlemcp.ts  the pinned MCP server, one process per friend
 src/modules/google/module.ts  a friend's own Gmail and Calendar tools
+src/modules/mailbird/accounts.ts  the person's own mail addresses (list_accounts, cached) for the recipient floor
 src/modules/mailbird/attachments.ts  an attachment from get_attachment_content, as bytes
 src/modules/mailbird/calendar.ts  Mailbird's calendar (the calendar of MAIL_PROVIDER=mailbird)
 src/modules/mailbird/mailbird.ts  MCP client for the local mail server
