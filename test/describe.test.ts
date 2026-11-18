@@ -19,9 +19,9 @@ const ask: () => Promise<Verdict> = async () => ({ decision: "ask", reason: "x" 
 test("a create's title and time are kept with its id for 24 hours, per conversation", () => {
   forgetCreated();
   const input = { summary: "Coffee", startTime: "2026-10-21T09:00:00", endTime: "2026-10-21T10:00:00" };
-  assert.equal(callLabel(input), "“Coffee”, Wed 21 Oct, 09:00–10:00, no guests");
+  assert.equal(callLabel(input), "“Coffee”, Wed 21 Oct, 09:00–10:00");
   assert.equal(callLabel({ properties: { title: "Trip notes" } }), "“Trip notes”");
-  assert.equal(callLabel({ start: { dateTime: "2026-10-21T09:00:00" }, summary: "A" }), "“A”, Wed 21 Oct, 09:00, no guests");
+  assert.equal(callLabel({ start: { dateTime: "2026-10-21T09:00:00" }, summary: "A" }), "“A”, Wed 21 Oct, 09:00");
   assert.equal(callLabel({ foo: 1 }), undefined);
   noteCreated("owner", idsInResult({ id: "bq99vc4x1" }), 1_000, callLabel(input));
 });
@@ -34,7 +34,7 @@ test("the delete question carries the title and time of what the assistant creat
   const asked: string[] = [];
   const canUse = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: "owner" });
   await canUse(DELETE, { calendarId: "primary", eventId: "bq99vc4x1" }, opts);
-  assert.match(asked[0]!, /\nNamed: “Coffee”, Wed 21 Oct, 09:00–10:00, no guests \(the assistant created it earlier in this conversation\)/);
+  assert.match(asked[0]!, /\nNamed: “Coffee”, Wed 21 Oct, 09:00–10:00 \(the assistant created it earlier in this conversation\)/);
   const facts = factsOf({ calendarId: "primary", eventId: "bq99vc4x1" }, asked[0]!);
   assert.ok(facts.must.includes("Coffee") && !facts.must.includes("bq99vc4x1"));
   assert.match(validateQuestion("Delete calendar event bq99vc4x1? Nobody will be notified.", facts) ?? "", /Coffee/);
