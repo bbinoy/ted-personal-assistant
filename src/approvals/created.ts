@@ -4,10 +4,11 @@
 
 import { clip } from "../core/sanitize.ts";
 import { whenOf } from "./format.ts";
+import { namesPeople } from "../policy/guests.ts";
 
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_PER_CONVERSATION = 500;
-const seen = new Map<string, Map<string, { at: number; label?: string }>>();
+const seen = new Map<string, Map<string, { at: number; label?: string; guests?: number }>>();
 
 // An id as comparable text: a Notion page id with or without dashes or in its URL, a number or a string otherwise.
 export const norm = (v: string | number): string => {
@@ -41,6 +42,17 @@ export function idsInCall(input: Record<string, unknown>): string[] {
   return [...out];
 }
 
+// The guest count as its own line (never inside the Named line: a title could say anything), written by code; a count only, never a name.
+export const guestsLine = (n: number): string => `\nGuests: ${n === 0 ? "none" : n} (counted by code)`;
+
+// Pure. How many people a creating call invites: none when it names nobody, the length of its `attendees` list (the person themself, marked `self`, not counted), else unknown. Only an event (a call with a time) has guests.
+export function callGuests(input: Record<string, unknown>): number | undefined {
+  if (!whenOf(input)) return undefined;
+  if (!namesPeople(input)) return 0;
+  const a = input.attendees;
+  return Array.isArray(a) ? a.filter((x) => !(x && typeof x === "object" && (x as Record<string, unknown>).self === true)).length : undefined;
+}
+
 // Pure. What the creating call said the thing is: its title (summary, title, subject or name, wherever the call has one) and when it is, as in an approval text.
 const NAME_KEY = /^(summary|title|subject|name)$/i;
 export function callLabel(input: Record<string, unknown>): string | undefined {
@@ -58,14 +70,14 @@ export function callLabel(input: Record<string, unknown>): string | undefined {
   return `“${clip(title, 120)}”${when ? `, ${when}` : ""}`;
 }
 
-export function noteCreated(conversation: string, ids: readonly string[], now = Date.now(), label?: string): void {
+export function noteCreated(conversation: string, ids: readonly string[], now = Date.now(), label?: string, guests?: number): void {
   if (!ids.length) return;
   for (const [c, m] of seen) {
     for (const [id, e] of m) if (now - e.at >= TTL_MS) m.delete(id);
     if (!m.size) seen.delete(c);
   }
   const m = seen.get(conversation) ?? seen.set(conversation, new Map()).get(conversation)!;
-  for (const id of ids) m.set(id, { at: now, ...(label ? { label } : {}) });
+  for (const id of ids) m.set(id, { at: now, ...(label ? { label } : {}), ...(guests !== undefined ? { guests } : {}) });
   while (m.size > MAX_PER_CONVERSATION) m.delete(m.keys().next().value!);
 }
 
@@ -77,6 +89,24 @@ export function createdLabel(conversation: string, input: Record<string, unknown
     if (e?.label && now - e.at < TTL_MS) return e.label;
   }
   return undefined;
+}
+
+// The guest count the creating call gave the event this call names (callGuests), if the assistant made it here within 24 hours and nothing named people on it since.
+export function createdGuests(conversation: string, input: Record<string, unknown>, now = Date.now()): number | undefined {
+  const m = seen.get(conversation);
+  for (const id of idsInCall(input)) {
+    const e = m?.get(id);
+    if (e?.guests !== undefined && now - e.at < TTL_MS) return e.guests;
+  }
+  return undefined;
+}
+
+// A later write named people on the event: what was recorded about its guests no longer holds (unknown until read again).
+export function forgetCreatedGuests(conversation: string, ids: readonly string[]): void {
+  for (const id of ids) {
+    const e = seen.get(conversation)?.get(id);
+    if (e) delete e.guests;
+  }
 }
 
 export const forgetCreated = (): void => seen.clear(); // tests
