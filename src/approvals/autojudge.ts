@@ -47,7 +47,7 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
 }
 
 // Pure: is this whole address in the text (not as the tail or head of a longer one)?
-const mentions = (text: string, a: string): boolean => {
+export const mentions = (text: string, a: string): boolean => {
   const at = a.toLowerCase();
   for (let i = text.indexOf(at); i >= 0; i = text.indexOf(at, i + 1)) {
     if (!/[\p{L}\p{N}._%+@-]/u.test(text[i - 1] ?? " ") && !/[\p{L}\p{N}_@-]/u.test(text[i + at.length] ?? " ")) return true;
@@ -138,6 +138,7 @@ export interface JudgeInput {
   untrustedInput?: boolean; // the run has read raw mail or web pages (or is the mail handler, or the browse worker): its arguments may be steered by third-party text
   approved?: CarriedApproval; // a browse commit step: the plan the owner approved earlier in this run, offered by code (browseguard.ts)
   notes?: string; // the conversation's notes index (judgecontext.ts)
+  typed?: readonly string[]; // the outside recipients that the person typed themselves in this conversation (permissions.ts, recentchat.ts typedByPerson)
   outside?: readonly string[]; // recipients the person's words, contacts and accounts do not name (recipientsOutside), when the run read untrusted text
   now?: number;
 }
@@ -150,7 +151,7 @@ function approvedPlan(a: CarriedApproval, now: number): string {
 
 // Pure: the prompt. The provenance and the action are fenced as data.
 export function judgePrompt(i: JudgeInput): string {
-  return judgeContext({ details: i.description, provenance: i.provenance, untrusted: i.untrustedInput, notes: i.notes, outside: i.outside, extra: i.approved ? approvedPlan(i.approved, i.now ?? Date.now()) : "" });
+  return judgeContext({ details: i.description, provenance: i.provenance, untrusted: i.untrustedInput, notes: i.notes, outside: i.outside, typed: i.typed, extra: i.approved ? approvedPlan(i.approved, i.now ?? Date.now()) : "" });
 }
 
 // Pure: whatever came back, as a verdict. Anything but an exact "auto" or "fix" is "ask"; "fix" also needs a reason (the model is told it).

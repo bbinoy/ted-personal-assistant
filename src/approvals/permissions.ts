@@ -2,7 +2,7 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import type { Source } from "../core/audit.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emit, type Why } from "../core/events.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, mentions, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines, UNNAMED } from "./describe.ts";
@@ -13,6 +13,7 @@ import { mailSlot, registered } from "../modules/index.ts";
 import { archivedBy, restoredBy } from "../modules/archivecap.ts";
 import { tasksNote } from "../modules/tasks/taskfacts.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
+import { typedByPerson } from "./recentchat.ts";
 import { indexText } from "../memory/notes.ts";
 import { knownPeople } from "../modules/people/people.ts";
 import { peopleIn } from "../policy/guests.ts";
@@ -200,6 +201,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   const conversation = setup.conversation ?? UNSCOPED_KEY;
   const source = auditSource(run); // (the audit label)
   const notesAtStart = memoryDir ? indexText(memoryDir) : ""; // the judge reads the notes as they were when the run began: a rule a mail-steered run saves mid-run never counts for its own calls
+  const typedAtStart = conversation === UNSCOPED_KEY ? "" : typedByPerson(conversation); // what the person typed here before the run began (a message logged during it does not count)
   const knownAtStart = knownPeople(memoryDir); // the people notes of before this run: a note written during it (from mail it read) does not make an address known to the floor
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
   type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
@@ -325,9 +327,10 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     const reached = view && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? view : entryFor(tool)?.action === "calendar-write" ? { action: "send" as const, to: peopleIn(input), cc: [], bcc: [] } : undefined;
     const own = reached && isUntrusted() ? await mailToolsOf(tool)?.ownAddresses?.(conversation).catch(() => []) : undefined; // the person's own mail accounts as the provider reports them; unconfirmed: none
     const outside = reached && isUntrusted() ? recipientsOutside(reached, input, provenance, knownAtStart, own ?? []) : [];
+    const typed = outside.filter((a) => mentions(typedAtStart, a));
     if (outside.length) log(tool, "judge-fact", source, { reason: "recipients-outside", recipients: outside.length });
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried, notes: notesAtStart || undefined, ...(reached && isUntrusted() ? { outside } : {}) });
+      judged = await judge({ description: description + notifyNote(tool, input) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried, notes: notesAtStart || undefined, ...(reached && isUntrusted() ? { outside, typed } : {}) });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
         judged = { decision: "ask", reason: judged.reason };

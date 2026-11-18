@@ -11,6 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NOTES_DIR } from "../src/memory/notes.ts";
 import { mkdirSync } from "node:fs";
+import { recordMessage } from "../src/core/messages.ts";
+import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
+import { typedByPerson } from "../src/approvals/recentchat.ts";
 import { knownPeople } from "../src/modules/people/people.ts";
 import { CHAT } from "./util.ts";
 import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
@@ -235,6 +238,30 @@ test("recipientsOutside: an address that only ends with one the person typed is 
   const v = { action: "send" as const, to: ["xmara@example.com", "mara@example.com", "mara@example.com.evil.example"], cc: [], bcc: [] };
   assert.deepEqual(recipientsOutside(v, {}, owner("send it to mara@example.com")), ["xmara@example.com", "mara@example.com.evil.example"]);
   assert.deepEqual(recipientsOutside({ ...v, to: ["mara@example.com"] }, {}, owner("send it to (mara@example.com), thanks")), []);
+});
+
+test("typed by the person: only the person's own lines of THIS conversation count; Ted's lines, notes and other conversations do not; the snapshot ignores later lines", async () => {
+  setDraftReader(async () => ({ to: ["claims@example.org", "ted-said@example.org", "friend-typed@example.org"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
+  const ownerLog = convPaths(convIdOfKey("owner")).messages;
+  const friendLog = convPaths(convIdOfKey("tenant:ana")).messages;
+  mkdirSync(join(ownerLog, ".."), { recursive: true });
+  mkdirSync(join(friendLog, ".."), { recursive: true });
+  recordMessage("owner", 1, "expenses go to Claims@Example.org please", new Date(), ownerLog);
+  recordMessage("chat", 2, "I could also write to ted-said@example.org", new Date(), ownerLog);
+  recordMessage("owner", 3, "xclaims@example.org is not the same", new Date(), ownerLog);
+  recordMessage("owner", 4, "friend-typed@example.org", new Date(), friendLog);
+  assert.match(typedByPerson("owner"), /claims@example\.org/);
+  assert.doesNotMatch(typedByPerson("owner"), /ted-said|friend-typed/, "Ted's lines and another conversation never count");
+  assert.match(typedByPerson("tenant:ana"), /friend-typed/);
+  assert.doesNotMatch(typedByPerson("tenant:ana"), /claims@/, "the owner's words are not the friend's");
+  const seen: { outside?: readonly string[]; typed?: readonly string[] }[] = [];
+  const judge = async (i: { outside?: readonly string[]; typed?: readonly string[] }): Promise<Verdict> => (seen.push(i), { decision: "ask", reason: "x" });
+  const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, { ...CHAT, untrusted: true });
+  recordMessage("owner", 5, "also ted-said@example.org", new Date(), ownerLog); // (logged after the run began)
+  scopeOf("owner").say("send it");
+  await can(SEND, { messageId: 1401, confirm: true }, opts);
+  assert.deepEqual(seen[0]!.outside, ["claims@example.org", "ted-said@example.org", "friend-typed@example.org"]);
+  assert.deepEqual(seen[0]!.typed, ["claims@example.org"], "only what the person wrote before the run began");
 });
 
 // ---- the person's own mail accounts are known to the floor ----

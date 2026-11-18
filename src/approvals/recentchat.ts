@@ -24,6 +24,22 @@ export function recentIn(key: string, current?: string): Recent[] {
   return kindOfKey(key) === "group" ? [] : recentChat(current, 5, convPaths(convIdOfKey(key)).messages);
 }
 
+// What the person themselves typed in THIS conversation, lowercased, for the recipient fact (permissions.ts reads it once per run): only inbound lines of this conversation's own log (the owner in the
+// owner's chat, the friend in hers, the members in their group), never Ted's lines, mail, notes or another conversation. The last 90 days and 500 lines. A log that cannot be read says nothing was typed.
+export function typedByPerson(key: string, now = Date.now()): string {
+  try {
+    const since = new Date(now - 90 * 86_400_000).toISOString();
+    return foldEdits(withoutDeleted(ledgerEntries(convPaths(convIdOfKey(key)).messages)))
+      .filter((m) => kindIs(m.kind, "inbound") && m.at > since)
+      .slice(-500)
+      .map((m) => m.text)
+      .join("\n")
+      .toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 // When did Ted last say anything in this conversation (the timestamp of his newest message of any kind, a question included)? An unquoted "yes" answers a question only if it is
 // that message (approvals.ts); `skip`: timestamps left out (a registration question). undefined: nothing logged or the log cannot be read (the caller then fails closed). Every chat, a group and a friend's too, has its own log.
 export function latestSaid(key: string, skip: ReadonlySet<number> = new Set()): number | undefined {

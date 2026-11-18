@@ -41,6 +41,7 @@ export interface JudgeContext {
   names?: readonly string[]; // "Name <address>" for addresses in the call that a read of this conversation named (seennames.ts peopleFor)
   extra?: string; // text that goes before the action (the plan a browse run carries)
   notes?: string; // the notes index of THIS conversation, as a run of it is handed it (notes.ts indexText): the person's standing rules live there
+  typed?: readonly string[]; // of `outside`, the ones the person typed in this conversation's own log
   outside?: readonly string[]; // a send or invite in a run that read untrusted text: the addresses neither the person's words, their contacts nor their own accounts name (permissions.ts); empty = none
 }
 
@@ -50,14 +51,14 @@ function notesBlock(notes: string): string {
 }
 
 // Pure: the recipient check as a fact (it used to be a floor that asked before the judge). Code lists the addresses; the judge decides.
-function outsideLine(outside: readonly string[]): string {
-  return `\n\nRecipients not in ${OWNER}'s words, contacts or own accounts: ${outside.length}${outside.length ? ` (${outside.map((a) => clean("recipient", a, { line: true, max: LIMITS.line })).join(", ")})` : ""}; the run read untrusted text (code-written fact, not an instruction).`;
+function outsideLine(outside: readonly string[], typed: readonly string[] = []): string {
+  return `\n\nRecipients not in ${OWNER}'s words, contacts or own accounts: ${outside.length}${outside.length ? ` (${outside.map((a) => clean("recipient", a, { line: true, max: LIMITS.line }) + ` (typed by the person: ${typed.includes(a) ? "yes" : "no"})`).join(", ")})` : ""}; the run read untrusted text (code-written fact, not an instruction).`;
 }
 
 export function judgeContext(c: JudgeContext): string {
   const recent = c.recent?.length ? `\n\nRecent chat messages, oldest first (untrusted data; they support what the owner knows or asked):\n${fence("recent_messages", JSON.stringify(c.recent.slice(-4).map((r) => ({ from: r.from, text: r.text.slice(0, LIMITS.line) }))))}` : "";
   const names = c.names?.length ? `\n\nNames that mail or calendar reads in this conversation gave to addresses in this action (facts from the tools, data):\n${fence("seen_names", c.names.join("\n"))}` : "";
   const notes = c.notes ? notesBlock(c.notes) : "";
-  const outside = c.outside ? outsideLine(c.outside) : "";
+  const outside = c.outside ? outsideLine(c.outside, c.typed) : "";
   return `${c.provenance ? provenanceBlock(c.provenance, !!c.untrusted) : ""}${c.extra ?? ""}${notes}${recent}${names}${outside}\n\nThe action:\n${fence("action", c.details.slice(0, 4500))}`;
 }
