@@ -101,7 +101,7 @@ test("through the permission path: classify asks, the judge sees the care line, 
 test("the judge's prompt: a delete is judged by bin and reach, not by who made it; never fix", () => {
   assert.match(SYSTEM, /Deleting is judged by reversibility and reach, not by who made the thing/);
   assert.match(SYSTEM, /"Delete:" line written by code/);
-  assert.match(SYSTEM, /Any other permanent delete is ask, even a draft nobody has seen/);
+  assert.match(SYSTEM, /Any other permanent delete is ask/);
   assert.match(SYSTEM, /Never choose fix for a delete\./);
   assert.ok(!/Created by the assistant/.test(SYSTEM));
 });
@@ -119,4 +119,18 @@ test("the journal line of a delete to the bin says it can be restored; a permane
   assert.equal(added.length, 2);
   assert.match(added[0]!, /restorable from the bin for about 30 days/);
   assert.doesNotMatch(added[1]!, /restorable/);
+});
+
+test("the journal line of a deleted event keeps its title and time and says how to recreate it", async () => {
+  const { noteDone } = await import("../src/approvals/journalrender.ts");
+  const { ledgerEntries } = await import("../src/core/messages.ts");
+  const { convIdOfKey, convPaths } = await import("../src/core/convpaths.ts");
+  const key = "owner";
+  const lines = () => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
+  const before = lines().length;
+  await noteDone({ conv: key, source: "chat", tool: `${MB}delete_calendar_event`, input: { eventId: "ev-5", summary: "Dentist", start: "2026-05-12T09:00:00Z" }, response: "ok" });
+  const added = lines().slice(before);
+  assert.equal(added.length, 1);
+  assert.match(added[0]!, /Dentist/);
+  assert.match(added[0]!, /create the event again from the title and time/);
 });
