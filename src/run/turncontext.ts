@@ -23,7 +23,7 @@ export function markShown(conv: string, session: string | undefined, text: strin
 }
 
 // What the chat session was told is kept under the conversation's id, with its facts, status and notes under suffixes.
-export const forgetShown = (conv: string): void => void [conv, `${conv}:facts`, `${conv}:status`, `${conv}:notes`].forEach((k) => told.delete(k));
+export const forgetShown = (conv: string): void => void [conv, `${conv}:facts`, `${conv}:status`, `${conv}:notes`, `${conv}:updated`].forEach((k) => told.delete(k));
 
 // The facts a run is handed besides its message (heartbeat/facts.ts factsFor, set once at start by heartbeat/wiring.ts: the run folder cannot import the heartbeat one). `blocks` are claimed and
 // delivered once, `status` is information; both are told to a chat session only when they differ from what it was last told (unseen / markShown, under their own keys).
