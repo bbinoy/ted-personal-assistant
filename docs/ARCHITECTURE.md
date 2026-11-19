@@ -488,6 +488,7 @@ src/run/scope.ts  what a look is made of; "anything to look at?"
 src/run/session.ts  when a session resumes, restarts or compacts
 src/run/sessionstore.ts  the `session` row of assistant.db
 src/run/turncontext.ts  what a session is told at the start of a turn
+src/run/updated.ts      the "Ted was updated" fact: merge subjects since a conversation's last run
 ```
 
 ### src/modules/ (and one folder per feature)

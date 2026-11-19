@@ -10,6 +10,7 @@ import { lookerOf } from "./scope.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
+import { markUpdated, updatedFact } from "./updated.ts";
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { logTail } from "./chattail.ts";
@@ -69,6 +70,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const k = conv.convId;
   const told = [
     [k, turnContext(conv, trigger)],
+    [`${k}:updated`, updatedFact(conv, r.resume)],
     [`${k}:notes`, readIndex(conv.notesDir) || undefined], // (the SDK loads MEMORY.md when a session starts; a resumed one is told the index again when it changed)
     [`${k}:status`, facts?.status.join("\n\n")],
     [`${k}:facts`, facts?.blocks.join("\n\n")],
@@ -100,6 +102,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   } finally {
     watch?.end();
   }
+  if (!t.fresh) markUpdated(conv, chatResume(conv.convId).resume); // (a look keeps no session; a fresh chat session has nothing stale: it is stored too)
   if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId).resume, s.text); // the run went through: the session has it now
   if (own) {
     const said = spoke(reply.text);

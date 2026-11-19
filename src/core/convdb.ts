@@ -322,6 +322,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "task tags: open-ended labels on an item (a JSON array of short lower-case words)",
     up: `ALTER TABLE items ADD COLUMN tags TEXT; -- JSON array, NULL for none`,
   },
+  {
+    version: 33,
+    name: "the Ted version (a commit id) each chat session last saw (run/updated.ts)",
+    up: `CREATE TABLE seen_version (session_id TEXT PRIMARY KEY, commit_id TEXT NOT NULL, at INTEGER NOT NULL);`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
