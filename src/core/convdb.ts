@@ -324,8 +324,8 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 33,
-    name: "the Ted version (a commit id) this conversation's last run saw (run/updated.ts)",
-    up: `CREATE TABLE seen_version (id INTEGER PRIMARY KEY CHECK (id = 1), commit_id TEXT NOT NULL);`,
+    name: "the Ted version (a commit id) each chat session last saw (run/updated.ts)",
+    up: `CREATE TABLE seen_version (session_id TEXT PRIMARY KEY, commit_id TEXT NOT NULL, at INTEGER NOT NULL);`,
   },
 ];
 
