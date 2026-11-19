@@ -16,17 +16,23 @@ const git = (...args: string[]): string | undefined => {
   }
 };
 
-/** The block for this run, or undefined; the conversation's last-seen commit is moved to the current one either way. */
-export function updatedFact(conv: Conversation, run: typeof git = git): string | undefined {
-  const head = run("rev-parse", "HEAD");
-  if (!head) return undefined;
-  const db = convDb(conv);
-  const last = db.get<{ commit_id: string }>("SELECT commit_id FROM seen_version WHERE id = 1")?.commit_id;
-  if (last === head) return undefined;
-  db.run("INSERT INTO seen_version (id, commit_id) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET commit_id = excluded.commit_id", head);
-  if (!last) return undefined; // the first run here: nothing earlier to be out of date
+// The commit the running code is at, read once: new commits are merged into the repository minutes before the restart, and a run before it must not claim an update that is not running yet.
+let started: string | undefined | null = null;
+export const startHead = (): string | undefined => (started === null ? (started = git("rev-parse", "HEAD")) : started);
+
+const seenIn = (conv: Conversation): string | undefined => convDb(conv).get<{ commit_id: string }>("SELECT commit_id FROM seen_version WHERE id = 1")?.commit_id;
+
+/** The block for this run, or undefined. Reads only: the commit is stored by markUpdated once the run went through. */
+export function updatedFact(conv: Conversation, head = startHead(), run: typeof git = git): string | undefined {
+  const last = head ? seenIn(conv) : undefined;
+  if (!head || !last || last === head) return undefined; // (no last: the first run here, nothing earlier to be out of date)
   const log = run("log", "--merges", "--first-parent", "--format=%s", `${last}..${head}`);
   if (log === undefined) return undefined;
   const subjects = log.split("\n").filter(Boolean).slice(0, MAX_LINES);
   return ["Ted was updated since the last run in this chat." + (subjects.length ? " Changes, newest first:" : ""), ...subjects.map((s) => `- ${s}`), "Earlier statements in this chat about what you can't do may be out of date: if a tool for it is in your list, try it."].join("\n");
+}
+
+/** The run went through (or started a fresh session): this conversation has seen the running version. */
+export function markUpdated(conv: Conversation, head = startHead()): void {
+  if (head && seenIn(conv) !== head) convDb(conv).run("INSERT INTO seen_version (id, commit_id) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET commit_id = excluded.commit_id", head);
 }

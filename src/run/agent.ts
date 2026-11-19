@@ -10,7 +10,7 @@ import { lookerOf } from "./scope.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
-import { updatedFact } from "./updated.ts";
+import { markUpdated, updatedFact } from "./updated.ts";
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { logTail } from "./chattail.ts";
@@ -102,6 +102,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   } finally {
     watch?.end();
   }
+  markUpdated(conv); // (a fresh session has nothing stale either)
   if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId).resume, s.text); // the run went through: the session has it now
   if (own) {
     const said = spoke(reply.text);
