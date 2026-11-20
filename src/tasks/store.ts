@@ -315,13 +315,21 @@ export function addedByLooks(key: string, since: number): Item[] {
   return readDb(key)?.all<Row>(`SELECT i.* FROM items i JOIN task_events e ON e.item_id = i.id WHERE ${byLooks} AND e.at >= ? ORDER BY i.id LIMIT 50`, LOOK_BY, since).map(toItem) ?? [];
 }
 
-/** Open items whose due date or reminder was moved at least `min` times (history rows 'edited' that set due or remind_at), with the count and when the first move was: the fact a run is told about tasks that slide (tasks/render.ts tasksFacts). */
-export function slidingItems(key: string, min: number): { item: Item; moves: number; since: number }[] {
-  const rows = readDb(key)?.all<Row & { moves: number; since: number }>(
-    "SELECT i.*, COUNT(*) AS moves, MIN(e.at) AS since FROM items i JOIN task_events e ON e.item_id = i.id WHERE i.status = 'open' AND e.action = 'edited' AND (json_extract(e.after, '$.due') IS NOT NULL OR json_extract(e.after, '$.remind_at') IS NOT NULL) GROUP BY i.id HAVING COUNT(*) >= ? ORDER BY moves DESC LIMIT 20",
-    min,
-  );
-  return rows?.map((r) => ({ item: toItem(r), moves: r.moves, since: r.since })) ?? [];
+/** Open items whose due date or reminder was moved on at least `min` different calendar days in `zone` (history rows 'edited' that set due or remind_at; many clicks in one sitting are one day), with that day count and when the first move was: the fact a run is told about tasks that slide (tasks/render.ts tasksFacts). */
+export function slidingItems(key: string, min: number, zone: string): { item: Item; moves: number; since: number }[] {
+  const db = readDb(key);
+  if (!db) return [];
+  const ev = db.all<{ item_id: number; at: number }>("SELECT e.item_id, e.at FROM task_events e JOIN items i ON i.id = e.item_id WHERE i.status = 'open' AND e.action = 'edited' AND (json_extract(e.after, '$.due') IS NOT NULL OR json_extract(e.after, '$.remind_at') IS NOT NULL) ORDER BY e.at");
+  const by = new Map<number, { days: Set<string>; since: number }>();
+  for (const e of ev) {
+    const g = by.get(e.item_id) ?? { days: new Set<string>(), since: e.at };
+    g.days.add(localOf(e.at, zone).date);
+    by.set(e.item_id, g);
+  }
+  return [...by].filter(([, g]) => g.days.size >= min).sort((x, y) => y[1].days.size - x[1].days.size).slice(0, 20).flatMap(([id, g]) => {
+    const r = db.get<Row>("SELECT * FROM items WHERE id = ?", id);
+    return r ? [{ item: toItem(r), moves: g.days.size, since: g.since }] : [];
+  });
 }
 
 export interface Added {

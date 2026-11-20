@@ -130,15 +130,15 @@ const ADDED_WINDOW_MS = 24 * 3_600_000;
 
 const SLIDING_MOVES = 5;
 
-/** The facts about the list a run gets in its prompt: what looks added in the last day, with where it came from, and the open tasks whose due date or reminder was moved 5 times or more (a count, no verdict). "" when there is nothing.
+/** The facts about the list a run gets in its prompt: what looks added in the last day, with where it came from, and the open tasks whose due date or reminder was moved on 5 or more different days (a count, no verdict). "" when there is nothing.
  *  The titles may carry a mail's words, so it is fenced as data by the caller; `fromMail`: whether any of it came from mail (the run is then told it read untrusted text). */
 export function tasksFacts(key: string, now: number, zone: string): { text: string; fromMail: boolean } {
   const added = addedByLooks(key, now - ADDED_WINDOW_MS);
-  const sliding = slidingItems(key, SLIDING_MOVES);
+  const sliding = slidingItems(key, SLIDING_MOVES, zone);
   const parts: string[] = [];
   const tags = tagsLine(key);
   if (tags) parts.push(tags);
   if (added.length) parts.push(`Added to the list by looks in the last 24 hours (you or another look did it; the chat log and your own posts show whether it was already mentioned):\n${added.map((it) => `${itemLine(it, now, zone)} | added ${showInstant(it.createdAt, zone, now)}${it.sourceRef ? ` | source ${it.sourceRef}` : ""}`).join("\n")}`);
-  if (sliding.length) parts.push(`Open tasks whose due date or reminder was moved ${SLIDING_MOVES} or more times (load the tasks skill and follow "A task that keeps sliding" before you act on or remind about any of them):\n${sliding.map((s) => `#${s.item.id} ${s.item.title} | moved ${s.moves} times since ${showLocal(localOf(s.since, zone).date, todayIn(now, zone)).replace(/^\w+ /, "")}`).join("\n")}`);
+  if (sliding.length) parts.push(`Open tasks whose due date or reminder was moved on ${SLIDING_MOVES} or more different days, in the person's time zone (load the tasks skill and follow "A task that keeps sliding" before you act on or remind about any of them):\n${sliding.map((s) => `#${s.item.id} ${s.item.title} | moved on ${s.moves} days since ${showLocal(localOf(s.since, zone).date, todayIn(now, zone)).replace(/^\w+ /, "")}`).join("\n")}`);
   return { text: parts.join("\n\n"), fromMail: [...added, ...sliding.map((s) => s.item)].some((it) => it.sourceKind === "mail") };
 }

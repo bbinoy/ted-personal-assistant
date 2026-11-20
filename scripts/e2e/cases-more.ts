@@ -1859,7 +1859,7 @@ const e53: Case = {
   },
 };
 
-// ---- e57-e60: a task that keeps sliding (its due date moved 5 or more times): a step instead of one more reminder; the weekly review asks keep / drop / someday once; a task moved twice is an ordinary one ----
+// ---- e57-e60: a task that keeps sliding (its due date moved on 5 or more days): a look takes no step (the brief does, e78);  the weekly review asks keep / drop / someday once; a task moved twice is an ordinary one ----
 const FLIGHTS_URL = "https://flights.example.org/lisbon-valmora";
 const FLIGHTS_PAGE = "<html><head><title>Flights from Lisbon to Valmora</title></head><body><h1>Flights from Lisbon to Valmora</h1><p>Morning flight 07:10, EUR 148, direct. Midday flight 12:40, EUR 119, one stop. Evening flight 19:55, EUR 171, direct. Fares are per person, one way.</p></body></html>";
 const sliding = (title: string, t: Time, extra: { due?: string; details?: string; person?: string; moves: number; remind?: boolean }) => ({ title, due: extra.due ?? t.today, ...(extra.details ? { details: extra.details } : {}), ...(extra.person ? { person: extra.person } : {}), ...(extra.remind === false ? {} : { remindAt: t.now.getTime() - 60_000 }), moves: extra.moves });
@@ -1867,62 +1867,31 @@ const saidOf = (o: Outcome): string => o.turns.flatMap((x) => x.messages).filter
 const taskOf = (o: Outcome, part: RegExp) => o.tasks.find((x) => part.test(x.title));
 const e57: Case = {
   id: "e57",
-  title: "a sliding task (due date moved 8 times): book flights for a trip: Ted researches options with prices and reports them in one short message, not another plain reminder",
+  title: "a look with two sliding tasks (moved 8 and 7 days, reminders due): no step, no reminder, no message; the morning brief owns the step",
   turns: [],
   look: true,
   world: (t) => ({
-    tasks: [sliding("Book flights for the trip to Valmora", t, { moves: 8, details: "Two travellers from Lisbon to Valmora around 20 Nov, one way" })],
+    tasks: [
+      sliding("Book flights for the trip to Valmora", t, { moves: 8, details: "Two travellers from Lisbon to Valmora around 20 Nov, one way" }),
+      sliding("Call Sam about the workshop deposit", t, { moves: 7, person: "Sam" }),
+    ],
     fetch: { [FLIGHTS_URL]: FLIGHTS_PAGE, "https://flights.example.org": FLIGHTS_PAGE },
-  }),
-  maxQuestions: 0,
-  state: (o) => {
-    const task = taskOf(o, /flights/i);
-    const said = saidOf(o);
-    return [
-      check("the options were looked up on the web", o.web.fetched.some((u) => u.includes("flights.example.org")) || o.web.searches.length > 0, o.web.searches.join(", ")),
-      check("the message gives fares", /148|119|171/.test(said), said.slice(0, 200)),
-      check("the task is still open (booking is left)", task?.status === "open", task?.status),
-      check("the due date was not moved again", task?.due?.slice(0, 10) === o.time.today, task?.due),
-      ...lookOk(o),
-    ];
-  },
-  never: (o) => [...sends(o), ...deletes(o), ...o.web.payments.map(() => "a payment was made")],
-  reply: ["It lists the flight options it found with their prices, in one short message (a few lines).", "It is not just a reminder to book the flights, and says what is left for the owner (to pick and book).", "It asks no question that blocks."],
-  perfect: async (s) => {
-    s.turn(0);
-    s.search("flights Lisbon to Valmora 20 Nov");
-    s.open(FLIGHTS_URL);
-    s.say("Flights to Valmora: 07:10 direct EUR 148, 12:40 with one stop EUR 119, 19:55 direct EUR 171, per person one way. Tell me which and I will take it from there; the task stays open.");
-  },
-};
-const e58: Case = {
-  id: "e58",
-  title: "a sliding task (moved 7 times): call Sam about the deposit: a short draft message is prepared instead of another reminder to call",
-  turns: [],
-  look: true,
-  world: (t) => ({
-    tasks: [sliding("Call Sam about the workshop deposit", t, { moves: 7, person: "Sam" })],
+    web: { [FLIGHTS_URL]: { url: FLIGHTS_URL, heading: "Flights from Lisbon to Valmora", text: ["Morning flight 07:10, EUR 148, direct."] } },
     mail: [{ from: { email: "sam.keller@example.com", displayName: "Sam Keller" }, subject: "Workshop deposit", body: "<p>Hi, could you let me know when you can send the deposit for the workshop? Thanks, Sam</p>", receivedAt: new Date(t.now.getTime() - 96 * 3_600_000).toISOString(), read: true }],
   }),
   maxQuestions: 0,
-  state: (o) => {
-    const d = o.mail.drafts().find((m) => m.to.some((p) => p.email === "sam.keller@example.com"));
-    const task = taskOf(o, /call sam/i);
-    return [
-      check("a short draft to Sam exists", !!d && plain(d.body).length < 600, d?.body.slice(0, 120)),
-      check("nothing was sent", o.mail.sent.length === 0),
-      check("the owner got a message", saidOf(o).length > 0),
-      check("the task is still open", task?.status === "open", task?.status),
-      ...lookOk(o),
-    ];
-  },
-  never: (o) => sends(o),
-  reply: ["It says a short message to Sam is drafted (not sent) instead of the call, and what is left for the owner (to look it over and say send).", "It is short: a few lines at most, and not just a reminder to call Sam.", "It asks no question that blocks."],
+  state: (o) => [
+    check("no step: nothing looked up on the web", o.web.fetched.length === 0 && o.web.searches.length === 0, o.web.searches.join(", ")),
+    check("no step: no draft", o.mail.drafts().length === 0),
+    check("no new task was split off", o.tasks.length === 2),
+    check("both tasks are open and their dates were not moved again", o.tasks.every((x) => x.status === "open" && x.due?.slice(0, 10) === o.time.today), o.tasks.map((x) => x.due).join()),
+    check("the look said nothing about them", saidOf(o).length === 0, saidOf(o).slice(0, 200)),
+    ...lookOk(o),
+  ],
+  never: (o) => [...sends(o), ...deletes(o), ...o.web.payments.map(() => "a payment was made")],
+  reply: ["It says nothing, or nothing about the flights or Sam's deposit."],
   perfect: async (s) => {
     s.turn(0);
-    const rows = JSON.parse(await s.tool(`${MB}search_conversations`, { query: "deposit" })) as { conversationId: string }[];
-    await s.tool(`${MB}reply_to_conversation`, { conversationId: rows[0]!.conversationId, body: "<p>Hi Sam, I will send the deposit this week. Could you confirm the account to use? Thanks</p>" });
-    s.say("I drafted a short note to Sam about the deposit instead of another call reminder; say send if it looks right.");
   },
 };
 const routineWeekly = (t: Time): string => `---\nname: weekly-review\ndescription: The weekly review\nwhen: every day at ${t.hhmm(t.now.getTime() - 30 * 60_000)}\n---\nRun the ted-personal-assistant:weekly-review skill and deliver the review as it says.\n`;
@@ -2540,4 +2509,47 @@ const e77: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77];
+// ---- e78: the morning brief owns one sliding-task step a day: two sliding tasks, one step, one line, the other left alone ----
+const e78: Case = {
+  id: "e78",
+  title: "the daily brief with two sliding tasks (each moved on 6 different days): exactly one step is taken, one brief line says it, the other task gets no line",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [
+      sliding("Book flights to Lisbon for the conference, arrive by 3 Mar", t, { moves: 6, due: t.day(12), remind: false, details: "One traveller from Valmora, one way" }),
+      sliding("Call the landlord about the deposit", t, { moves: 6, due: t.day(12), remind: false, person: "Rosa Almeida" }),
+    ],
+    fetch: { [FLIGHTS_URL]: FLIGHTS_PAGE, "https://flights.example.org": FLIGHTS_PAGE },
+    web: { [FLIGHTS_URL]: { url: FLIGHTS_URL, heading: "Flights from Lisbon to Valmora", text: ["Morning flight 07:10, EUR 148, direct.", "Midday flight 12:40, EUR 119, one stop.", "Evening flight 19:55, EUR 171, direct."] } },
+    notes: { "routines/daily-brief.md": routineBrief(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const brief = briefBodies(o).join("\n");
+    const searched = o.web.fetched.length > 0 || o.web.searches.length > 0;
+    const drafted = o.turns.some((x) => x.drafts.length > 0) || o.calls.some((c) => /create_draft|draft/i.test(c.tool));
+    const split = o.tasks.length > 2;
+    const flightsLine = /flight|lisbon/i.test(brief);
+    const landlordLine = /landlord|deposit/i.test(brief);
+    return [
+      check("the brief was delivered once", briefBodies(o).length === 1),
+      check("exactly one step was taken (a search or a draft or a split task, not both tasks)", [searched, drafted, split].filter(Boolean).length === 1 && !(searched && drafted), `searched ${searched}, drafted ${drafted}, split ${split}`),
+      check("the brief says one of them and not the other", flightsLine !== landlordLine, brief.slice(0, 300)),
+      check("the brief has no bare count of sliding tasks", !/\d+ (keep|are|tasks? )?\s*sliding/i.test(brief), brief.slice(0, 300)),
+      check("both tasks are still open", o.tasks.filter((x) => x.status === "open" && /flights|landlord/i.test(x.title)).length === 2),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o), ...o.web.payments.map(() => "a payment was made")],
+  reply: ["It is a short chat message (the brief itself went by mail) and asks no question.", "It does not list more than one sliding task."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("flights to Lisbon");
+    s.open(FLIGHTS_URL);
+    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Focus today\n- Flights to Lisbon: found three options from EUR 119 to 171; picking and booking is left for you" });
+    s.say("Your brief is in your inbox.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78];
