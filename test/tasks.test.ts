@@ -554,7 +554,7 @@ test("tasks: the one-time Notion import is gone: no tool, no skill, no table; ol
   assert.equal(S.addItem(scope(k), { title: "From before", sourceKind: "import", sourceRef: "p1" }).item.sourceKind, "import");
 });
 
-test("tasks: the facts say how often an open task's due date or reminder moved, from 5 moves on, and nothing for fewer, done tasks or other edits", () => {
+test("tasks: the facts say on how many days an open task's due date or reminder moved, from 5 days on, and nothing for fewer, done tasks or other edits", () => {
   const k = fresh();
   const slide = S.addItem(scope(k), { title: "Book flights for the trip", due: "2026-05-01" });
   const twice = S.addItem(scope(k), { title: "Renew the pass", due: "2026-05-01" });
@@ -567,9 +567,22 @@ test("tasks: the facts say how often an open task's due date or reminder moved, 
   for (let i = 0; i < 6; i++) S.editItem(scope(k), finished.item.id, { due: `2026-05-${10 + i}` });
   S.completeItem(scope(k), finished.item.id);
   const f = tasksFacts(k, NOW, ZONE);
-  assert.match(f.text, new RegExp(`#${slide.item.id} Book flights for the trip \\| moved 6 times since 12 Oct`));
+  assert.match(f.text, new RegExp(`#${slide.item.id} Book flights for the trip \\| moved on 6 days since 12 Oct`));
   assert.doesNotMatch(f.text, /Renew the pass|Tidy the shelf|Pay the fee/);
   assert.equal(tasksFacts(fresh(), NOW, ZONE).text, "");
+});
+
+test("tasks: 15 moves in one sitting are one day (not sliding); moves on 5 different days slide", () => {
+  const k = fresh();
+  const burst = S.addItem(scope(k), { title: "Renew the parking permit", due: "2026-05-01" });
+  const spread = S.addItem(scope(k), { title: "Book the dentist", due: "2026-05-01" });
+  const day = 86_400_000;
+  for (let i = 0; i < 15; i++) S.editItem(scope(k, { now: NOW - 3_600_000 + i * 1000 }), burst.item.id, { due: `2026-06-${10 + i}` });
+  for (let i = 0; i < 5; i++) S.editItem(scope(k, { now: NOW - (i + 1) * day }), spread.item.id, { due: `2026-06-${10 + i}` });
+  assert.deepEqual(S.slidingItems(k, 5, ZONE).map((s) => [s.item.id, s.moves]), [[spread.item.id, 5]]);
+  const f = tasksFacts(k, NOW, ZONE);
+  assert.match(f.text, /Book the dentist \| moved on 5 days/);
+  assert.doesNotMatch(f.text, /parking permit/);
 });
 
 test("tasks: tags are normalised, stored with the item, replaced by an edit, shown in the line and the facts, and filter a list", async () => {

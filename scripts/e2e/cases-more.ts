@@ -2540,4 +2540,47 @@ const e77: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77];
+// ---- e78: the morning brief owns one sliding-task step a day: two sliding tasks, one step, one line, the other left alone ----
+const e78: Case = {
+  id: "e78",
+  title: "the daily brief with two sliding tasks (each moved on 6 different days): exactly one step is taken, one brief line says it, the other task gets no line",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [
+      sliding("Book flights to Lisbon for the conference, arrive by 3 Mar", t, { moves: 6, due: t.day(12), remind: false, details: "One traveller from Valmora, one way" }),
+      sliding("Call the landlord about the deposit", t, { moves: 6, due: t.day(12), remind: false, person: "Rosa Almeida" }),
+    ],
+    fetch: { [FLIGHTS_URL]: FLIGHTS_PAGE, "https://flights.example.org": FLIGHTS_PAGE },
+    web: { [FLIGHTS_URL]: { url: FLIGHTS_URL, heading: "Flights from Lisbon to Valmora", text: ["Morning flight 07:10, EUR 148, direct.", "Midday flight 12:40, EUR 119, one stop.", "Evening flight 19:55, EUR 171, direct."] } },
+    notes: { "routines/daily-brief.md": routineBrief(t) },
+  }),
+  maxQuestions: 0,
+  state: (o) => {
+    const brief = briefBodies(o).join("\n");
+    const searched = o.web.fetched.length > 0 || o.web.searches.length > 0;
+    const drafted = o.turns.some((x) => x.drafts.length > 0) || o.calls.some((c) => /create_draft|draft/i.test(c.tool));
+    const split = o.tasks.length > 2;
+    const flightsLine = /flight|lisbon/i.test(brief);
+    const landlordLine = /landlord|deposit/i.test(brief);
+    return [
+      check("the brief was delivered once", briefBodies(o).length === 1),
+      check("exactly one step was taken (a search or a draft or a split task, not both tasks)", [searched, drafted, split].filter(Boolean).length === 1 && !(searched && drafted), `searched ${searched}, drafted ${drafted}, split ${split}`),
+      check("the brief says one of them and not the other", flightsLine !== landlordLine, brief.slice(0, 300)),
+      check("the brief has no bare count of sliding tasks", !/\d+ (keep|are|tasks? )?\s*sliding/i.test(brief), brief.slice(0, 300)),
+      check("both tasks are still open", o.tasks.filter((x) => x.status === "open" && /flights|landlord/i.test(x.title)).length === 2),
+      ...lookOk(o),
+    ];
+  },
+  never: (o) => [...sends(o), ...deletes(o), ...o.web.payments.map(() => "a payment was made")],
+  reply: ["It is a short chat message (the brief itself went by mail) and asks no question.", "It does not list more than one sliding task."],
+  perfect: async (s) => {
+    s.turn(0);
+    s.search("flights to Lisbon");
+    s.open(FLIGHTS_URL);
+    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Focus today\n- Flights to Lisbon: found three options from EUR 119 to 171; picking and booking is left for you" });
+    s.say("Your brief is in your inbox.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e58, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78];
