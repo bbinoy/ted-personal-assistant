@@ -114,7 +114,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | session | the conversation's chat session (`session`), resumed | a fresh session every time, none saved (continuity is the shared context: facts, chat tail, journal, its own posts) |
 | message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the last 40 chat lines |
 | attended | yes | no |
-| answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
+| JSON for code | none | `nextCheckMinutes`, `urgent`, `triage` (what it writes is delivered as a reply is: nothing or `[[silent]]` is silence) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session (`freshSession` for a look), the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
 - **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled). `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run asks like a chat turn (approvals, below) and the browse worker of a look is unattended too.
@@ -208,10 +208,10 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - `hasSomethingToLookAt` (`src/run/scope.ts`) wants the capability `mail`, `calendar` or `notion`, or an active note; otherwise no model call is made.
 - Then `mayRun` must allow it and the conversation must not be busy.
 
-**What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, the answer format) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat tail.
+**What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, what to write) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat tail.
 
 - The message is also the judge's standing provenance, so it holds no mail and no chat.
-- The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..60 minutes (`clampLook`); `[[silent]]` means nothing to say.
+- What the run writes after its last tool call is delivered exactly as a chat turn's reply is (`agentrun.ts writtenAfterTools`, then `postNotice`); nothing or `[[silent]]` means nothing to say. Its JSON holds only what code needs: `{ nextCheckMinutes, urgent?, triage? }`; the next look is clamped to 10..60 minutes (`clampLook`).
 
 **A look starts fresh.** Every look is a new SDK session (`freshSession`, `TRIGGERS.look.fresh`): it neither resumes nor saves one, and the chat session is never touched by it, not even to drop it or mark it untrusted. It is told the full context, the notes index, the facts and the chat tail every time. Continuity comes from the shared context (facts, chat tail, journal, its own posts). A look that read mail is untrusted for that run only. An earlier design resumed one Haiku session per conversation and its later looks answered from their memory of earlier checks without opening the inbox.
 

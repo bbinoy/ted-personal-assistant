@@ -282,6 +282,14 @@ export function missingTools(content: unknown): string[] {
   });
 }
 
+// Pure. The text written since the last tool call, after one more assistant message: its text blocks join it, a call of a tool other than the structured answer starts it again (what is written between calls is narration, never delivered).
+function writtenAfterTools(before: string, content: unknown): string {
+  const blocks = (Array.isArray(content) ? content : []) as { type?: string; text?: string; name?: string }[];
+  const text = blocks.filter((b) => b.type === "text" && typeof b.text === "string").map((b) => b.text!.trim()).filter(Boolean).join("\n\n");
+  const called = blocks.some((b) => b.type === "tool_use" && b.name !== "StructuredOutput");
+  return called ? "" : [before, text].filter(Boolean).join("\n\n");
+}
+
 // The stream yields many message types (system, assistant, tool use...).
 // The one we want is the single "result" message that ends the turn.
 export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOptions, previousCost: number): Promise<AgentReply> {
@@ -290,6 +298,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   let first = false;
   const usage = new QueryUsage();
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
+  let written = ""; // the text the main loop wrote since its last tool call (what a chat turn's result is)
   for await (const message of stream) {
     observe(payer, message);
     opts.watch?.see(message);
@@ -303,7 +312,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       if (!first && !message.parent_tool_use_id) (first = true), opts.onFirstOutput?.();
       if (message.error) lastError = message.error;
       usage.add(message.message);
-      if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
+      if (!message.parent_tool_use_id) {
+        lastContext = contextTokens(message.message.usage);
+        written = writtenAfterTools(written, message.message.content);
+      }
     }
     if (message.type !== "result") continue;
     const stored = opts.sessionConv && !opts.freshSession ? readSession(opts.sessionConv) : undefined;
@@ -329,7 +341,9 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     }
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
-      return { text: message.result, costUsd: turnCostUsd, structured: message.structured_output };
+      // A run with a constrained JSON answer (a look) has the JSON as its result: its words are what it wrote after its last tool call, as the result of a chat turn is.
+      // (the browse worker also has a JSON answer: its fallback text is now its last written words, not the JSON)
+      return { text: message.structured_output === undefined ? message.result : written, costUsd: turnCostUsd, structured: message.structured_output };
     }
     throw failure(lastError, message.subtype, payer);
   }

@@ -39,6 +39,7 @@ import { walkNotes } from "../../src/memory/notes.ts";
 import { dreamScope } from "../../src/modules/memory/dreamscope.ts";
 import { dreamSystem } from "../../src/run/persona.ts";
 import { localTime } from "../../src/core/timezone.ts";
+import { withoutSilent } from "../../src/core/silent.ts";
 import { spentToday } from "../../src/core/budget.ts";
 import { readAudit } from "../../src/core/audit.ts";
 import { FakeCalendar } from "./fakecalendar.ts";
@@ -348,7 +349,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
           busy: () => false,
           record: () => {},
           sendWhile: (_c: unknown, run: () => Promise<unknown>) => withSend(conv.key, sink, run as never),
-          runTurn: async (_c: unknown, t: { run: (x: object) => Promise<{ text: string }> }) => ((said.push((await t.run({})).text), { spoke: true })),
+          runTurn: async (_c: unknown, t: { run: (x: object) => Promise<{ text: string }> }) => ((said.push(withoutSilent((await t.run({})).text)), { spoke: true })),
         };
         const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (cv, payer, build, extra) => runLook(cv, payer, build, approveIn(cv.key, { background: true }), extra, { now: o.now, io: { query: realQuery } }), may: () => LOGIN, why: () => "refused", notesChangedAt: () => 0 });
         recordMessage("owner", nowMs - 3_600_000, "morning", new Date(nowMs - 3_600_000)); // (a conversation with some history, as a look finds it)

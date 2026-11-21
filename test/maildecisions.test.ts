@@ -130,7 +130,7 @@ test("a look that answers records its decisions for the next run; a look that fa
     });
     assert.equal(await bad.hb.look(bad.conv, {} as never, new Date()), "failed");
     assert.deepEqual(ids(OWNER_CONV), before, "failed: nothing decided");
-    const good = look(async () => ({ text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30, triage } }));
+    const good = look(async () => ({ text: "", structured: { nextCheckMinutes: 30, triage } }));
     assert.equal(await good.hb.look(good.conv, {} as never, new Date()), "silent");
     assert.deepEqual(ids(OWNER_CONV).slice(before.length), ["look-1", "look-2"], "silent but fine: decided from now on");
   } finally {

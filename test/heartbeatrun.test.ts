@@ -74,7 +74,7 @@ function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () 
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       if (a.judged) extra.triage?.judged([a.judged[0]], a.judged[1], a.judged[2]);
-      return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.triage ? { triage: a.triage } : {}), ...(a.urgent ? { urgent: true } : {}) } };
+      return { text: a.message ?? "[[silent]]", costUsd: 0.02, structured: { nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.triage ? { triage: a.triage } : {}), ...(a.urgent ? { urgent: true } : {}) } };
     },
     notesChangedAt: () => 0,
     now: () => now,
@@ -102,13 +102,13 @@ test("the next look is clamped to 10..60 minutes, whatever the model says, and f
   assert.deepEqual([schema.properties.nextCheckMinutes.minimum, schema.properties.nextCheckMinutes.maximum], [10, 60]);
 });
 
-test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
-  assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false, triage: [] });
-  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 60, urgent: false, triage: [] });
-  for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say", "SILENT", "**[[SILENT]]**", "(silent)"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
-  assert.equal(parseHeartbeatAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
-  assert.equal(parseHeartbeatAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
-  assert.equal(parseHeartbeatAnswer(undefined, "").nextCheckMinutes, 30);
+test("the answer: only what code needs; the minutes are clamped, a bad answer falls back to the day default, urgent is a literal true", () => {
+  assert.deepEqual(parseHeartbeatAnswer({ nextCheckMinutes: 15 }), { nextCheckMinutes: 15, urgent: false, triage: [] });
+  assert.deepEqual(parseHeartbeatAnswer({ nextCheckMinutes: 600, urgent: true }), { nextCheckMinutes: 60, urgent: true, triage: [] });
+  assert.equal(parseHeartbeatAnswer({ nextCheckMinutes: 30, urgent: "true" }).urgent, false);
+  assert.equal(parseHeartbeatAnswer(undefined).nextCheckMinutes, 30);
+  assert.equal(parseHeartbeatAnswer("free text").nextCheckMinutes, 30);
+  assert.ok(!Object.hasOwn((HEARTBEAT_SCHEMA as unknown as { schema: { properties: object } }).schema.properties, "message"), "the words a look writes are delivered as written, not handed in as a field");
 });
 
 test("the instruction: the clock, the zone, the last look, the quiet window and the brief rules as text; no gate vocabulary", () => {
@@ -191,6 +191,26 @@ test("owner's look: a run that spoke with the send tool while it worked counts a
   assert.equal(await w.look(conv, DAY), "posted");
   assert.deepEqual(seen.posted, [], "the final answer had nothing to add: nothing is posted twice");
   assert.deepEqual(readRows().map((r) => [r.message, r.sent, r.outcome]), [[true, 2, "posted"]]);
+});
+
+test("a look's words are delivered as a chat turn's reply is: written text goes out once; nothing, [[silent]] in any slipped form or a bare reaction is silence", async () => {
+  const said = rig(() => ({ message: "Eve is waiting on Friday's slides.\n\nI drafted the reply." }));
+  assert.equal(await said.w.look(said.conv, DAY), "posted");
+  assert.deepEqual(said.seen.posted, ["Eve is waiting on Friday's slides.\n\nI drafted the reply."], "the whole text goes to the one delivery (one message per paragraph is its job), once");
+  for (const quiet of ["", "   ", "[[silent]]", "[[SILENT]]", "**[[SILENT]]**", "(silent)", "[[react: 👍]]"]) {
+    const r = rig(() => ({ message: quiet }));
+    assert.equal(await r.w.look(r.conv, DAY), "silent", JSON.stringify(quiet));
+    assert.deepEqual(r.seen.posted, [], JSON.stringify(quiet));
+  }
+  const beside = rig(() => ({ message: "Moved the dentist to Friday.\n\n[[silent]]" }));
+  assert.equal(await beside.w.look(beside.conv, DAY), "posted", "words written beside the marker still go out (the delivery drops the marker)");
+});
+
+test("a look's words held for quiet hours keep no markers", async () => {
+  const r = rig(() => ({ message: "Your code: [[whole]]AB-12[[/whole]]\n\n[[react: 👍]]\n\n[[silent]]" }));
+  assert.equal(await r.w.look(r.conv, NIGHT), "silent");
+  assert.deepEqual(heldPosts(r.conv).map((h) => h.text), ["Your code: AB-12"]);
+  assert.deepEqual(r.seen.posted, []);
 });
 
 test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, and at night the clamp holds too", async () => {
@@ -735,8 +755,8 @@ test("the decision log: a look's per-mail decisions become triage journal lines,
 });
 
 test("the answer's decision log is read leniently: bad rows are dropped, never the look", () => {
-  const a = parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, triage: [{ id: " x ", from: "A", subject: "S", decision: "keep", reason: "r" }, null, { id: "y", decision: "nope" }, "text"] }, "");
+  const a = parseHeartbeatAnswer({ nextCheckMinutes: 30, triage: [{ id: " x ", from: "A", subject: "S", decision: "keep", reason: "r" }, null, { id: "y", decision: "nope" }, "text"] });
   assert.deepEqual(a.triage, [{ id: "x", from: "A", subject: "S", decision: "keep", reason: "r" }]);
-  assert.deepEqual(parseHeartbeatAnswer({ message: "x", nextCheckMinutes: 30, triage: "garbage" }, "").triage, []);
-  assert.deepEqual(parseHeartbeatAnswer(undefined, "free text").triage, []);
+  assert.deepEqual(parseHeartbeatAnswer({ nextCheckMinutes: 30, triage: "garbage" }).triage, []);
+  assert.deepEqual(parseHeartbeatAnswer("free text").triage, []);
 });

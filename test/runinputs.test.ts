@@ -7,7 +7,7 @@ import { join } from "node:path";
 // WHAT EACH KIND OF RUN IS HANDED, side by side (CLAUDE.md §2: one agent, a closed list of differences). The owner's chat turn and look, a group's, a friend's, and the
 // expert each of them may brief are rendered with fakes (no model, a temporary data folder) through the real run path (agent.ts runConversation / runLook): the system
 // prompt's persona sections, the blocks of the user turn by name (clock, setup, notices, notes, status, held posts, the message), the tools, skills, connectors flag, model,
-// session and answer format, and the sections and blocks of the expert's own prompt and brief. Three tests and one fixture:
+// session and the look's JSON for code, and the sections and blocks of the expert's own prompt and brief. Three tests and one fixture:
 //   1. REQUIRED: what every run must have (exactly one CURRENT TIME in its turn and in its expert's brief, the persona sections every conversation shares).
 //   2. ALLOWED: every other difference between two kinds must be in the table below, with its reason and the axis it follows (the trigger, the conversation, or either). A
 //      difference not in the table, or one that follows another axis than its row says, fails the test: add it to the table with a reason, or remove the difference.
@@ -35,7 +35,7 @@ const KEY = "test-instance-key";
 
 // ---- the allowed differences ----------------------------------------------------------------------------------------------------------------------------------
 // A feature is named `<part>:<name>` (system:, expert-system:, block:, expert-brief:, tools:, builtin:, skills:, mcp:, agents:) or a plain scalar. `by`: what the value may depend on:
-//   trigger       a chat turn against a look (CLAUDE.md §2: model, session, trigger line, attended, answer format), the same for every conversation
+//   trigger       a chat turn against a look (CLAUDE.md §2: model, session, trigger line, attended, the look's JSON for code), the same for every conversation
 //   conversation  the owner, a group, a friend: the capability set, privacy (§5) or billing; a conversation's turn and look agree
 //   either        both (a tool a capability gives that attendance removes)
 // Nothing else is allowed: the clock, the persona sections everyone shares, the notes, the held posts and the message are the same for all.
@@ -43,7 +43,7 @@ type By = "trigger" | "conversation" | "either";
 const ALLOWED: { match: RegExp; by: By; reason: string }[] = [
   // -- the trigger table (runoptions.ts TRIGGERS) and what follows from it --
   { match: /^(model|effort)$/, by: "trigger", reason: "model: a look is a cheap model that decides and delegates (HEARTBEAT_MODEL, high effort); a chat turn is HARNESS_MODEL" },
-  { match: /^answer$/, by: "trigger", reason: "answer format: a look answers in the look's JSON (message, nextCheckMinutes, urgent), a chat turn in a reply" },
+  { match: /^answer$/, by: "trigger", reason: "the look also hands in JSON for code (nextCheckMinutes, urgent, triage); what it writes is delivered as a chat turn's reply is" },
   { match: /^session$/, by: "trigger", reason: "session: a chat turn resumes the conversation's session, a look starts a fresh one every time" },
   { match: /^attended$/, by: "trigger", reason: "attended: a message's person is waiting, a look's nobody" },
   // -- what the capability set and attendance decide --
@@ -134,7 +134,7 @@ async function render(name: KindName): Promise<Seen> {
     (async function* () {
       prompt = await textOf(p.prompt);
       options = p.options;
-      yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s", total_cost_usd: 0, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } };
+      yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s", total_cost_usd: 0, structured_output: { nextCheckMinutes: 30 } };
     })()
   )) as never;
   forgetShown(k.conv.convId); // (every run is a first one: told everything)

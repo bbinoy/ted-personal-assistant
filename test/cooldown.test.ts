@@ -90,7 +90,7 @@ function rig() {
     pipeline: pipeline as any,
     groupChats: false,
     vouch: async () => true,
-    run: async () => (runs++, { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 15 } }),
+    run: async () => (runs++, { text: "", structured: { nextCheckMinutes: 15 } }),
     notesChangedAt: () => 0,
     now: () => now,
     guards: { paused: () => false },

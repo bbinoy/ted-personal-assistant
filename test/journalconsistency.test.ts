@@ -221,7 +221,7 @@ test("delegations and the SDK's own tools are no actions; plumbing is never arme
   assert.equal(journalable(FORGET), true);
   const key = fresh("owner");
   const before = journal(key).length;
-  await noteDone({ conv: key, source: "background", tool: "StructuredOutput", input: { message: "[[silent]]", nextCheckMinutes: 30 } });
+  await noteDone({ conv: key, source: "background", tool: "StructuredOutput", input: { nextCheckMinutes: 30 } });
   assert.equal(journal(key).length, before, "the run handing in its answer is no 'Ran StructuredOutput' line");
   const mk = (run: string) => makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, undefined, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "forget it" }), conversation: key, run });
   await mk("run-a")("mcp__send__send", { text: "hello" }, opts);

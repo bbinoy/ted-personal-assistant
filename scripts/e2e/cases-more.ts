@@ -2552,4 +2552,47 @@ const e78: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78];
+// ---- e79: a look with nothing to do delivers nothing: whatever it writes is sent like a chat reply, so no "nothing new" note may be written ----
+const e79: Case = {
+  id: "e79",
+  title: "a look with a quiet calendar and an empty inbox has nothing to do: nothing is delivered, not even a note that all is quiet",
+  turns: [],
+  look: true,
+  world: (t) => ({ calendar: [{ summary: "Team sync", start: t.local(t.day(2), "10:00"), end: t.local(t.day(2), "10:30") }] }),
+  maxQuestions: 0,
+  state: (o) => [check("nothing reached the chat", spoken(o).length === 0, spoken(o).join(" | ").slice(0, 200)), check("nothing was asked", o.asks.length === 0)],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["There are no chat messages at all (no 'nothing new', 'all quiet' or 'checked' filler, no note to self)."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_accounts`, {}).catch(() => "");
+  },
+};
+
+// ---- e80: a look that has something to tell delivers it once: its words are sent as a chat reply, not again by the send tool ----
+const e80: Case = {
+  id: "e80",
+  title: "a reminder wakes a look and it tells the owner what is due: exactly one message, not the same text twice (send tool plus final words)",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    tasks: [{ title: "Call the dentist to move Thursday's check-up", due: t.today, remindAt: t.now.getTime() - 60_000 }],
+    calendar: [{ summary: "Team sync", start: t.local(t.today, "15:00"), end: t.local(t.today, "15:30"), zone: t.zone }],
+  }),
+  maxQuestions: 0,
+  state: (o) => [
+    check("exactly one message reached the chat", spoken(o).length === 1, `${spoken(o).length}: ${spoken(o).join(" | ").slice(0, 300)}`),
+    check("it names the dentist call", /dentist/i.test(spoken(o).join(" ")), spoken(o).join(" | ").slice(0, 200)),
+    check("the task is still open (a call is the owner's)", o.tasks.some((x) => /dentist/i.test(x.title) && (x.status === "open" || x.status === "snoozed"))),
+    check("nothing was asked", o.asks.length === 0),
+  ],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is one short message that tells the owner the dentist call (to move Thursday's check-up) is due today.", "It is addressed to the owner, not a note to itself."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}list_accounts`, {}).catch(() => "");
+    s.say("Heads up: calling the dentist to move Thursday's check-up is due today. Your team sync is at 15:00, so before that would work.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78, e79, e80];

@@ -26,7 +26,7 @@ const fake = (sessionId: string, fail?: string) =>
     calls.push({ prompt: String(p.prompt), options: p.options }),
     (async function* () {
       if (fail) throw new Error(fail);
-      yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: sessionId, total_cost_usd: 0.01, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } };
+      yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: sessionId, total_cost_usd: 0.01, structured_output: { nextCheckMinutes: 30 } };
     })()
   )) as never;
 const approve = async () => ({ approved: false });
@@ -125,4 +125,27 @@ test("a tool nobody declared asks the owner in a chat and in a look (never denie
   const can = makeCanUseTool(approve as never, { who: "owner", attended: false }, undefined, undefined, undefined, lookSet);
   const r = (await can("mcp__new_server__do_thing", {}, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
   assert.match(r.message ?? "", /Asked|declined/);
+});
+
+test("a look's words are what it wrote after its last tool call, as a chat turn's result is; the JSON stays apart, narration between calls is dropped", async () => {
+  const asst = (...content: object[]) => ({ type: "assistant", message: { content, usage: { input_tokens: 1, output_tokens: 1 } }, parent_tool_use_id: null });
+  const stream = (...msgs: object[]) => (() => (async function* () {
+    for (const m of msgs) yield m;
+    yield { type: "result", subtype: "success", is_error: false, result: '{"nextCheckMinutes":30}', session_id: "s-words", total_cost_usd: 0.01, structured_output: { nextCheckMinutes: 30 } };
+  })()) as never;
+  const conv = group("oneagent-words");
+  const run = (...msgs: object[]) => runLook(conv, LOGIN, () => ({ prompt: "Background check" }), approve, { facts: noFacts() }, { io: { query: stream(...msgs) } });
+  const tool = (id: string, name: string) => ({ type: "tool_use", id, name, input: {} });
+  const brief = await run(
+    asst({ type: "text", text: "Let me look at the mail." }, tool("t1", "Read")),
+    asst({ type: "text", text: "Your day: dentist at 10." }, tool("t2", "StructuredOutput")),
+  );
+  assert.equal(brief.text, "Your day: dentist at 10.");
+  assert.deepEqual(brief.structured, { nextCheckMinutes: 30 });
+  assert.equal((await run(asst({ type: "text", text: "Checking." }, tool("t1", "Read")), asst(tool("t2", "StructuredOutput")))).text, "", "nothing written after the last call: silence");
+  assert.equal((await run(asst(tool("t2", "StructuredOutput")))).text, "");
+  assert.equal((await run(asst({ type: "text", text: "First part." }), asst({ type: "text", text: "Second part." }, tool("t2", "StructuredOutput")))).text, "First part.\n\nSecond part.", "text-only messages are joined");
+  assert.equal((await run(asst({ type: "text", text: "Your day." }, tool("t2", "StructuredOutput")), asst({ type: "text", text: "Handed in." }))).text, "Your day.\n\nHanded in.", "text written after the JSON is still words of the run (the prompt says to write nothing after it)");
+  const sub = { ...asst({ type: "text", text: "the expert's own words" }), parent_tool_use_id: "t9" };
+  assert.equal((await run(sub, asst({ type: "text", text: "[[silent]]" }, tool("t2", "StructuredOutput")))).text, "[[silent]]", "a subagent's words are not the run's");
 });
