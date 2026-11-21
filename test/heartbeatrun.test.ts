@@ -206,6 +206,13 @@ test("a look's words are delivered as a chat turn's reply is: written text goes 
   assert.equal(await beside.w.look(beside.conv, DAY), "posted", "words written beside the marker still go out (the delivery drops the marker)");
 });
 
+test("a look's words held for quiet hours keep no markers", async () => {
+  const r = rig(() => ({ message: "Your code: [[whole]]AB-12[[/whole]]\n\n[[react: 👍]]\n\n[[silent]]" }));
+  assert.equal(await r.w.look(r.conv, NIGHT), "silent");
+  assert.deepEqual(heldPosts(r.conv).map((h) => h.text), ["Your code: AB-12"]);
+  assert.deepEqual(r.seen.posted, []);
+});
+
 test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, and at night the clamp holds too", async () => {
   const day = rig(() => ({ nextCheckMinutes: 3 }));
   assert.equal(await day.w.look(day.conv, DAY), "silent");

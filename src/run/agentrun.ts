@@ -342,6 +342,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
       // A run with a constrained JSON answer (a look) has the JSON as its result: its words are what it wrote after its last tool call, as the result of a chat turn is.
+      // (the browse worker also has a JSON answer: its fallback text is now its last written words, not the JSON)
       return { text: message.structured_output === undefined ? message.result : written, costUsd: turnCostUsd, structured: message.structured_output };
     }
     throw failure(lastError, message.subtype, payer);

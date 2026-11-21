@@ -18,6 +18,8 @@ import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { spoke } from "../run/turncontext.ts";
+import { withoutSilent } from "../core/silent.ts";
+import { stripWhole } from "../conversation/split.ts";
 import { createTriage, type Triage } from "../tasks/maildecisions.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped, RunTimeout } from "../run/ceiling.ts";
@@ -227,9 +229,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else if (interrupted) console.error(`heartbeat: the ${conv.kind} run was stopped: the Mac slept`);
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     if (reply && spoke(reply.text) && !stale) {
-      const message = reply.text.trim(); // (the delivery of postNotice reads the markers and silence as a chat turn's reply does)
+      const message = withoutSilent(reply.text); // posted: [[whole]] and a reaction stay for the delivery, which reads them as for a chat turn
+      const plain = stripWhole(message.replace(/\[\[react:[^\]]*\]\]/gi, "")).trim().replace(/\n{3,}/g, "\n\n"); // held: plain words, no markers (a held post is later told to a look as a fact)
       // Quiet hours are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent or a routine is due (the people asked for that time).
-      if (submitPost(conv, message, !!answer?.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
+      if (submitPost(conv, plain, !!answer?.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: plain, source: auditSource({ who: conv.kind, attended: false }) });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);

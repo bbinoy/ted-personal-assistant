@@ -144,6 +144,8 @@ test("a look's words are what it wrote after its last tool call, as a chat turn'
   assert.deepEqual(brief.structured, { nextCheckMinutes: 30 });
   assert.equal((await run(asst({ type: "text", text: "Checking." }, tool("t1", "Read")), asst(tool("t2", "StructuredOutput")))).text, "", "nothing written after the last call: silence");
   assert.equal((await run(asst(tool("t2", "StructuredOutput")))).text, "");
+  assert.equal((await run(asst({ type: "text", text: "First part." }), asst({ type: "text", text: "Second part." }, tool("t2", "StructuredOutput")))).text, "First part.\n\nSecond part.", "text-only messages are joined");
+  assert.equal((await run(asst({ type: "text", text: "Your day." }, tool("t2", "StructuredOutput")), asst({ type: "text", text: "Handed in." }))).text, "Your day.\n\nHanded in.", "text written after the JSON is still words of the run (the prompt says to write nothing after it)");
   const sub = { ...asst({ type: "text", text: "the expert's own words" }), parent_tool_use_id: "t9" };
   assert.equal((await run(sub, asst({ type: "text", text: "[[silent]]" }, tool("t2", "StructuredOutput")))).text, "[[silent]]", "a subagent's words are not the run's");
 });
