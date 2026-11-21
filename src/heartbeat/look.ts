@@ -17,6 +17,7 @@ import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
+import { spoke } from "../run/turncontext.ts";
 import { createTriage, type Triage } from "../tasks/maildecisions.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped, RunTimeout } from "../run/ceiling.ts";
@@ -38,7 +39,7 @@ import { meetingWhy } from "../tasks/meetings.ts";
 // fresh session (every look starts one; continuity is the shared context: facts, the chat tail, the journal, its own posts). The message is the background check: the time in the conversation's zone, why
 // it is due and the routines due. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge path, with `standing` provenance (the check's fixed
 // text is what the judge reads as the reason for the run; no message of anyone's led there). What the judge is not sure about is asked like in a chat turn (handed off, so the look goes on; held through quiet hours: approvers.ts).
-// It answers with a message or [[silent]] and the minutes until its next look.
+// What it writes is delivered exactly as a chat turn's reply is (nothing or [[silent]]: silence); its structured answer holds only what code needs (the minutes until its next look, urgent, the triage).
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..60 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 interface RunExtra {
@@ -216,7 +217,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       lease?.end();
     }
 
-    const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
+    const answer = reply ? parseHeartbeatAnswer(reply.structured) : undefined;
     const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's
     const interrupted = !reply && (slept.has(overtaken) || spannedSleep); // the Mac slept: the connections are dead; a failed row, neutral for the failure tracker, due again at once
     const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
@@ -225,10 +226,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (timedOut) console.error(`heartbeat: the ${conv.kind} run timed out:`, (failure as Error).message);
     else if (interrupted) console.error(`heartbeat: the ${conv.kind} run was stopped: the Mac slept`);
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
-    if (answer?.message && !stale) {
-      const message = answer.message;
+    if (reply && spoke(reply.text) && !stale) {
+      const message = reply.text.trim(); // (the delivery of postNotice reads the markers and silence as a chat turn's reply does)
       // Quiet hours are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent or a routine is due (the people asked for that time).
-      if (submitPost(conv, message, answer.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
+      if (submitPost(conv, message, !!answer?.urgent, now, routineDue) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);

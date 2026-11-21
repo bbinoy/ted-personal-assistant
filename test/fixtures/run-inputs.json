@@ -158,7 +158,7 @@
     },
     "answer": {
       "by": "trigger",
-      "reason": "answer format: a look answers in the look's JSON (message, nextCheckMinutes, urgent), a chat turn in a reply",
+      "reason": "the look also hands in JSON for code (nextCheckMinutes, urgent, triage); what it writes is delivered as a chat turn's reply is",
       "values": {
         "reply": ["owner chat", "group chat", "friend chat"],
         "json": ["owner look", "group look", "friend look"]

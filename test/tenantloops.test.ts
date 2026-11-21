@@ -83,7 +83,7 @@ function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: st
       seen.provenance.push(extra.provenance);
       const a = o.answer?.(conv) ?? { message: "Good morning! A reminder from me." };
       if (a === "throw") throw new Error("run crashed");
-      return { text: "", costUsd: 0.01, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
+      return { text: a.message ?? "[[silent]]", costUsd: 0.01, structured: { nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
     },
     groups: () => [],
     key: () => ("key" in o ? o.key : KEY),

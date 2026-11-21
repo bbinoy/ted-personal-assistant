@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "1dac849c18a28b75"
+        "sha": "cf6f4d1e3b0cf8fe"
       },
       "kind": {
         "who": "owner",
@@ -172,7 +172,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "1dac849c18a28b75"
+        "sha": "cf6f4d1e3b0cf8fe"
       },
       "snapshot": false
     },
@@ -344,7 +344,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "a4dd25e63ad33d85"
+        "sha": "42c96b04a3650039"
       },
       "kind": {
         "who": "group",
@@ -407,7 +407,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "a4dd25e63ad33d85"
+        "sha": "42c96b04a3650039"
       },
       "snapshot": false
     },
@@ -470,7 +470,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "08b83235bd6c9e83"
+        "sha": "a0708e6ef507f462"
       },
       "tenant": {
         "id": "<bea>",
@@ -539,7 +539,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "08b83235bd6c9e83"
+        "sha": "a0708e6ef507f462"
       },
       "snapshot": false
     },
@@ -605,7 +605,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "1dac849c18a28b75"
+        "sha": "cf6f4d1e3b0cf8fe"
       },
       "kind": {
         "who": "owner",
@@ -771,7 +771,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "1dac849c18a28b75"
+        "sha": "cf6f4d1e3b0cf8fe"
       },
       "snapshot": false
     },
@@ -942,7 +942,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "a4dd25e63ad33d85"
+        "sha": "42c96b04a3650039"
       },
       "kind": {
         "who": "group",
@@ -1009,7 +1009,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "a4dd25e63ad33d85"
+        "sha": "42c96b04a3650039"
       },
       "snapshot": false
     },
@@ -1072,7 +1072,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "08b83235bd6c9e83"
+        "sha": "a0708e6ef507f462"
       },
       "tenant": {
         "id": "<bea>",
@@ -1145,7 +1145,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "08b83235bd6c9e83"
+        "sha": "a0708e6ef507f462"
       },
       "snapshot": false
     },

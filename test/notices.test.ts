@@ -12,7 +12,6 @@ import { scratchLog } from "./scratch.ts";
 import { friendConvId } from "../src/core/convpaths.ts";
 import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
-import { parseHeartbeatAnswer } from "../src/run/rules.ts";
 import { ledgerEntries } from "../src/core/messages.ts";
 import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
 import { holdFact } from "../src/core/ownerfact.ts";
@@ -52,13 +51,6 @@ test("planFlush: only outside the quiet window and with something held", () => {
   assert.equal(planFlush({ night: false, held: 2 }), true);
   assert.equal(planFlush({ night: true, held: 2 }), false);
   assert.equal(planFlush({ night: false, held: 0 }), false);
-});
-
-test("the heartbeat answer's urgent flag: only a literal true on a real message", () => {
-  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30, urgent: true }, "").urgent, true);
-  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30, urgent: "true" }, "").urgent, false);
-  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30 }, "").urgent, false);
-  assert.equal(parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, urgent: true }, "").urgent, false);
 });
 
 test("held posts: night holds, day posts; at the end of quiet the look is due and gets all of them once, newest first", () => {

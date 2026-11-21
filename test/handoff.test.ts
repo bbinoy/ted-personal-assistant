@@ -351,7 +351,7 @@ test("the judge's provenance in a continuation is the asking turn's, never the c
 
 test("a continuation marks the session untrusted, also on a session that was clean (after a rotation)", async () => {
   const conv = owner();
-  const query = (() => (async function* () { yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s-rot", total_cost_usd: 0, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } }; })()) as never;
+  const query = (() => (async function* () { yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s-rot", total_cost_usd: 0, structured_output: { nextCheckMinutes: 30 } }; })()) as never;
   await runConversation(conv, {}, () => ({ prompt: "hello" }), undefined, { query });
   assert.equal(readSession(conv.convId).untrustedIn, undefined, "a plain turn leaves the session clean");
   await runConversation(conv, {}, () => ({ prompt: "approved call", untrusted: true }), undefined, { query });
@@ -463,7 +463,7 @@ test("a continuation whose asking turn had no provenance has none: the call asks
 test("a continuation with no session to resume is untrusted for the whole run", async () => {
   const fresh = group("g-fresh-untrusted");
   let during: boolean | undefined;
-  const query = (() => (async function* () { during = sessionTaint(fresh.convId, undefined).read(); yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s-fresh", total_cost_usd: 0, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } }; })()) as never;
+  const query = (() => (async function* () { during = sessionTaint(fresh.convId, undefined).read(); yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s-fresh", total_cost_usd: 0, structured_output: { nextCheckMinutes: 30 } }; })()) as never;
   await runConversation(fresh, {}, () => ({ prompt: "approved call", untrusted: true }), undefined, { query });
   assert.equal(during, true);
 });

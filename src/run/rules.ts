@@ -1,5 +1,4 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { hasSilent } from "../core/silent.ts";
 import { settings } from "../core/settings.ts";
 import type { TriageRow } from "../tasks/maildecisions.ts";
 
@@ -15,11 +14,10 @@ export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["message", "nextCheckMinutes"],
+    required: ["nextCheckMinutes"],
     properties: {
-      message: { type: "string" }, // the message to the owner, or [[silent]]
       nextCheckMinutes: { type: "integer", minimum: MIN_LOOK_MINUTES, maximum: MAX_LOOK_MINUTES },
-      urgent: { type: "boolean" }, // truly time-critical: code then posts it also in quiet hours (heartbeat/notices.ts)
+      urgent: { type: "boolean" }, // what the run wrote is truly time-critical: code then posts it also in quiet hours (heartbeat/notices.ts)
       triage: { type: "array", maxItems: MAX_TRIAGE, items: { type: "object", additionalProperties: false, required: ["id", "decision", "reason"], properties: { id: { type: "string" }, from: { type: "string" }, subject: { type: "string" }, decision: { type: "string", enum: [...TRIAGE_DECISIONS] }, reason: { type: "string" } } } }, // one row per inbox mail the look considered: the decision log (journal category "triage")
     },
   },
@@ -33,26 +31,15 @@ export const clampLook = (minutes: unknown, fallback: number = settings.heartbea
 };
 
 export interface Answer {
-  message: string | undefined; // undefined: silent
   nextCheckMinutes: number;
-  urgent: boolean; // the model marked the message time-critical (only a literal true counts)
+  urgent: boolean; // the model marked what it wrote time-critical (only a literal true counts)
   triage: TriageRow[]; // the look's decision for each inbox mail it considered
 }
 
-// Pure: the run's answer. The constrained JSON is read first, a JSON text second; anything else is silent (a run that did not follow the format must never post its reasoning).
-export function parseHeartbeatAnswer(structured: unknown, text: string): Answer {
-  let raw: unknown = structured;
-  if (!raw || typeof raw !== "object") {
-    try {
-      raw = JSON.parse(text);
-    } catch {
-      raw = undefined;
-    }
-  }
-  const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown; urgent?: unknown; triage?: unknown };
-  const message = typeof v.message === "string" ? v.message.trim() : "";
-  const silent = !message || hasSilent(message);
-  return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: !silent && v.urgent === true, triage: triageRows(v.triage) };
+// Pure: what code needs from the run's constrained JSON. The words the run wrote are delivered as in a chat turn (look.ts), never read from here.
+export function parseHeartbeatAnswer(structured: unknown): Answer {
+  const v = (structured && typeof structured === "object" ? structured : {}) as { nextCheckMinutes?: unknown; urgent?: unknown; triage?: unknown };
+  return { nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: v.urgent === true, triage: triageRows(v.triage) };
 }
 
 // Pure: the decision log of the answer, only well-formed rows (a model's slip drops a row, never the look).

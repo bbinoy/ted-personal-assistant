@@ -104,7 +104,7 @@ test("the look's prompt carries what was added from mail in the last day, fenced
   const seen: { prompt: string; untrusted?: boolean }[] = [];
   const hb = createHeartbeatLook({
     pipeline: pipeline as never,
-    run: (async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { untrusted?: boolean; facts?: { status: string[]; blocks: string[] } }) => (seen.push({ prompt: told(build, extra), untrusted: extra.untrusted }), { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30 } })) as never,
+    run: (async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { untrusted?: boolean; facts?: { status: string[]; blocks: string[] } }) => (seen.push({ prompt: told(build, extra), untrusted: extra.untrusted }), { text: "", structured: { nextCheckMinutes: 30 } })) as never,
     may: () => LOGIN,
     why: () => "x",
     notesChangedAt: () => 0,

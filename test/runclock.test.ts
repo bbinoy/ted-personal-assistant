@@ -24,7 +24,7 @@ const textOf = async (p: any): Promise<string> => (typeof p === "string" ? p : S
 const query = ((p: { prompt: unknown }) => (
   (async function* () {
     prompts.push(await textOf(p.prompt));
-    yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s", total_cost_usd: 0, structured_output: { message: "[[silent]]", nextCheckMinutes: 30 } };
+    yield { type: "result", subtype: "success", is_error: false, result: "[[silent]]", session_id: "s", total_cost_usd: 0, structured_output: { nextCheckMinutes: 30 } };
   })()
 )) as never;
 const facts = { blocks: [], status: [], untrusted: false, done: () => {}, onDelegate: () => {}, onTool: () => {}, routines: "" } as never;
