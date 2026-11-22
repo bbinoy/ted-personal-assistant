@@ -2,7 +2,7 @@ import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import { settings } from "../core/settings.ts";
 import { inQuietHours } from "../core/timezone.ts";
 import type { Conversation } from "../conversation/conversation.ts";
-import { isQuiet } from "../conversation/quiet.ts";
+import { holdingNow } from "./notices.ts";
 import { allows } from "../policy/capabilities.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { claimMeeting, claimedMeetings, giveBack, openMeetings, prepDue, prepSkip, settleMeeting, sweepMeetings, type MeetingRow } from "../tasks/meetings.ts";
@@ -15,19 +15,24 @@ import { claimMeeting, claimedMeetings, giveBack, openMeetings, prepDue, prepSki
 // The rules, all in code:
 //   * AT MOST ONCE per event id AND start time: the row is claimed in the database BEFORE the look is made due; a moved event is a new row (its old pending one went when the look re-recorded it).
 //   * SKIPPED (meetings.ts prepSkip): declined by the owner, all-day, private, nobody else on it (and no video link). Whether a meeting is worth a word is the look's judgement from the meeting's facts (attendees, who is outside her domain).
-//   * NEVER CLAIMED IN THE DEEP NIGHT: none between 23:00 and 06:00 in her zone, nor while her own /quiet is on. It stays open; a later tick claims it if the night or /quiet ends in time, the sweep drops it once too late.
+//   * NEVER CLAIMED IN QUIET HOURS (the one definition, notices.ts holdingNow: the quiet window in her zone, or her /quiet). A prep that would fall inside the window is claimed just before it begins (the evening
+//     before an early meeting); one that falls in her /quiet stays open, a later tick claims it if /quiet ends in time, the sweep drops it once too late.
 //   * NOT SAID LATE: less than MIN_LEAD_MS before the start the sweep drops it, claimed or not.
 //   * A look that did not tell it gives it back once while there is time; a look that told it marks it sent. Otherwise it is an ordinary look: the same floor, judge and budget as any other.
 //   * Only the conversations with a calendar: the owner's, a friend's whose set has Google calendar; a group never.
 
-const NIGHT_FROM = 23; // the deep night, fixed: no prep between these hours (her zone)
-const NIGHT_TO = 6;
-
 /** Does this conversation have meeting prep at all: switched on and a calendar in its capability set (the owner's connector, a friend's own Google). */
 export const prepEnabled = (conv: Conversation): boolean => settings.prepMinutes > 0 && allows(conv, "calendar") && allows(conv, "heartbeat");
 
-/** May a prep be claimed at this moment? Not in the deep night, not while her /quiet is on. */
-const prepAllowedNow = (conv: Conversation, now: Date): boolean => !inQuietHours(now, NIGHT_FROM, NIGHT_TO, zoneOf(conv)) && !isQuiet(conv, now);
+/** How many minutes before the start this meeting's prep is due: prepMinutes, or, when that moment is in quiet hours, back to one tick before the window begins. */
+function leadMinutes(conv: Conversation, startMs: number): number {
+  const zone = zoneOf(conv);
+  const quiet = (t: number) => inQuietHours(new Date(t), settings.quietStartHour, settings.quietEndHour, zone);
+  const due = startMs - settings.prepMinutes * 60_000;
+  let t = due;
+  for (let i = 0; i < 1440 && quiet(t); i++) t -= 60_000; // the last minute before quiet hours begin
+  return (startMs - t) / 60_000 + (t === due ? 0 : settings.heartbeatMinutes - 1);
+}
 
 /** One conversation's tick: sweeps what is too late, drops what the rules skip, claims what is due (the look says it). Never throws; never creates a database. Returns how many it claimed. */
 export function claimPreps(conv: Conversation, now: Date): number {
@@ -41,10 +46,10 @@ export function claimPreps(conv: Conversation, now: Date): number {
     sweepMeetings(db, t);
     let claimed = 0;
     for (const m of openMeetings(db)) {
-      if (!prepDue(m, t, settings.prepMinutes)) continue;
+      if (!prepDue(m, t, leadMinutes(conv, m.startMs))) continue;
       const skip = prepSkip(m);
       if (skip) settleMeeting(db, m, "skipped", t, { why: skip });
-      else if (prepAllowedNow(conv, now) && claimMeeting(db, m, t)) claimed++;
+      else if (!holdingNow(conv, now) && claimMeeting(db, m, t)) claimed++;
     }
     return claimed;
   } catch (e) {
