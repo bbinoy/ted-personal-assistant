@@ -15,6 +15,7 @@ export interface HeartbeatRow {
   toolCalls: number; // tool calls that ran (the run's own and its subagents')
   archived: number; // mail archived in this look
   delegations: number; // experts it called (heartbeat/delegation.ts); their cost is in costUsd (the SDK's total includes subagents)
+  cause?: string; // a failed look: the class of what went wrong (tenants/errors.ts Cause), never a message
   outcome: "posted" | "silent" | "failed" | "timeout" | "preempted"; // timeout: the run hit its wall-clock ceiling (RUN_MAX_MINUTES_CHAT) and was aborted; preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
 }
 
@@ -34,18 +35,18 @@ export function appendRow(row: HeartbeatRow): void {
 function insertRow(row: HeartbeatRow): void {
   const at = Date.parse(row.at);
   instanceDb().run(
-    "INSERT INTO looks (at, at_ms, kind, night, message, sent, next_check_minutes, cost_usd, tool_calls, archived, delegations, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    row.at, Number.isFinite(at) ? at : Date.now(), row.kind ?? "owner", row.night ? 1 : 0, row.message ? 1 : 0, row.sent ?? null, row.nextCheckMinutes, row.costUsd, row.toolCalls, row.archived, row.delegations, row.outcome,
+    "INSERT INTO looks (at, at_ms, kind, night, message, sent, next_check_minutes, cost_usd, tool_calls, archived, delegations, outcome, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    row.at, Number.isFinite(at) ? at : Date.now(), row.kind ?? "owner", row.night ? 1 : 0, row.message ? 1 : 0, row.sent ?? null, row.nextCheckMinutes, row.costUsd, row.toolCalls, row.archived, row.delegations, row.outcome, row.cause ?? null,
   );
 }
 
 interface LookRow {
-  at: string; kind: string; night: number; message: number; sent: number | null; next_check_minutes: number; cost_usd: number; tool_calls: number; archived: number; delegations: number; outcome: string;
+  at: string; kind: string; night: number; message: number; sent: number | null; next_check_minutes: number; cost_usd: number; tool_calls: number; archived: number; delegations: number; outcome: string; cause: string | null;
 }
-const COLUMNS = "at, kind, night, message, sent, next_check_minutes, cost_usd, tool_calls, archived, delegations, outcome";
+const COLUMNS = "at, kind, night, message, sent, next_check_minutes, cost_usd, tool_calls, archived, delegations, outcome, cause";
 const toRow = (r: LookRow): HeartbeatRow => ({
   at: r.at, kind: r.kind as HeartbeatRow["kind"], night: r.night === 1, message: r.message === 1, ...(r.sent !== null ? { sent: r.sent } : {}),
-  nextCheckMinutes: r.next_check_minutes, costUsd: r.cost_usd, toolCalls: r.tool_calls, archived: r.archived, delegations: r.delegations, outcome: r.outcome as HeartbeatRow["outcome"],
+  nextCheckMinutes: r.next_check_minutes, costUsd: r.cost_usd, toolCalls: r.tool_calls, archived: r.archived, delegations: r.delegations, outcome: r.outcome as HeartbeatRow["outcome"], ...(r.cause ? { cause: r.cause } : {}),
 });
 
 // Every row, oldest first (or those of the last `days`).
@@ -59,3 +60,6 @@ export const lastLookAt = (): string | undefined => instanceDb().get<{ at: strin
 
 /** Retention: looks older than `days`. Returns how many went. */
 export const pruneLooks = (days: number, now = Date.now()): number => instanceDb().run("DELETE FROM looks WHERE at_ms < ?", now - Math.max(1, days) * 86_400_000).changes;
+
+/** The kind's newest `n` looks, newest first (the failing-looks fact). */
+export const recentLooks = (kind: string, n: number): HeartbeatRow[] => instanceDb().all<LookRow>(`SELECT ${COLUMNS} FROM looks WHERE kind = ? ORDER BY id DESC LIMIT ?`, kind, n).map(toRow);

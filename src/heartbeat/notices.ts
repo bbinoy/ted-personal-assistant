@@ -1,10 +1,11 @@
 import { MAX_HELD, notify } from "../core/notify.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
-import { OWNER, settings } from "../core/settings.ts";
+import { instanceDb } from "../core/instancedb.ts";
+import { told } from "../core/told.ts";
+import { causeOf, refusal, type Cause } from "../tenants/errors.ts";
+import { settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
-import { inQuietHours, timeIn } from "../core/timezone.ts";
-import { causeOf, FIXES, refusal, type Cause } from "../tenants/errors.ts";
-import { classifySendError } from "../conversation/outbound.ts";
+import { inQuietHours } from "../core/timezone.ts";
 import { isQuiet } from "../conversation/quiet.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { emit } from "../core/events.ts";
@@ -12,7 +13,7 @@ import { auditSource } from "../core/runkind.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Small, separate mechanisms, all pure planners over a little state:
 //   1. system matters (the damaged database (1b), the shared key, spend warnings) are a FACT for her next run (core/notify.ts), which says it in its own words; there is no fixed text to her.
-//   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
+//   2. looks that fail: no message at all. They go to the log and the doctor, and the looks table keeps the cause: the conversation's next look is handed the recent failures as a FACT (facts.ts failingLooksFact).
 //   3. quiet hours and /quiet, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on) is HELD (state, per conversation). Code never words it
 //      again: when quiet is over the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts), each handed over exactly once, and says again in today's words
 //      only what is still true. A conversation without a look drops what it held (dropUnreachable). The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from it.
@@ -32,76 +33,6 @@ export const planFlush = (i: { night: boolean; held: number }): boolean => i.hel
 export interface Held {
   text: string;
   at: number; // when it was held (epoch ms)
-}
-
-const STALE_MS = 36 * 3_600_000; // nothing held is delivered after this: it is no longer news
-
-// Pure: what of the held items is still news at `now`? Anything older than 36 hours is dropped. (Whether the owner has moved on is the look's judgement: it has the chat log.)
-export const stillTrue = (held: readonly Held[], now: number): Held[] => held.filter((h) => now - h.at <= STALE_MS);
-
-// ---- the failure tracker ----
-
-// Looks that fail are SYSTEM STATUS (CLAUDE.md: log, doctor, not the chat). A group's or a friend's failures are only logged (look.ts) and counted for `npm run doctor` (the looks table).
-// The owner's own background is the one exception, and only as a FACT for her next look, never as a fixed message: when her looks have failed at least LONG_FAILS times in a row for
-// at least LONG_AWAKE_MS of time the Mac was AWAKE. Awake time is the monotonic clock (on macOS it stands still while the Mac sleeps, heartbeat.ts sleptFor), so a night of sleep between
-// two failures adds nothing; a look stopped by a sleep, or cut by its ceiling across one, is not a failure at all (look.ts). The look that then runs reads the fact and decides whether it is
-// worth one line. A look that works ends the streak, with no "back to normal".
-// The exception to the exception: a cause where NO look can run and only she can fix it (NO_MODEL: the login expired). A fact for the next look would never reach her, so after LONG_FAILS
-// failures (no awake stretch: the cause is certain) she gets the chat turn's fixed line (errors.ts refusal) ONCE per streak, through postNotice, held while quiet hours or /quiet last and sent
-// at the first failing look after. The streak lives in memory: a restart may tell once more. Such a cause is not also a fact for a look.
-const LONG_FAILS = 3;
-const NO_MODEL: ReadonlySet<Cause> = new Set<Cause>(["login"]); // (billing and refused are the shared friends' key, which the owner's looks do not run on)
-const LONG_AWAKE_MS = 2 * 3_600_000;
-type Scope = "owner" | "group" | "tenant";
-interface Streak {
-  n: number;
-  since: number; // wall clock (ms) of the first failure: what the fact says
-  monoSince: number; // the monotonic clock then: how long the Mac has been awake since
-  mono: number; // the monotonic clock at the latest failure
-  cause: Cause;
-  told: boolean; // NO_MODEL: her fixed line was sent (or may have been) for this streak
-}
-
-export interface FailureTracker {
-  // One finished look that was neither called off nor stopped by a sleep. Groups and friends are not tracked here (log and doctor only).
-  observe(key: string, scope: Scope, failed: boolean, cause: Cause | undefined, now: number, mono: number): void;
-  // The fact for the conversation's next look, or "" while its failures are not a long awake stretch.
-  fact(key: string, zone?: string): string;
-  // The cause to tell her in a fixed line now (NO_MODEL, LONG_FAILS reached, not yet told this streak), or undefined. `told(key, true)` marks it sent; `false` lets the next failing look try again.
-  toTell(key: string): Cause | undefined;
-  told(key: string, yes: boolean): void;
-}
-
-export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {}): FailureTracker {
-  const fails = o.fails ?? LONG_FAILS;
-  const awake = o.awakeMs ?? LONG_AWAKE_MS;
-  const streaks = new Map<string, Streak>();
-  return {
-    observe(key, scope, failed, cause, now, mono) {
-      if (scope !== "owner") return;
-      if (!failed) return void streaks.delete(key);
-      const st = streaks.get(key) ?? { n: 0, since: now, monoSince: mono, mono, cause: cause ?? "other", told: false };
-      st.n++;
-      st.mono = mono;
-      st.cause = cause ?? "other";
-      streaks.set(key, st);
-    },
-    fact(key, zone) {
-      const st = streaks.get(key);
-      if (!st || NO_MODEL.has(st.cause) || st.n < fails || st.mono - st.monoSince < awake) return "";
-      const c = FIXES[st.cause];
-      const hours = Math.round(((st.mono - st.monoSince) / 3_600_000) * 10) / 10;
-      return `Your own background looks have failed ${st.n} times in a row since ${timeIn(new Date(st.since), zone)} (${hours} hours of that with the Mac awake; time asleep does not count). Cause as code classifies it: ${c.what}. What would fix it: ${c.fix} This is system status: say it only if it still matters to ${OWNER} and they have to do something, in one short line in your own words; otherwise say nothing about it.`;
-    },
-    toTell(key) {
-      const st = streaks.get(key);
-      return st && NO_MODEL.has(st.cause) && st.n >= fails && !st.told ? st.cause : undefined;
-    },
-    told(key, yes) {
-      const st = streaks.get(key);
-      if (st) st.told = yes;
-    },
-  };
 }
 
 // ---- the state: two tables of the conversation's assistant.db (`hold`: the day's count; `held_posts`: what is held, oldest first) ----
@@ -144,10 +75,10 @@ export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
 
 // What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet).
-const ready = (conv: Conversation, now: Date, held: readonly Held[]): boolean => planFlush({ night: holding(conv, now, zoneOf(conv)), held: stillTrue(held, now.getTime()).length });
+const ready = (conv: Conversation, now: Date, held: readonly Held[]): boolean => planFlush({ night: holding(conv, now, zoneOf(conv)), held: held.length });
 
-// All the held posts, newest first, for the conversation's next look. They are PENDING while that look runs (like seen_mail): `done()` deletes them (and what was stale), and the look calls it only
-// when it ended well (posted or silent); a failed or called-off look leaves them for the next one, so each is told at most once yet not lost (the 36 hours of stillTrue end a stuck item).
+// All the held posts, newest first, for the conversation's next look. They are PENDING while that look runs (like seen_mail): `done()` deletes them, and the look calls it only
+// when it ended well (posted or silent); a failed or called-off look leaves them for the next one, so each is told at most once yet not lost (the newest MAX_HELD are kept, so a stuck item cannot pile up).
 // Nothing while the conversation is still being left alone (a night look would only hold them again). Only this conversation's own database.
 export function takeHeld(conv: Conversation, now: Date): { held: Held[]; done: () => void } {
   const none = { held: [], done: () => {} };
@@ -156,7 +87,7 @@ export function takeHeld(conv: Conversation, now: Date): { held: Held[]; done: (
   if (!ready(conv, now, held)) return none;
   const db = convDb(conv.convId);
   const upTo = db.num("SELECT COALESCE(MAX(seq), 0) FROM held_posts"); // (posts held while the look runs are not part of it)
-  return { held: stillTrue(held, now.getTime()).reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
+  return { held: held.reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
 }
 
 // Is something held that may be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
@@ -184,21 +115,20 @@ export function noticeDamaged(now: Date = new Date()): number {
   return n;
 }
 
-// 2. Looks that fail. Called by look.ts with each finished look (not one called off or stopped by a sleep); `error` is what the run threw, if it did; `mono`: the monotonic clock now.
-// When no look can run and only she can fix it (NO_MODEL), she gets the fixed line once per streak (see the tracker); a send refused before anything went out is tried again at the next failing look.
-const tracker = createFailureTracker();
-export async function observeLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): Promise<void> {
+// A look that fails where no model run is possible at all (the login expired) can never tell her through a run, and she has to act (the friends' key is keynotice.ts's): the chat turn's own
+// fixed line (errors.ts refusal, CLAUDE.md §4) goes out ONCE per cause, held while quiet hours or /quiet last (the next failing look sends it), and a look that works forgets the marks. Owner only.
+const NO_RUN: ReadonlySet<Cause> = new Set<Cause>(["login"]);
+export async function noteLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, failed: boolean, error: unknown, now: Date): Promise<void> {
+  if (conv.kind !== "owner") return;
   try {
-    tracker.observe(conv.key, conv.kind, outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), mono);
-    const cause = tracker.toTell(conv.key);
-    const text = cause && refusal(cause, "owner");
-    if (!text || holdingNow(conv, now)) return;
-    tracker.told(conv.key, true);
+    const db = instanceDb();
+    if (!failed) return void db.run("DELETE FROM told WHERE key LIKE 'lookfail:%'");
+    const cause = causeOf(error);
+    const text = NO_RUN.has(cause) ? refusal(cause, "owner") : undefined;
+    if (!text || holdingNow(conv, now) || !told(db, `lookfail:${cause}`, { once: true }, now.getTime())) return;
     const res = await postNotice(pipeline, conv, text);
-    if (res.error && classifySendError(res.error) === "refused") tracker.told(conv.key, false); // (only a send that proves nothing went out: a later step of the turn can fail after delivery)
+    if (res.error || !res.spoke) db.run("DELETE FROM told WHERE key = ?", `lookfail:${cause}`); // (not sent: the next failing look tries again)
   } catch (e) {
-    console.error("notices: could not track a look:", (e as Error).message);
+    console.error("notices: could not note a look:", (e as Error).message);
   }
 }
-/** The fact block for the conversation's next look: its long awake stretch of failures, or "" (always "" for a group or a friend). */
-export const failingLooksFact = (conv: Conversation): string => tracker.fact(conv.key, zoneOf(conv));
