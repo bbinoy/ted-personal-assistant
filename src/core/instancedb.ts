@@ -103,6 +103,11 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
       DROP TABLE notices;
     `,
   },
+  {
+    version: 6,
+    name: "a failed look keeps its cause class (a word like login or timeout, never text), for the failing-looks fact",
+    up: `ALTER TABLE looks ADD COLUMN cause TEXT;`,
+  },
 ];
 
 const dbs = new Map<string, Db>();
