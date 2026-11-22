@@ -202,5 +202,10 @@ test("noteLook: a login that stops every run is told once until a look works aga
   await fail(new AuthError("x"), MORNING);
   assert.equal(sent.length, 3, "sent at the first failing look after quiet");
   for (const e of [new RunTimeout(60_000), new Error("fetch failed")]) await fail(e);
-  assert.equal(sent.length, 3, "other causes are never told");
+  assert.equal(sent.length, 3, "other causes are never told (a sleep never reaches noteLook: look.ts)");
+  for (const k of ["billing", "refused"] as const) {
+    await fail(new InstanceKeyError(k));
+    await fail(new InstanceKeyError(k));
+  }
+  assert.deepEqual(sent.slice(3), [refusal("billing", "owner"), refusal("refused", "owner")], "each cause once");
 });
