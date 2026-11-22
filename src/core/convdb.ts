@@ -327,6 +327,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "the Ted version (a commit id) each chat session last saw (run/updated.ts)",
     up: `CREATE TABLE seen_version (session_id TEXT PRIMARY KEY, commit_id TEXT NOT NULL, at INTEGER NOT NULL);`,
   },
+  {
+    version: 34,
+    name: "every held post has the time it was held (older rows had none)",
+    up: `UPDATE held_posts SET at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE at IS NULL;`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

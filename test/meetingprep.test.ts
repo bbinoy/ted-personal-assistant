@@ -248,23 +248,22 @@ test("not for a group, not while PREP_MINUTES is 0, not for a conversation witho
   assert.equal(PT.meetingsWaiting(conv), false);
 });
 
-test("the night rule: no claim between 23:00 and 06:00, nor under /quiet; it stays open, never held; the configured quiet window (22-07) does not stop a prep for a meeting that is on", () => {
+test("quiet hours: a prep that falls inside the quiet window (22-07) is claimed just before it begins, never inside it, nor under /quiet; a midday meeting is unchanged", () => {
   reset();
-  const late = berlin("2026-10-22", "23:30");
-  record([raw("night", late + 15 * MIN)], late - 3 * 60 * MIN);
-  assert.equal(tick(late), 0);
-  assert.deepEqual(states(), [["night", "pending", undefined]], "left open, not settled: the sweep drops it once too late");
-  assert.deepEqual(heldPosts(conv), [], "never held for a digest: a prep after its meeting is worth nothing");
+  const m = berlin("2026-10-23", "07:00");
+  record([raw("early", m)], m - 12 * 60 * MIN);
+  assert.equal(tick(berlin("2026-10-22", "21:50")), 0, "too early");
+  assert.equal(tick(berlin("2026-10-22", "21:57")), 1, "claimed before 22:00");
 
   reset();
-  const early = berlin("2026-10-23", "06:45");
-  record([raw("early", early + 15 * MIN)], early - 60 * MIN);
-  assert.equal(tick(early), 1, "a 07:00 meeting is prepared at 06:45 though 22-07 is the quiet window");
+  record([raw("night", m)], m - 12 * 60 * MIN);
+  assert.equal(tick(berlin("2026-10-22", "22:30")), 0);
+  assert.equal(tick(berlin("2026-10-23", "06:45")), 0, "nothing inside quiet hours");
+  assert.deepEqual(heldPosts(conv), [], "never held: a prep after its meeting is worth nothing");
 
   reset();
-  const dusk = berlin("2026-10-22", "22:30");
-  record([raw("dusk", dusk + 15 * MIN)], dusk - 60 * MIN);
-  assert.equal(tick(dusk), 1, "22:30 is quiet-window time but not deep night");
+  record([raw("noon", NOW + 15 * MIN)]);
+  assert.equal(tick(NOW), 1, "a midday meeting is prepared 15 minutes before, as ever");
 
   reset();
   setQuiet(conv, "");
@@ -273,14 +272,7 @@ test("the night rule: no claim between 23:00 and 06:00, nor under /quiet; it sta
   assert.deepEqual(states(), [["dnd", "pending", undefined]]);
 });
 
-test("a night or /quiet that ends before the meeting does not lose the prep: a 06:10 meeting due at 05:55 is claimed at 06:00; a /quiet that ends in time too; otherwise the sweep drops it", () => {
-  reset();
-  const m = berlin("2026-10-23", "06:10");
-  record([raw("early", m)], m - 3 * 3_600_000);
-  assert.equal(tick(m - 15 * MIN), 0); // 05:55: night
-  assert.equal(rowsOf()[0]!.state, "pending");
-  assert.equal(tick(berlin("2026-10-23", "06:00")), 1);
-
+test("a /quiet that ends before the meeting does not lose the prep; otherwise the sweep drops it", () => {
   reset();
   record([raw("dnd", NOW + 30 * MIN)]);
   setQuiet(conv, iso(NOW + 20 * MIN)); // /quiet until 12:20

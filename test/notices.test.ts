@@ -173,10 +173,9 @@ test("the doctor's error window: dates are rebuilt from the file's time, so yest
 
 
 test("held items are checked before they are handed over: anything held for over a day and a half is no longer news", () => {
-  const old = [{ text: "x", why: "quiet" as const, at: NIGHT.getTime() }];
+  const old = [{ text: "x", at: NIGHT.getTime() }];
   assert.equal(stillTrue(old, NIGHT.getTime() + 37 * 3_600_000).length, 0);
   assert.equal(stillTrue(old, NIGHT.getTime() + 3_600_000).length, 1);
-  assert.equal(stillTrue([{ text: "y" as const }], 1e15).length, 1, "a row without a time is kept");
 });
 test("the send tool of an unattended look is held at 02:00 unless urgent; a chat turn's sink is never gated", async () => {
   reset();
