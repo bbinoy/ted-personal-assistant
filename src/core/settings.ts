@@ -49,15 +49,6 @@ export function autoApprove(env: Env): "off" | "auto" {
   throw new Error(`AUTO_APPROVE must be "auto" or "off" (got "${raw}"). Write AUTO_APPROVE=auto (or remove the line) for the approval judge, or AUTO_APPROVE=off to be asked about everything.`);
 }
 
-// ARCHIVE (and its old forms HEARTBEAT_ACTIONS, GMAIL_ARCHIVE_LIVE, GOOGLE_ARCHIVE_LIVE) is gone: archiving is always live. A line still in .env stops the agent at start-up,
-// so a trial week someone relied on is not silently ended.
-const GONE_ARCHIVE_SWITCHES = ["ARCHIVE", "HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"] as const;
-function rejectArchiveSwitches(env: Env): void {
-  for (const old of GONE_ARCHIVE_SWITCHES) {
-    if (env[old]?.trim()) throw new Error(`${old} is gone: archiving is always live now (an archive is reversible: npm run restore). Remove ${old} from .env.`);
-  }
-}
-
 // <MODULE>_TOOLS: the tools of one module's connector that stay visible to the model, one setting per module, named after it (NOTION_TOOLS for the module "notion"). Only the
 // ones that are set are returned (by module name); the module's own default applies to the rest (hiddenTools). Each name is checked against the module's pattern at start-up
 // (modules/index.ts checkHideSettings).
@@ -150,7 +141,6 @@ export const parseLanguages = (raw: string | undefined): string[] => {
 
 export function loadSettings(env: Env) {
   // The rhythm (when the heartbeat ticks, the look gap, the dream's hour and thresholds) is the assistant's own data in the preset (preset.ts); no env variable repeats it. What differs per install (the quiet hours, whether the dream runs at all) is env.
-  rejectArchiveSwitches(env);
   const rhythm = presetFor(env).rhythm;
   const quiet = quietHours(env);
   // Where mail comes from. none: chat only, no mail client anywhere (heartbeat, brief, prompts and doctor all leave mail out).
