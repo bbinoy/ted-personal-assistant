@@ -17,7 +17,7 @@ or `MEMORY.md`). Use exactly those; do not guess calendar ids.
 - in chat, load `ted-personal-assistant:setup` and set it up with the owner now;
 - in an unattended run, call `list_calendars` and save the `setup/calendars` note yourself, as the setup skill says, then carry on and say so in one line.
 
-A work calendar shared into one of the owner's accounts is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one; which is which follows the mail skill's "Work and private accounts".
+A work calendar shared into one of the owner's accounts is one more listed calendar, handled like the private one with the same rules. A meeting with colleagues or about work goes on the work calendar (`calendarId`), a private event on the private one.
 
 ## The tools (Mailbird's calendar, over every calendar account the owner has)
 
@@ -125,11 +125,7 @@ Before you act on an event, look it up by day and title (`list_calendar_events` 
 ## Guardrails
 
 - May, in any run: create, move or edit an event on the owner's own calendar with nobody invited and no notifications (bookings, holds, own plans), and mention it.
-- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting asks the owner first, in a look too: the question goes to the chat and the run carries on.
-- Whole calendars (creating, renaming or deleting one) are not yours to manage: those tools are not offered.
-- The agent's policy (`src/policy/policy.ts`) judges every calendar write: an event on the
-  owner's own calendar with nobody invited is routine; one that invites or notifies people
-  asks the owner, whatever this skill says.
+- Anything with guests or notifications, other people's events, invites and responses stays a draft, task or suggestion, and the policy asks the owner. Deleting asks first, in a look too: the question goes to the chat and the run carries on.
 
 ## In the briefing
 

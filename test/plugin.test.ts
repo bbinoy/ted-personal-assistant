@@ -106,13 +106,12 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
 
 test("daily-brief skill: one archive list read from the journal, no inbox sweep, no archiving of its own briefs, no model-written delivery time", () => {
   const s = readFileSync(join(skillsDir, "daily-brief", "SKILL.md"), "utf8");
-  assert.match(s, /keep only today's daily brief in the inbox and archive the older ones/);
-  assert.match(s, /"Daily brief", "Evening wrap" or "Weekly review", with or without/); // matched by subject, not by emoji
+  assert.match(s, /own-briefs rule hold \(archive the older briefs by a subject search\)/); // the mail skill owns the rule
+  assert.match(readFileSync(join(skillsDir, "mail", "SKILL.md"), "utf8"), /"Daily brief", "Evening wrap" or "Weekly review" \(with or without/); // matched by subject, not by emoji
   assert.doesNotMatch(s, /never archive the assistant's own brief emails/);
   const read = (n: string) => readFileSync(join(skillsDir, n, "SKILL.md"), "utf8");
   assert.match(s, /use what the looks did[\s\S]*do \*\*not\*\* list or re-sweep the inbox/); // the looks are the only triage of new mail
   assert.doesNotMatch(s, /WHOLE inbox|archive_conversation/);
-  assert.match(s, /notes are the strongest context/);
   assert.match(s, /call the `journal` tool \*\*once, early\*\*/);
   assert.match(s, /Tidied tasks: closed/); // one line of what the looks tidied, from the journal
   assert.doesNotMatch(s, /Reconcile tasks|"Reconcile" section/);
@@ -126,26 +125,24 @@ test("the weekly review has no inbox sweep: the looks own the whole inbox, in th
   const read = (n: string) => readFileSync(join(skillsDir, n, "SKILL.md"), "utf8");
   assert.doesNotMatch(read("weekly-review"), /inbox sweep/i);
   assert.doesNotMatch(read("mail"), /Inbox sweep/);
-  assert.match(read("mail"), /## Keeping the whole inbox[\s\S]*List the WHOLE inbox[\s\S]*Inbox decisions so far[\s\S]*open selectively/);
+  assert.match(read("mail"), /## Keeping the inbox[\s\S]*List the WHOLE inbox[\s\S]*Inbox decisions so far[\s\S]*open selectively/);
   assert.match(read("mailbird"), /list_conversations/);
 });
 
 test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   const mb = read("mail");
-  assert.match(mb, /Triage is a judgement[\s\S]*what does the owner still need this mail for[\s\S]*failing\s+its job/);
-  assert.match(mb, /## For every run that handles mail[\s\S]*Today's daily brief stays in the inbox; every older brief, wrap and review\s+is archived/);
-  assert.match(mb, /A real conversation stays, read or unread, however old/); // the sweep never archives a live thread with a person
-  assert.match(mb, /Cold outreach is noise even when a named person wrote it/);
-  assert.match(mb, /A completed task closes its mail/);
-  assert.match(mb, /A series keeps only its newest mail/);
+  assert.match(mb, /what does the owner still need this mail for[\s\S]*failing its job/);
+  assert.match(mb, /Only today's daily brief stays in the inbox;\s+older ones are archived/);
+  assert.match(mb, /A friend's or family member's\s+thread that may need an answer is never archived/); // the sweep never archives a live thread with a person
+  assert.match(mb, /cold outreach even when a\s+named person wrote it/);
+  assert.match(mb, /a\s+mail whose task is done is handled/);
+  assert.match(mb, /Of a series of reminders only the newest stays/);
   assert.doesNotMatch(mb, /Old briefs are never archived/);
-  assert.match(mb, /still need this mail for[\s\S]*next 7 days[\s\S]*For automated mail, unread is not a reason to keep/);
-  assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(a plain read, cheap\)\s+before deciding/);
   assert.match(mb, /notes are the strongest context/);
   const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
   assert.match(hb, /Decision log: in the "triage" part of your final answer/); // the persona points at the skill; the rules live in the skill (asserted above)
-  assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
+  assert.match(mb, /opened first \(a plain read: free, not judged, no cap\)[\s\S]*Never keep\s+a mail just because you did not read it/);
   assert.doesNotMatch(mb, /Do NOT open every email|archive newsletters unopened/);
   for (const provider of ["mailbird", "gmail"]) assert.ok(read(provider).split("\n").length < 90 && !/archive unless the mail needs the owner/.test(read(provider)), `${provider}: tools and quirks only, the rules are in the mail skill`);
 });

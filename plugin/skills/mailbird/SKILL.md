@@ -28,22 +28,20 @@ holds what is particular to Mailbird.
   several attachments, and the send then fails. Until that is fixed, a draft carries at
   most one attachment: several receipts or tickets go as one email each (same recipient,
   a subject that names each one).
-- **Archive** is `archive_conversation` (reversible: `npm run restore <id>`). Never
-  `trash_conversation` or `delete_conversation_permanently`, never spam or block.
-  A conversation id changes when it changes folder: re-list before acting on it.
+- **Archive** is `archive_conversation`. A conversation id changes when it changes folder:
+  re-list before acting on it.
 - **Reply drafts stay in their thread and are saved quietly:** `reply_to_conversation`
   (or `reply_all_to_conversation` for several recipients), with no `select_conversation`,
   no `showInUi` and no `forceNewWindow` (a popup or window steals focus on the desktop).
   To add Cc or Bcc (or change the recipients) of a reply, make the reply draft first, then
   `update_draft` with `cc` / `bcc`: the draft stays in its thread. Never start a new mail
   with `create_draft` just to set a Cc.
-  Show the draft in chat as the mail skill says (the owner does not open Mailbird). `create_draft` only starts a brand-new mail with no
+  `create_draft` only starts a brand-new mail with no
   thread; pass the `accountId` it should leave from (`list_accounts`), never the default by habit. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
-  because plain newlines are flattened when sent. Read the saved draft back before any send.
-- **Sending** follows the mail skill's guardrails. `confirm: true` on `send_message_now`
-  is Mailbird's own safety check, not the owner's approval.
+  because plain newlines are flattened when sent.
+- **Sending**: `confirm: true` on `send_message_now` is Mailbird's own check, not the owner's approval.
 - **Write actions** need "Allow write actions" on in Mailbird's Wingman AI settings. If
-  a write errors because of it, tell the owner; do not retry.
+  a write errors because of it, the mail skill says what to do.
   [Mailbird's setup article](https://nextsupport.getmailbird.com/hc/en-us/articles/40033560742167-Connect-Claude-ChatGPT-and-OpenClaw-to-Mailbird-Next-MCP-Server-Setup).
 
 ## When the connection is broken
