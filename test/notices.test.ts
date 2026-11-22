@@ -4,7 +4,7 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
+import { noteLook, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -177,3 +177,30 @@ test("a system matter for the owner (the shared key, a friend's damaged file) is
   reset();
 });
 
+
+test("noteLook: a login that stops every run is told once until a look works again; held in quiet hours; other causes never", async () => {
+  instanceDb().run("DELETE FROM told");
+  const o = { ...owner(), logFile: scratchLog(`nl-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const sent: string[] = [];
+  const pipeline = {
+    enqueue: <X,>(_c: unknown, job: () => Promise<X>) => job(),
+    runTurn: async (_c: unknown, t: { run: () => Promise<{ text: string }> }) => (sent.push((await t.run()).text), { spoke: true }),
+  } as never;
+  const DAY = new Date(2026, 9, 15, 12, 0, 0);
+  const fail = (e: unknown, at = DAY) => noteLook(pipeline, o, true, e, at);
+  await fail(new AuthError("x"));
+  await fail(new AuthError("x"));
+  assert.deepEqual(sent, [refusal("login", "owner")], "two failures, one line");
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 1);
+  await noteLook(pipeline, o, false, undefined, DAY);
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 2, "a good look, then a new failure: again");
+  await noteLook(pipeline, o, false, undefined, DAY);
+  await fail(new AuthError("x"), new Date(2026, 9, 14, 22, 35, 0));
+  assert.equal(sent.length, 2, "held at night");
+  await fail(new AuthError("x"), MORNING);
+  assert.equal(sent.length, 3, "sent at the first failing look after quiet");
+  for (const e of [new RunTimeout(60_000), new Error("fetch failed")]) await fail(e);
+  assert.equal(sent.length, 3, "other causes are never told");
+});

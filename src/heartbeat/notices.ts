@@ -1,6 +1,9 @@
 import { takeCapNotice } from "../core/capnotice.ts";
 import { MAX_HELD, holdFact } from "../core/ownerfact.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
+import { instanceDb } from "../core/instancedb.ts";
+import { told } from "../core/told.ts";
+import { causeOf, refusal, type Cause } from "../tenants/errors.ts";
 import { settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { inQuietHours } from "../core/timezone.ts";
@@ -112,4 +115,21 @@ export function noticeDamaged(now: Date = new Date()): number {
     n++;
   }
   return n;
+}
+
+// A look that fails where no model run is possible at all (the login expired, the key has no credit or was refused) can never tell her through a run, and she has to act: the chat turn's own
+// fixed line (errors.ts refusal, CLAUDE.md §4) goes out ONCE per cause, held while quiet hours or /quiet last (the next failing look sends it), and a look that works forgets the marks. Owner only.
+const NO_RUN: ReadonlySet<Cause> = new Set<Cause>(["login", "billing", "refused"]);
+export async function noteLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, failed: boolean, error: unknown, now: Date): Promise<void> {
+  if (conv.kind !== "owner") return;
+  try {
+    const db = instanceDb();
+    if (!failed) return void db.run("DELETE FROM told WHERE key LIKE 'lookfail:%'");
+    const cause = causeOf(error);
+    const text = NO_RUN.has(cause) ? refusal(cause, "owner") : undefined;
+    if (!text || holdingNow(conv, now) || !told(db, `lookfail:${cause}`, { once: true }, now.getTime())) return;
+    await postNotice(pipeline, conv, text);
+  } catch (e) {
+    console.error("notices: could not note a look:", (e as Error).message);
+  }
 }
