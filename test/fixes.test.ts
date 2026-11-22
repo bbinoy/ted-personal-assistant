@@ -1,9 +1,17 @@
 import { test } from "node:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { AuthError, causeOf, FIXES, InstanceKeyError, noticeFor, RateLimitError, type Cause } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
-import { createFailureTracker } from "../src/heartbeat/notices.ts";
 import { KEY_FACTS } from "../src/tenants/keynotice.ts";
+
+process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "fixes-test-"));
+const { appendRow } = await import("../src/core/looks.ts");
+const { failingLooksFact } = await import("../src/heartbeat/facts.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
+const resetLooks = () => void instanceDb().run("DELETE FROM looks");
 
 const CAUSES = Object.keys(FIXES) as Cause[];
 const SAMPLES: Record<Cause, unknown> = {
@@ -34,19 +42,19 @@ test("every cause maps to one fix, and each cause is recognised from its error",
   assert.equal(causeOf(new Error("she has not connected Notion yet")), "reconnect");
 });
 
-test("the failing-looks fact carries the cause's what and fix, for the owner only; a friend's or a group's failures give none", () => {
-  const H = 3_600_000;
+test("the failing-looks fact carries the cause's what and fix, for the owner only; one failure or a good look after it gives none", () => {
+  const row = (outcome: "failed" | "silent", cause?: string, n = 0) => ({ at: new Date(2026, 9, 14, 12, n).toISOString(), kind: "owner" as const, night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: 0, delegations: 0, outcome, ...(cause ? { cause } : {}) });
+  const owner = { kind: "owner" } as never;
   for (const c of CAUSES) {
-    const t = createFailureTracker();
-    for (let i = 0; i < 3; i++) t.observe("k", "owner", true, c, 1_000 + i, i * H);
-    const fact = t.fact("k");
-    if (c === "login") assert.equal(fact, "", "no look can run on it: the owner gets the fixed line instead (notices.ts observeLook)");
-    else assert.ok(fact.includes(FIXES[c].what) && fact.includes(FIXES[c].fix), `${c}: ${fact}`);
-    for (const scope of ["tenant", "group"] as const) {
-      const f = createFailureTracker();
-      for (let i = 0; i < 3; i++) f.observe("x", scope, true, c, 1_000 + i, i * H);
-      assert.equal(f.fact("x"), "", `${scope} ${c}`);
-    }
+    resetLooks();
+    appendRow(row("failed", c, 1));
+    assert.equal(failingLooksFact(owner), "", "one failure is not a fact");
+    appendRow(row("failed", c, 2));
+    const fact = failingLooksFact(owner);
+    assert.ok(fact.includes(FIXES[c].what) && fact.includes(FIXES[c].fix), `${c}: ${fact}`);
+    assert.equal(failingLooksFact({ kind: "group" } as never), "");
+    appendRow(row("silent", undefined, 3));
+    assert.equal(failingLooksFact(owner), "", "a look that works ends it");
   }
   assert.match(FIXES.timeout.fix, /RUN_MAX_MINUTES_CHAT/, "the one ceiling of every run");
 });

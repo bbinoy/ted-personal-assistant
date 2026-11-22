@@ -26,9 +26,9 @@ import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { fence } from "../core/fence.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { heldWaiting, observeLook, postNotice, submitPost } from "./notices.ts";
+import { heldWaiting, postNotice, submitPost } from "./notices.ts";
 import { factsFor, routinesWaiting } from "./facts.ts";
-import { isApiRefusal } from "../tenants/errors.ts";
+import { causeOf, isApiRefusal } from "../tenants/errors.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { waitingReminders, remindersWaiting } from "./remindtick.ts";
 import { meetingsWaiting, waitingMeetings } from "./preptick.ts";
@@ -167,7 +167,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     };
     let held = false; // something this look said was held for later (quiet hours)
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
-    let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
+    let failure: unknown; // what the run threw (its cause class is recorded in the look row)
     const overtaken = new AbortController();
     const h = history.get(conv.key) ?? { preempted: 0 };
     history.set(conv.key, h);
@@ -221,7 +221,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured) : undefined;
     const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's
-    const interrupted = !reply && (slept.has(overtaken) || spannedSleep); // the Mac slept: the connections are dead; a failed row, neutral for the failure tracker, due again at once
+    const interrupted = !reply && (slept.has(overtaken) || spannedSleep); // the Mac slept: the connections are dead; a failed row (cause "slept"), due again at once
     const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
     const calledOff = !interrupted && (overtaken.signal.aborted || failure instanceof RunStopped); // a message overtook it, or the owner said /stop: not a failure
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : interrupted ? "failed" : calledOff ? "preempted" : timedOut ? "timeout" : "failed";
@@ -246,14 +246,13 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
     const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..60 rule), not after the day's 30 minutes
-    if (outcome !== "preempted" && !interrupted) await observeLook(pipeline, conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look was handed is settled by facts.ts: held posts when it ended posted or silent, reminders and learned changes when it posted or held, a prep when it posted, a routine when its expert came back (a look a message overtook settles none of the last two).
     facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted || isApiRefusal(failure), sends: sent, acted });
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     console.log(`${conv.kind} look ${outcome} ($${(reply?.costUsd ?? 0).toFixed(4)}, ${toolCalls} tool call(s), ${delegations} delegation(s))`); // the cost line a chat turn has ("replied"), for doctor and the heartbeat report
-    emit({ type: "look", conv: conv.key, unjournaled, source: auditSource({ who: conv.kind, attended: false }), row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
+    emit({ type: "look", conv: conv.key, unjournaled, source: auditSource({ who: conv.kind, attended: false }), row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome, ...(failed ? { cause: interrupted ? "slept" : causeOf(failure) } : {}) } });
     if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
     else if (outcome === "preempted") recordCalledOff(pipeline, conv, now); // a message overtook it: due again once the conversation is quiet (ledger.ts lookWhy), not at the day's 30 minutes
     else recordWakeKeepingPull(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news; a check_again of this run (an earlier time, with its reason) stays

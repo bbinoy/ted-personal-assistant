@@ -24,10 +24,10 @@ export const isApiRefusal = (e: unknown): e is AuthError | RateLimitError | Inst
 // What to tell whom, by what went wrong and who is reading: the owner in their own chat (where to look), a group (nobody there should be sent to a terminal), a friend
 // (no terminals, no logs; the account is the instance's, not hers, so she is told who must fix it).
 export type Audience = "owner" | "group" | "friend";
-// What went wrong, in the classes a person can act on (also what the background-failure notice says, heartbeat/notices.ts). A connector's failure reaches us only as text from the SDK, hence the words.
+// What went wrong, in the classes a person can act on (also what the failing-looks fact says, heartbeat/facts.ts). A connector's failure reaches us only as text from the SDK, hence the words.
 export type Cause = "login" | "limit" | "billing" | "refused" | "timeout" | "connector" | "reconnect" | "other";
 // THE table from a cause to what the OWNER is told and the ONE next step she can take (the exact command, the exact setting, or the exact place in the Claude app). Every owner-facing failure
-// text ends with `fix`: the chat notices below; the failing-looks FACT for the owner's next look carries it too (heartbeat/notices.ts). No secret, token or word of a friend's: a fixed sentence per cause. A friend's reconnect puts
+// text ends with `fix`: the chat notices below; the failing-looks FACT for the owner's next look carries it too (heartbeat/facts.ts). No secret, token or word of a friend's: a fixed sentence per cause. A friend's reconnect puts
 // no minted link in the message (a link is a secret that works once): the fix is the sentence that makes the assistant send HER one, in her own chat.
 export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
   login: { what: "my Claude login expired", fix: "On the Mac, run `claude auth login`." },
@@ -42,7 +42,7 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
 
 // ---- what a person is told when Ted cannot serve them right now: ONE table, by reason and audience ----
 // Fixed texts, on purpose (CLAUDE.md §4): only for people for whom no model run is possible at that moment (a refused key or login, a spent day, a cooldown, no key), and the owner's own
-// failure notices, which end with the one step she must take (FIXES). A run that merely failed (timeout, connector, reconnect, other) gets one short line to a group or a friend
+// chat failure notices, which end with the one step she must take (FIXES). A run that merely failed (timeout, connector, reconnect, other) gets one short line to a group or a friend
 // (FAILED): no model can say it, and they have nothing to do but ask again; the log and `npm run doctor` say the cause. Short and kind. A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
 export type Reason = Cause | "cooldown" | "no-key";
 export interface RefusalFacts {

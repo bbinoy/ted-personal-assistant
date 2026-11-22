@@ -4,7 +4,7 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { clearQuiet, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, observeLook, dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
+import { dropUnreachable, heldPosts, heldWaiting, resetHeld, planFlush, planPost, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -80,7 +80,7 @@ test("held posts as facts: written-when wording, capped, trimmed; a conversation
   submitPost(c, "newer post", false, min(EVENING, 20));
   const taken = takeHeld(c, MORNING).held;
   assert.deepEqual(taken.map((h) => h.text), ["newer post", "older post"]);
-  assert.equal(heldBlock(taken, MORNING, systemZone()), `<held_posts>\nHeld back and not sent (written 22:55 yesterday): "newer post"\nHeld back and not sent (written 22:35 yesterday): "older post"\n</held_posts>\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`);
+  assert.equal(heldBlock(taken, MORNING, systemZone()), `<held_posts>\nHeld back and not sent (written 22:55 yesterday, 9 h ago): "newer post"\nHeld back and not sent (written 22:35 yesterday, 9 h ago): "older post"\n</held_posts>\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`);
   assert.match(heldBlock([{ text: "x", at: MORNING.getTime() - 3_600_000 }], MORNING, systemZone()), /written 06:30 today/);
   assert.equal(heldBlock([], MORNING, systemZone()), "");
   assert.equal(heldBlock(Array.from({ length: 12 }, (_, i) => ({ text: `p${i} ${"x".repeat(600)}`, at: EVENING.getTime() })), MORNING, systemZone()).split("Held back").length - 1, HELD_MAX, "capped");
@@ -104,32 +104,6 @@ test("held posts are each conversation's own: a group's and a friend's are hande
   assert.deepEqual(takeHeld(g, MORNING).held.map((h) => h.text), ["group's post"]);
   assert.deepEqual(takeHeld(f, MORNING).held.map((h) => h.text), ["friend's post"]);
   assert.deepEqual(takeHeld(o, MORNING).held.map((h) => h.text), ["owner's post"]);
-});
-
-test("failure tracker: the owner's looks become a fact only after 3 failures over 2 hours AWAKE; sleep does not count; a success ends it without a word", () => {
-  const H = 3_600_000;
-  const T = 1_000_000_000_000;
-  const t = createFailureTracker();
-  t.observe("owner", "owner", true, "connector", T, 0);
-  t.observe("owner", "owner", true, "connector", T + 600_000, 0.2 * H);
-  t.observe("owner", "owner", true, "connector", T + 1_200_000, 0.4 * H);
-  assert.equal(t.fact("owner"), "", "three failures, but only 24 minutes awake");
-  t.observe("owner", "owner", true, "connector", T + 2.5 * H, 2.1 * H);
-  const fact = t.fact("owner");
-  assert.match(fact, /failed 4 times in a row/);
-  assert.match(fact, /Connectors/);
-  assert.match(fact, /system status/);
-  t.observe("owner", "owner", false, undefined, T + 3 * H, 2.5 * H);
-  assert.equal(t.fact("owner"), "", "a look that works ends it: no 'back to normal' anywhere");
-  // a night asleep between failures: ten hours on the wall clock, minutes on the monotonic one
-  const n = createFailureTracker();
-  for (let i = 0; i < 5; i++) n.observe("owner", "owner", true, "connector", T + i * 2.5 * H, i * 60_000);
-  assert.equal(n.fact("owner"), "", "the Mac slept through most of it");
-  // groups and friends are never tracked for anyone's chat
-  const g = createFailureTracker({ fails: 1, awakeMs: 0 });
-  g.observe("g1", "group", true, "timeout", T, 0);
-  g.observe("tenant:mara", "tenant", true, "timeout", T, 0);
-  assert.equal(g.fact("g1") + g.fact("tenant:mara"), "");
 });
 
 test("causeOf and the owner's failure messages: login, limit, timeout, connector, the rest", () => {
@@ -172,11 +146,6 @@ test("the doctor's error window: dates are rebuilt from the file's time, so yest
 });
 
 
-test("held items are checked before they are handed over: anything held for over a day and a half is no longer news", () => {
-  const old = [{ text: "x", at: NIGHT.getTime() }];
-  assert.equal(stillTrue(old, NIGHT.getTime() + 37 * 3_600_000).length, 0);
-  assert.equal(stillTrue(old, NIGHT.getTime() + 3_600_000).length, 1);
-});
 test("the send tool of an unattended look is held at 02:00 unless urgent; a chat turn's sink is never gated", async () => {
   reset();
   const c = owner();
@@ -208,54 +177,3 @@ test("a system matter for the owner (the shared key, a friend's damaged file) is
   reset();
 });
 
-test("observeLook: a login that stops every run is told to the owner once per streak, after 3 failures, not in quiet hours", async () => {
-  const o = { ...owner(), logFile: scratchLog(`ol-${Math.random().toString(36).slice(2)}.jsonl`) };
-  const sent: string[] = [];
-  let sendError: unknown;
-  const pipeline = {
-    enqueue: <X,>(_c: unknown, job: () => Promise<X>) => job(),
-    runTurn: async (_c: unknown, t: { run: () => Promise<{ text: string }> }) => {
-      sent.push((await t.run()).text);
-      if (sendError) throw sendError;
-      return { spoke: true };
-    },
-  } as never;
-  const DAY = new Date(2026, 9, 15, 12, 0, 0);
-  const NIGHT = new Date(2026, 9, 14, 22, 35, 0);
-  const fail = (e: unknown, at = DAY) => observeLook(pipeline, o, "failed", e, at, 0);
-  await observeLook(pipeline, o, "silent", undefined, DAY, 0); // a clean start
-  await fail(new AuthError("x"));
-  await fail(new AuthError("x"));
-  assert.equal(sent.length, 0, "not at 2");
-  await fail(new AuthError("x"));
-  assert.deepEqual(sent, [refusal("login", "owner")]);
-  await fail(new AuthError("x"));
-  assert.equal(sent.length, 1, "once per streak");
-  // a good look ends it; the next streak tells again
-  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
-  for (let i = 0; i < 3; i++) await fail(new AuthError("x"));
-  assert.equal(sent.length, 2);
-  // quiet hours hold it; the first failing look after quiet sends it
-  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
-  for (let i = 0; i < 4; i++) await fail(new AuthError("x"), NIGHT);
-  assert.equal(sent.length, 2, "held at night");
-  await fail(new AuthError("x"), MORNING);
-  assert.equal(sent.length, 3);
-  // other causes are never told
-  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
-  for (let i = 0; i < 5; i++) await fail(new RunTimeout(60_000));
-  for (let i = 0; i < 5; i++) await fail(new Error("fetch failed"));
-  assert.equal(sent.length, 3);
-  // a send that failed is tried again, but not one that may have gone out
-  await observeLook(pipeline, o, "silent", undefined, DAY, 0);
-  sendError = new Error("Failed to send message");
-  for (let i = 0; i < 3; i++) await fail(new AuthError("x"));
-  assert.equal(sent.length, 4);
-  await fail(new AuthError("x"));
-  assert.equal(sent.length, 5, "refused: tried again");
-  sendError = new Error("socket closed");
-  await fail(new AuthError("x"));
-  assert.equal(sent.length, 6);
-  await fail(new AuthError("x"));
-  assert.equal(sent.length, 6, "unsure: not repeated");
-});

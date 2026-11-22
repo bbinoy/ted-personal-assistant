@@ -255,7 +255,7 @@ test("the incident: a post held at 22:35 is not sent at 07:00; the morning look 
   await w.tick(release); // the look chose 120 minutes, yet it is due now: something was held for it
   assert.deepEqual(seen.posted, [], "never delivered verbatim");
   assert.equal(seen.runs.length, 2, "the morning look ran at once");
-  const block = `Held back and not sent (written 22:35 yesterday): "${TEXT}"`;
+  const block = `Held back and not sent (written 22:35 yesterday, 8 h ago): "${TEXT}"`;
   assert.equal(seen.prompts[1]!.split(block).length - 1, 1, "the held text, once");
   assert.match(seen.prompts[1]!, /These were not delivered\. Say again only what is still true and still matters now, in today's words/);
   assert.doesNotMatch((seen.provenance[1] as { task: string }).task, /Held back/, "not in the standing reason the judge reads");
@@ -634,48 +634,27 @@ test("a look that was preempted twice runs to completion the third time, though 
   assert.deepEqual(seen.posted, []);
 });
 
-test("looks that fail again and again: nothing in the chat; after 2 hours of failing with the Mac AWAKE the owner's next look gets it as a fact, and a look that works ends it silently", async () => {
-  let wall = DAY.getTime();
-  let mono = 0;
+test("looks that fail again and again: nothing in the chat; the owner's next look gets the count and cause as a fact, and a look that works ends it silently", async () => {
   let mode: "boom" | "ok" = "boom";
-  const { w, conv, at, seen } = rig(() => (mode === "boom" ? { throws: true } : { message: "[[silent]]" }), { clocks: { wall: () => wall, mono: () => mono } });
-  for (let i = 0; i < 4; i++) {
+  reset(); // (the file's earlier tests left rows)
+  const { w, conv, at, seen } = rig(() => (mode === "boom" ? { throws: true } : { message: "[[silent]]" }));
+  for (let i = 0; i < 3; i++) {
     const t = min(DAY, i * 45);
     at(t);
-    mono = i * 45 * 60_000; // awake all the while
-    wall = t.getTime();
     assert.equal(await w.look(conv, t), "failed");
-    assert.doesNotMatch(seen.prompts.at(-1)!, /background looks have failed/);
+    assert.equal(/background looks failed/.test(seen.prompts.at(-1)!), i === 2, "from the second failure on, the look is told");
   }
+  assert.deepEqual(seen.posted, [], "nothing in the chat");
   mode = "ok";
   const t = min(DAY, 180);
   at(t);
-  mono = 180 * 60_000;
   assert.equal(await w.look(conv, t), "silent");
-  assert.match(seen.prompts.at(-1)!, /Your own background looks have failed 4 times in a row since 14:00 \(2\.3 hours of that with the Mac awake/);
+  assert.match(seen.prompts.at(-1)!, /Your own background looks failed 3 times in a row/);
   assert.match(seen.prompts.at(-1)!, /npm run doctor/, "the cause's fix, for the model to pass on if it matters");
   const t2 = min(DAY, 220);
   at(t2);
-  mono = 220 * 60_000;
   await w.look(conv, t2);
-  assert.doesNotMatch(seen.prompts.at(-1)!, /background looks have failed/, "it worked: the streak is over, no 'back to normal'");
-});
-
-test("a look cut by its ceiling across a sleep is neutral: it counts as no failure, however often", async () => {
-  let wall = DAY.getTime();
-  let mono = 0;
-  const { w, conv, at, seen } = rig(() => ({ timeout: true, during: () => void (wall += 3_600_000) }), { clocks: { wall: () => wall, mono: () => mono } }); // an hour on the wall clock, no time awake
-  for (let i = 0; i < 6; i++) {
-    const t = min(DAY, i * 45);
-    at(t);
-    mono = i * 45 * 60_000;
-    wall = t.getTime();
-    await w.look(conv, t);
-  }
-  assert.equal(readRows().filter((r) => r.outcome === "failed").length, 6, "the rows say what happened (failed, not timeout: the sleep's)");
-  // counted, the 4th look on (3 failures, 2 hours awake) would carry the failing-looks fact: none does
-  assert.equal(seen.prompts.length, 6);
-  assert.ok(seen.prompts.every((p) => !/background looks have failed/.test(p)));
+  assert.doesNotMatch(seen.prompts.at(-1)!, /background looks failed/, "it worked: the streak is over, no 'back to normal'");
 });
 
 test("a group's and a friend's failing looks never reach the owner's chat, and no group look is told of them", async () => {

@@ -219,8 +219,8 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 | fact | built by | handed over |
 |---|---|---|
-| the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (3 in a row over 2 h awake) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
-| held posts (quiet hours, `/quiet`), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over; deleted only when the run ends well; nothing older than 36 h |
+| the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (2 or more in a row: count and last cause from the `looks` table) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
+| held posts (quiet hours, `/quiet`), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over; deleted only when the run ends well; each shows its age, the look judges; at most 30 are kept |
 | reminders due | `waitingReminders`, `reminderFacts` (and the trigger line, `reminderWhy`) | claimed by the tick; settled when a look ended well: told if it said something (or held it), only marked if it stayed silent; a failed or called-off look leaves them for the next |
 | meetings claimed for prep | `waitingMeetings`, `meetingFacts` (and the trigger line, `meetingWhy`) | `PREP_MINUTES` before the start; told when the run said something |
 | routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |

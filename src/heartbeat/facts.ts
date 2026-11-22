@@ -1,7 +1,8 @@
 import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
 import { forgetLapsed, lapsedIn, openCount, type Lapsed } from "../approvals/approvals.ts";
 import { convDb } from "../core/convdb.ts";
-import { settings } from "../core/settings.ts";
+import { OWNER, settings } from "../core/settings.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 import { told } from "../core/told.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { fence } from "../core/fence.ts";
@@ -21,9 +22,10 @@ import { mailSlot } from "../modules/index.ts";
 import { inboxBlock } from "../tasks/maildecisions.ts";
 import { markOwed, markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines } from "../tasks/routines.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
-import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
+import { takeHeld, type Held } from "./notices.ts";
+import { recentLooks } from "../core/looks.ts";
 import { loginExpiryFact } from "../core/loginwatch.ts";
-import { FIXES } from "../tenants/errors.ts";
+import { FIXES, type Cause } from "../tenants/errors.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
 // A routine (a routine note) the Mac slept through still runs on waking within this many hours of its time, else that period is skipped.
@@ -84,6 +86,19 @@ function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): st
   return `Questions that were declined or lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
 }
 
+// The owner's own looks that keep failing, as a fact (system status stays out of the chat: the run decides whether she must act). The looks table has no conversation, so this is the owner's kind only;
+// a group's or a friend's failures stay in the log and `npm run doctor`. "" unless the last two looks failed.
+export function failingLooksFact(conv: Conversation): string {
+  if (conv.kind !== "owner") return "";
+  const rows = recentLooks("owner", 10);
+  const run = rows.findIndex((r) => r.outcome !== "failed" && r.outcome !== "timeout");
+  const failed = rows.slice(0, run < 0 ? rows.length : run);
+  if (failed.length < 2) return "";
+  const cause = failed[0]!.cause;
+  const what = cause && cause in FIXES ? `${FIXES[cause as Cause].what}. ${FIXES[cause as Cause].fix}` : cause === "slept" ? "the Mac went to sleep during the look (not a fault)" : "unknown";
+  return `Your own background looks failed ${failed.length} times in a row, the last at ${timeIn(new Date(failed[0]!.at), zoneOf(conv))}. Cause as code classifies the last one: ${what}. This is system status: say it only if it still matters to ${OWNER} and they have to do something, in one short line in your own words; otherwise say nothing about it.`;
+}
+
 // Everything held back (notices.ts takeHeld, newest first: quiet hours or /quiet) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
 // each trimmed. The run says again only what is still true today, in today's words; "" when there is none.
 export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date, zone: string): string {
@@ -95,7 +110,8 @@ export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date,
     const day = dayIn(new Date(at), zone);
     return `${timeIn(new Date(at), zone)} ${day === today ? "today" : day === yesterday ? "yesterday" : `on ${day}`}`;
   };
-  const lines = held.slice(0, HELD_MAX).map((h) => `Held back and not sent (written ${when(h.at)}): "${oneLine(h.text, HELD_CHARS)}"`);
+  const age = (at: number): string => `${Math.max(0, Math.round((now.getTime() - at) / 3_600_000))} h ago`;
+  const lines = held.slice(0, HELD_MAX).map((h) => `Held back and not sent (written ${when(h.at)}, ${age(h.at)}): "${oneLine(h.text, HELD_CHARS)}"`);
   return `${fence("held_posts", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
 }
 
