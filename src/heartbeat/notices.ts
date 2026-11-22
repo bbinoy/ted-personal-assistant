@@ -1,5 +1,4 @@
-import { takeCapNotice } from "../core/capnotice.ts";
-import { MAX_HELD, holdFact } from "../core/ownerfact.ts";
+import { MAX_HELD, notify } from "../core/notify.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
@@ -12,7 +11,7 @@ import { emit } from "../core/events.ts";
 import { auditSource } from "../core/runkind.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Small, separate mechanisms, all pure planners over a little state:
-//   1. system matters (the damaged database (1b), the shared key, spend warnings) are a FACT for her next run (core/ownerfact.ts holdFact), which says it in its own words; there is no fixed text to her.
+//   1. system matters (the damaged database (1b), the shared key, spend warnings) are a FACT for her next run (core/notify.ts), which says it in its own words; there is no fixed text to her.
 //   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
 //   3. quiet hours and /quiet, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on) is HELD (state, per conversation). Code never words it
 //      again: when quiet is over the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts), each handed over exactly once, and says again in today's words
@@ -178,9 +177,8 @@ export function dropUnreachable(conv: Conversation): void {
 export function noticeDamaged(now: Date = new Date()): number {
   let n = 0;
   for (const d of damagedConvs()) {
-    if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    holdFact(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged?.session ? " (I kept the chat session)" : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
+    if (!notify(`convdb:${d.conv}`, { perDay: true }, `The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged?.session ? " (I kept the chat session)" : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now.getTime())) continue;
     n++;
   }
   return n;

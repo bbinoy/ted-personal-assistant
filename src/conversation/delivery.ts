@@ -18,7 +18,7 @@ import { type Timing } from "../core/timing.ts";
 import type { Quote } from "@ted-assistant/messenger";
 import { MAX_SPOKEN_CHARS, voiceDeadlineMs, VoiceAbort } from "@ted-assistant/speech/tts";
 import { startDeadline } from "../core/deadline.ts";
-import { takeCapNotice } from "../core/capnotice.ts";
+import { notify } from "../core/notify.ts";
 import { causeOf, reportReconnect } from "../tenants/errors.ts";
 
 // Everything the assistant says or shows while a conversation is being answered: the delivery of a reply (text, voice, picture, reaction), "typing…", the failure notice, and the run of one turn.
@@ -177,8 +177,8 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
     if (causeOf(e) === "reconnect") reportReconnect(conv.convId, now());
     const text = conv.notice(e);
     if (text === undefined) return false; // (a run that merely failed, for a group or a friend: the warning reaction on their message is the notice)
-    // (the one throttle, capnotice.ts: kept across restarts, keyed by the conversation's folder name, never a raw group id)
-    if (conv.noticeEveryMs > 0 && !takeCapNotice(`warn:${conv.convId}`, now(), conv.noticeEveryMs)) return false;
+    // (the one throttle, notify.ts: kept across restarts, keyed by the conversation's folder name, never a raw group id)
+    if (conv.noticeEveryMs > 0 && !notify(`warn:${conv.convId}`, { everyMs: conv.noticeEveryMs }, undefined, now())) return false;
     return out.reply(text, { quote: conv.threadAlways ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }
 

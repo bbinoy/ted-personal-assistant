@@ -12,7 +12,7 @@ const { friendConvId } = await import("../src/core/convpaths.ts");
 const { instanceDb, kvGet, kvSet, openInstanceDbAt } = await import("../src/core/instancedb.ts");
 const { openDb, LedgerCorruptError } = await import("../src/core/db.ts");
 const B = await import("../src/core/budget.ts");
-const N = await import("../src/core/capnotice.ts");
+const N = await import("../src/core/notify.ts");
 const R = await import("../src/core/looks.ts");
 const { removeTenant } = await import("../src/tenants/removal.ts");
 const { Ledger } = await import("../src/modules/browse/payments.ts");
@@ -94,7 +94,7 @@ test("a failing database: the heartbeat tick, a look's record, a charge, a notic
     assert.doesNotThrow(() => R.appendRow({ at: new Date().toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent" }));
     assert.doesNotThrow(() => B.recordCost(1));
     assert.equal(B.spentToday(), Number.POSITIVE_INFINITY, "fail closed: no reading");
-    assert.equal(N.takeCapNotice("x"), false, "nobody is told twice or told for nothing");
+    assert.equal(N.notify("x", { perDay: true }), undefined, "nobody is told twice or told for nothing");
     assert.deepEqual(I.connectionState(BO, "notion"), { state: "none" });
     assert.doesNotThrow(() => I.markNeedsReconnect(BO, "notion"));
   } finally {

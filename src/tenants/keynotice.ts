@@ -1,12 +1,11 @@
-import { takeCapNotice } from "../core/capnotice.ts";
-import { holdFact } from "../core/ownerfact.ts";
+import { notify } from "../core/notify.ts";
 
 // ONE place that tells the owner about a problem with the shared instance key (TENANT_ANTHROPIC_API_KEY) that every friend's run depends on. It is called from where
 // a friend's run FAILS because of the key: errors.ts `failure`, which every model call on the key goes through, whatever started it (her chat turn, the heartbeat, a
 // wake-up, the dream, the mail loops and the mail handler, the idle look, the compaction), and from where a run cannot start at all for want of a key (payer.ts).
 // So there is no per-source branch: a source that fails the same way is reported the same way.
 //
-// It is a FACT for the owner's next run (core/ownerfact.ts), which says it in its own words, at most once per problem per three hours, however
+// It is a FACT for the owner's next run (core/notify.ts), which says it in its own words, at most once per problem per three hours, however
 // many friends and runs run into it. It holds no word of any friend, no name and no key.
 
 export type KeyProblem = "refused" | "missing";
@@ -19,7 +18,5 @@ export const KEY_FACTS: Readonly<Record<KeyProblem, string>> = {
 
 // Records the problem; hands the fact over if none of this kind went out within the interval. Returns whether it did. Never throws.
 export function reportKeyProblem(problem: KeyProblem, now = Date.now()): boolean {
-  if (!takeCapNotice(`key:${problem}`, now, 180 * 60_000)) return false;
-  holdFact(KEY_FACTS[problem], new Date(now));
-  return true;
+  return notify(`key:${problem}`, { everyMs: 180 * 60_000 }, KEY_FACTS[problem], now) === true;
 }

@@ -14,7 +14,7 @@ import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from 
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { ledgerEntries } from "../src/core/messages.ts";
 import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
-import { holdFact } from "../src/core/ownerfact.ts";
+import { holdFact } from "../src/core/notify.ts";
 import { refusal, refusalOnce } from "../src/tenants/errors.ts";
 import { errorLinesSince } from "../src/core/logwindow.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
@@ -198,8 +198,8 @@ test("the send tool of an unattended look is held at 02:00 unless urgent; a chat
 
 test("a system matter for the owner (the shared key, a friend's damaged file) is a fact for her next look, never a ping at night", () => {
   reset();
-  holdFact("The shared API key was refused.", NIGHT);
-  holdFact("The shared API key was refused.", NIGHT);
+  holdFact("The shared API key was refused.", NIGHT.getTime());
+  holdFact("The shared API key was refused.", NIGHT.getTime());
   assert.equal(heldPosts(owner()).length, 1, "once");
   assert.deepEqual(takeHeld(owner(), NIGHT).held, [], "not during quiet");
   const t = takeHeld(owner(), MORNING);

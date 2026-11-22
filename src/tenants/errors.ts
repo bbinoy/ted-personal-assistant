@@ -1,8 +1,7 @@
 import { noteRateLimit } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
-import { takeCapNotice } from "../core/capnotice.ts";
-import { holdFact } from "../core/ownerfact.ts";
+import { notify } from "../core/notify.ts";
 import { OWNER } from "../core/settings.ts";
 
 // The failures that have their own message, instead of "something broke".
@@ -69,17 +68,15 @@ export function refusal(reason: Reason, audience: Audience, o: RefusalFacts = {}
   const say = REFUSALS[reason][audience];
   return typeof say === "function" ? say(o) : say;
 }
-// The same line to the same person or group (key: their convId) at most once a day for a day's ceiling, else every 30 minutes (capnotice.ts); undefined: it was said, stay silent.
+// The same line to the same person or group (key: their convId) at most once a day for a day's ceiling, else every 30 minutes (notify.ts); undefined: it was said, stay silent.
 export function refusalOnce(reason: Reason, audience: Audience, convId: string, o: RefusalFacts = {}, now = Date.now()): string | undefined {
   const every = reason === "cooldown" || reason === "no-key" ? 30 * 60_000 : undefined;
   const text = refusal(reason, audience, o);
-  return text !== undefined && takeCapNotice(`refusal:${reason}:${convId}`, now, every) ? text : undefined;
+  return text !== undefined && notify(`refusal:${reason}:${convId}`, every === undefined ? { perDay: true } : { everyMs: every }, undefined, now) ? text : undefined;
 }
 // A friend's Notion or Google connection failed: not urgent and not the owner's own turn, so a FACT for her next look (once per conversation per day), no chat text. No name, no link.
 export function reportReconnect(convId: string, now = Date.now()): boolean {
-  if (!takeCapNotice(`reconnect:${convId}`, now)) return false;
-  holdFact(`A friend's ${FIXES.reconnect.what}. ${FIXES.reconnect.fix}`, new Date(now));
-  return true;
+  return notify(`reconnect:${convId}`, { perDay: true }, `A friend's ${FIXES.reconnect.what}. ${FIXES.reconnect.fix}`, now) === true;
 }
 export const noticeFor = (audience: Audience) => (e: unknown): string | undefined => refusal(causeOf(e), audience);
 const CONNECTOR_WORDS = /\bmcp\b|connector|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|server .*(?:failed|not connected|disconnected)/i;

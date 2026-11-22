@@ -14,7 +14,7 @@ const { groupDir, recordGroup } = await import("../src/conversation/groupstore.t
 const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/conversation/forget.ts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
-const { takeCapNotice } = await import("../src/core/capnotice.ts");
+const { notify } = await import("../src/core/notify.ts");
 const { instanceDb } = await import("../src/core/instancedb.ts");
 const marked = (key: string): boolean => !!instanceDb().get("SELECT 1 FROM told WHERE key = ?", key);
 const { convDb: rowDb, peekConvDb: peekRowDb } = await import("../src/core/convdb.ts");
@@ -42,8 +42,8 @@ function group(id: string, name: string, tag: string) {
   holdVoiceNote(id, { ts: NOW, id: `${tag}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
   addRow(id);
   recordCost(1.25, groupConvId(id), "chat");
-  takeCapNotice(`refusal:owner-budget:${groupConvId(id)}`);
-  takeCapNotice(`warn:${groupConvId(id)}`, Date.now(), 60_000);
+  notify(`refusal:owner-budget:${groupConvId(id)}`, { perDay: true });
+  notify(`warn:${groupConvId(id)}`, { everyMs: 60_000 });
   return { id, dir, p };
 }
 
@@ -106,7 +106,7 @@ test("forget friend: her registry entry, folder (voices, pending, history), audi
     holdVoiceNote(`tenant:${rec.id}`, { ts: NOW, id: `${rec.id}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
     addRow(`tenant:${rec.id}`);
     recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
-    takeCapNotice(`refusal:shared-budget:${friendConvId(rec.id)}`);
+    notify(`refusal:shared-budget:${friendConvId(rec.id)}`, { perDay: true });
   }
   const r = await forgetFriend(gone.id, { attachmentsDir: attachments, secrets: [async () => 3] });
   assert.ok(r?.registry);

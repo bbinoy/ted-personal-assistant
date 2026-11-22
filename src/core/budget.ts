@@ -1,5 +1,4 @@
-import { takeCapNotice } from "./capnotice.ts";
-import { holdFact } from "./ownerfact.ts";
+import { notify } from "./notify.ts";
 import { told } from "./told.ts";
 import { dayIn } from "./timezone.ts";
 import { settings } from "./settings.ts";
@@ -73,8 +72,8 @@ export function spentToday(ledger?: ConvId, now: Date = new Date()): number {
 }
 
 // ---- warnings, not ceilings ----
-// Nothing is ever paused for money. The owner pays both payers, so she hears of a big day as a FACT for her next run (ownerfact.ts), which says it in its own words, once per threshold per day
-// (told.ts, through takeCapNotice): the login's day past DAILY_BUDGET_USD and every WARN_STEP_USD more, the instance key's day (all friends together) past INSTANCE_KEY_DAILY_USD and every
+// Nothing is ever paused for money. The owner pays both payers, so she hears of a big day as a FACT for her next run (notify.ts), which says it in its own words, once per threshold per day
+// (told.ts): the login's day past DAILY_BUDGET_USD and every WARN_STEP_USD more, the instance key's day (all friends together) past INSTANCE_KEY_DAILY_USD and every
 // step more, and one friend's own day past that same first level and every step more. The fact names a friend by id and gives the amount only, never anything she said. Checked on every charge
 // (recordSpend), so the ledger is the only trigger. The first check after a deploy records what is already crossed without telling (WARN_SEEDED), so an old, inflated day does not fire at once.
 const WARN_STEP_USD = 5;
@@ -86,8 +85,8 @@ const crossed = (usd: number, first: number): number | undefined => (Number.isFi
 
 function warn(subject: string, usd: number, first: number, what: (level: number) => string, seed: boolean, now: Date): void {
   const level = crossed(usd, first);
-  if (level === undefined || !takeCapNotice(`budget:warn:${level}:${subject}`, now.getTime())) return;
-  if (!seed) holdFact(`She asked to be told when spend passes each warning level, so say it in one friendly line. ${what(level)} Nothing is paused; the next warning comes at $${level + WARN_STEP_USD}.`, now);
+  if (level === undefined) return;
+  notify(`budget:warn:${level}:${subject}`, { perDay: true }, seed ? undefined : `She asked to be told when spend passes each warning level, so say it in one friendly line. ${what(level)} Nothing is paused; the next warning comes at $${level + WARN_STEP_USD}.`, now.getTime());
 }
 function warnSpend(now: Date): void {
   const day = dayIn(now);
