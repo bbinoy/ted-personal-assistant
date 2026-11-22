@@ -78,8 +78,6 @@ test("settings: defaults, and typos fail loudly instead of becoming NaN", () => 
   assert.equal(loadSettings({ HEARTBEAT_MINUTES: "20" }).heartbeatMinutes, 5, "the tick period is the preset's alone");
   assert.deepEqual([d.quietStartHour, d.quietEndHour], [22, 7]);
   assert.throws(() => loadSettings({ QUIET_HOURS: "24-7" }), /QUIET_HOURS/);
-  // the archive switch and its three older forms are gone: archiving is always live, and a line left in .env stops the agent instead of silently ending a trial week
-  for (const old of ["ARCHIVE", "HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"]) assert.throws(() => loadSettings({ [old]: "log" }), new RegExp(`${old} is gone: archiving is always live`));
 });
 
 test("settings: the tool-hiding lists have safe defaults and reject typos", () => {

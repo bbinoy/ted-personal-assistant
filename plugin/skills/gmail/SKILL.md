@@ -22,7 +22,7 @@ The tools you have: `search_threads`, `get_thread`, `get_message`, `get_draft`,
   `get_thread` and `messageFormat: "PLAIN_TEXT"` (never `RAW`).
 - **Attachments**: never read or open their content; if the owner needs it, tell them
   to open it in Gmail.
-- **Archive** = `unlabel_thread` with `labelIds: ["INBOX"]`. The labels `TRASH` and `SPAM` are blocked on every label tool. Archiving may be switched to log-only: a refused archive is then not an error.
+- **Archive** = `unlabel_thread` with `labelIds: ["INBOX"]` (reversible: `npm run restore <threadId>` or label the thread INBOX again). The labels `TRASH` and `SPAM` are blocked on every label tool.
 - **Drafts**: `create_draft` (for a reply pass `replyToMessageId` so it stays in the
   thread) and `update_draft`. Plain text in `body`, no Markdown; one blank line between paragraphs.
 - **Sends**: `send_message` (a new mail, or a draft by `draftId`), `reply` and `forward`

@@ -32,13 +32,13 @@ export const planFlush = (i: { night: boolean; held: number }): boolean => i.hel
 
 export interface Held {
   text: string;
-  at?: number; // when it was held (epoch ms); older rows have none and are kept as they were
+  at: number; // when it was held (epoch ms)
 }
 
 const STALE_MS = 36 * 3_600_000; // nothing held is delivered after this: it is no longer news
 
 // Pure: what of the held items is still news at `now`? Anything older than 36 hours is dropped. (Whether the owner has moved on is the look's judgement: it has the chat log.)
-export const stillTrue = (held: readonly Held[], now: number): Held[] => held.filter((h) => h.at === undefined || now - h.at <= STALE_MS);
+export const stillTrue = (held: readonly Held[], now: number): Held[] => held.filter((h) => now - h.at <= STALE_MS);
 
 // ---- the failure tracker ----
 
@@ -107,36 +107,33 @@ export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {
 
 // ---- the state: two tables of the conversation's assistant.db (`hold`: the day's count; `held_posts`: what is held, oldest first) ----
 
-type HeldRow = { text: string; at: number | null };
-const heldOf = (r: HeldRow): Held => ({ text: r.text, ...(r.at !== null ? { at: r.at } : {}) });
 const HELD_SQL = "SELECT text, at FROM held_posts ORDER BY seq";
 
 /** How many posts are held (the usual tick: one small query, nothing more). */
 const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
 /** The held posts, oldest first (a read for the tests and the doctor). */
-export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>(HELD_SQL).map(heldOf);
+export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<Held>(HELD_SQL);
 /** Forget everything held (tests). */
 export const resetHeld = (conv: Pick<Conversation, "convId">): void => void convDb(conv.convId).run("DELETE FROM held_posts");
 
-// The held posts in one transaction, newest MAX_HELD (the old `why` column is written as "quiet": rows from the time of a daily cap read the same).
+// The held posts in one transaction, newest MAX_HELD.
 function save(conv: Conversation, held: Held[]): void {
   const db = convDb(conv.convId);
   db.tx(() => {
     db.run("DELETE FROM held_posts");
-    for (const h of held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, at) VALUES (?, 'quiet', ?)", h.text, h.at ?? null);
+    for (const h of held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, at) VALUES (?, 'quiet', ?)", h.text, h.at);
   });
 }
-const zoneFor = (conv: Conversation): string => zoneOf(conv);
 const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings.quietStartHour, settings.quietEndHour, zone);
 // Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
 const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
 // Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own waits by this.
-export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
+export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneOf(conv));
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it). `scheduled`: the look is running a due routine.
 export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date, scheduled = false): "post" | "held" {
-  const zone = zoneFor(conv);
+  const zone = zoneOf(conv);
   if (planPost({ urgent, night: scheduled ? isQuiet(conv, now) : holding(conv, now, zone) }) === "post") return "post";
   const held = heldPosts(conv);
   if (!held.some((h) => h.text === text)) save(conv, [...held, { text, at: now.getTime() }]);
@@ -148,7 +145,7 @@ export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
 
 // What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet).
-const ready = (conv: Conversation, now: Date, held: readonly Held[]): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), held: stillTrue(held, now.getTime()).length });
+const ready = (conv: Conversation, now: Date, held: readonly Held[]): boolean => planFlush({ night: holding(conv, now, zoneOf(conv)), held: stillTrue(held, now.getTime()).length });
 
 // All the held posts, newest first, for the conversation's next look. They are PENDING while that look runs (like seen_mail): `done()` deletes them (and what was stale), and the look calls it only
 // when it ended well (posted or silent); a failed or called-off look leaves them for the next one, so each is told at most once yet not lost (the 36 hours of stillTrue end a stuck item).
@@ -206,4 +203,4 @@ export async function observeLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn"
   }
 }
 /** The fact block for the conversation's next look: its long awake stretch of failures, or "" (always "" for a group or a friend). */
-export const failingLooksFact = (conv: Conversation): string => tracker.fact(conv.key, zoneFor(conv));
+export const failingLooksFact = (conv: Conversation): string => tracker.fact(conv.key, zoneOf(conv));

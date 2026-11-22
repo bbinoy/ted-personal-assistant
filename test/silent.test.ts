@@ -17,3 +17,9 @@ test("the marker is removed from words that carry it, the words stay", () => {
   assert.equal(withoutSilent("[[silent]]"), "");
   assert.equal(withoutSilent("I'll stay silent on that"), "I'll stay silent on that");
 });
+
+test("a text that is only JSON (an echoed structured answer) is silent; words around braces are not", () => {
+  for (const t of ['{"nextCheckMinutes":30}', ' {"nextCheckMinutes": 45, "urgent": false} ', '```json\n{"nextCheckMinutes":30}\n```', "[]"]) assert.equal(isSilent(t), true, t);
+  for (const t of ['Done. {"a":1}', "{not json}", "Your code is {x}", "[1] see the note"]) assert.equal(isSilent(t), false, t);
+});
+

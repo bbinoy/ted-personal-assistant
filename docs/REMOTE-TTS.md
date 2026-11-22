@@ -45,7 +45,7 @@ Authorization: Bearer {TTS_HTTP_TOKEN}      (only if a token is set)
 - `voice`: a voice name your server understands. `reference_id`: the id, on your server, of the reference recording for a cloned voice. The recording itself never travels and is never in this repo. Both are left out when unset.
 - Success: status 200 and the audio as the body, WAV, MP3 or OGG, up to 25 MB. The format is read from the `Content-Type` (`audio/wav`, `audio/mpeg`, `audio/ogg`), or from the first bytes if that is missing or generic.
 - Anything else (any other status, an empty or non-audio body, no answer within the timeout, a redirect) is a failure. Use 401/403 for a bad token and 429 for quota; they are named in the log.
-- Redirects are not followed, so the token cannot be sent to another host.
+- Redirects are not followed, so the token cannot be sent to another host. As a library: `synthesizeWith(text, {provider: "http", http: {url, token, timeoutMs}}, log)` from `@ted-assistant/speech/tts` returns an .m4a path in a fresh temp folder; a failure throws.
 
 ### Try the plumbing locally
 
