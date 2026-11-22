@@ -117,9 +117,9 @@ export function noticeDamaged(now: Date = new Date()): number {
   return n;
 }
 
-// A look that fails where no model run is possible at all (the login expired, the key has no credit or was refused) can never tell her through a run, and she has to act: the chat turn's own
+// A look that fails where no model run is possible at all (the login expired) can never tell her through a run, and she has to act (the friends' key is keynotice.ts's): the chat turn's own
 // fixed line (errors.ts refusal, CLAUDE.md §4) goes out ONCE per cause, held while quiet hours or /quiet last (the next failing look sends it), and a look that works forgets the marks. Owner only.
-const NO_RUN: ReadonlySet<Cause> = new Set<Cause>(["login", "billing", "refused"]);
+const NO_RUN: ReadonlySet<Cause> = new Set<Cause>(["login"]);
 export async function noteLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, failed: boolean, error: unknown, now: Date): Promise<void> {
   if (conv.kind !== "owner") return;
   try {
@@ -128,7 +128,8 @@ export async function noteLook(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, 
     const cause = causeOf(error);
     const text = NO_RUN.has(cause) ? refusal(cause, "owner") : undefined;
     if (!text || holdingNow(conv, now) || !told(db, `lookfail:${cause}`, { once: true }, now.getTime())) return;
-    await postNotice(pipeline, conv, text);
+    const res = await postNotice(pipeline, conv, text);
+    if (res.error || !res.spoke) db.run("DELETE FROM told WHERE key = ?", `lookfail:${cause}`); // (not sent: the next failing look tries again)
   } catch (e) {
     console.error("notices: could not note a look:", (e as Error).message);
   }

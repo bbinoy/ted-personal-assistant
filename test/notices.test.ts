@@ -182,9 +182,10 @@ test("noteLook: a login that stops every run is told once until a look works aga
   instanceDb().run("DELETE FROM told");
   const o = { ...owner(), logFile: scratchLog(`nl-${Math.random().toString(36).slice(2)}.jsonl`) };
   const sent: string[] = [];
+  let spoke = true;
   const pipeline = {
     enqueue: <X,>(_c: unknown, job: () => Promise<X>) => job(),
-    runTurn: async (_c: unknown, t: { run: () => Promise<{ text: string }> }) => (sent.push((await t.run()).text), { spoke: true }),
+    runTurn: async (_c: unknown, t: { run: () => Promise<{ text: string }> }) => (sent.push((await t.run()).text), { spoke }),
   } as never;
   const DAY = new Date(2026, 9, 15, 12, 0, 0);
   const fail = (e: unknown, at = DAY) => noteLook(pipeline, o, true, e, at);
@@ -203,9 +204,16 @@ test("noteLook: a login that stops every run is told once until a look works aga
   assert.equal(sent.length, 3, "sent at the first failing look after quiet");
   for (const e of [new RunTimeout(60_000), new Error("fetch failed")]) await fail(e);
   assert.equal(sent.length, 3, "other causes are never told (a sleep never reaches noteLook: look.ts)");
-  for (const k of ["billing", "refused"] as const) {
-    await fail(new InstanceKeyError(k));
-    await fail(new InstanceKeyError(k));
-  }
-  assert.deepEqual(sent.slice(3), [refusal("billing", "owner"), refusal("refused", "owner")], "each cause once");
+  for (const k of ["billing", "refused"] as const) await fail(new InstanceKeyError(k)); // (the friends' key: keynotice.ts)
+  assert.equal(sent.length, 3);
+  // a send that did not go out is tried again at the next failing look
+  await noteLook(pipeline, o, false, undefined, DAY);
+  spoke = false;
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 4);
+  spoke = true;
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 5, "retried");
+  await fail(new AuthError("x"));
+  assert.equal(sent.length, 5, "and then once");
 });

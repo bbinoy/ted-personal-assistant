@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { AuthError, causeOf, FIXES, InstanceKeyError, noticeFor, RateLimitError, type Cause } from "../src/tenants/errors.ts";
+import { AuthError, causeOf, failure, FIXES, InstanceKeyError, noticeFor, RateLimitError, type Cause } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { KEY_FACTS } from "../src/tenants/keynotice.ts";
 
@@ -77,4 +77,18 @@ test("the shared-key facts each end with the exact setting", () => {
   assert.match(told[0]!, /check TENANT_ANTHROPIC_API_KEY in \.env, then restart\.$/);
   assert.match(told[1]!, /and restart\.$/);
   for (const t of told) assert.doesNotMatch(t, SECRETS);
+});
+
+test("authentication_failed on the login payer is the login cause; a sleeping look is skipped when counting failures; an unknown cause still counts", () => {
+  assert.equal(causeOf(failure("authentication_failed", "error_during_execution")), "login");
+  resetLooks();
+  const at = (n: number) => new Date(2026, 9, 14, 12, n).toISOString();
+  const base = { kind: "owner" as const, night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: 0, delegations: 0 };
+  appendRow({ ...base, at: at(1), outcome: "failed", cause: "login" });
+  appendRow({ ...base, at: at(2), outcome: "failed", cause: "slept" });
+  assert.equal(failingLooksFact({ kind: "owner" } as never), "", "the sleep is neither a failure nor an end: one failure");
+  appendRow({ ...base, at: at(3), outcome: "failed", cause: "something-new" });
+  const fact = failingLooksFact({ kind: "owner" } as never);
+  assert.match(fact, /failed 2 times in a row/);
+  assert.match(fact, /unknown/);
 });

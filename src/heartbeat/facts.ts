@@ -90,12 +90,12 @@ function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): st
 // a group's or a friend's failures stay in the log and `npm run doctor`. "" unless the last two looks failed.
 export function failingLooksFact(conv: Conversation): string {
   if (conv.kind !== "owner") return "";
-  const rows = recentLooks("owner", 10);
+  const rows = recentLooks("owner", 10).filter((r) => r.cause !== "slept"); // (a look the Mac slept through is neither a failure nor the end of a streak)
   const run = rows.findIndex((r) => r.outcome !== "failed" && r.outcome !== "timeout");
   const failed = rows.slice(0, run < 0 ? rows.length : run);
   if (failed.length < 2) return "";
   const cause = failed[0]!.cause;
-  const what = cause && cause in FIXES ? `${FIXES[cause as Cause].what}. ${FIXES[cause as Cause].fix}` : cause === "slept" ? "the Mac went to sleep during the look (not a fault)" : "unknown";
+  const what = cause && cause in FIXES ? `${FIXES[cause as Cause].what}. ${FIXES[cause as Cause].fix}` : "unknown";
   return `Your own background looks failed ${failed.length} times in a row, the last at ${timeIn(new Date(failed[0]!.at), zoneOf(conv))}. Cause as code classifies the last one: ${what}. This is system status: say it only if it still matters to ${OWNER} and they have to do something, in one short line in your own words; otherwise say nothing about it.`;
 }
 
