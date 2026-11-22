@@ -4,7 +4,7 @@ import { dataRoot, isConvId, layout, type Layout } from "../core/convpaths.ts";
 import { registerRetention, type RetentionRule } from "../core/retention.ts";
 import { pruneVoiceNotes } from "../modules/voice/voicenote.ts";
 import { MAX_DECISIONS, trimDecisions } from "../tasks/maildecisions.ts";
-import { MAX_HELD } from "../core/ownerfact.ts";
+import { MAX_HELD } from "../core/notify.ts";
 import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 import { STALE_MINUTES } from "../tasks/routines.ts";
 import { scheduledIn } from "../modules/tasks/routinelist.ts";

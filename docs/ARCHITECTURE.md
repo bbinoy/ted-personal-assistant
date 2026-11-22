@@ -88,7 +88,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 | table | holds |
 |---|---|
 | `spend` | one row per charged run: time, local day, convId, payer (`login` or `key`), kind, dollars; the budgets are sums over it (`src/core/budget.ts`) |
-| `told` | when each notice was last told, by key, and whether it was told once for good: the one record of "told once / once a day / at most every N" (`core/told.ts`; the instance-wide use is `capnotice.ts takeCapNotice`) |
+| `told` | when each notice was last told, by key, and whether it was told once for good: the one record of "told once / once a day / at most every N" (`core/told.ts`; the instance-wide use is `notify.ts notify`) |
 | `looks` | one counted row per heartbeat look, no words (`looks.ts`) |
 | `payments` | one row per status change of a card payment, never deleted (`modules/browse/payments.ts`) |
 | `intake` | per tenant and purpose: when a form was stored (names and lengths), when a connection stopped working |
@@ -195,7 +195,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **The tick** (`src/heartbeat/heartbeat.ts`). Every `rhythm.heartbeat.everyMinutes` (preset) a free timer starts independent jobs, each in its own try/catch: `wake`, `dream` (`dreamTrigger`) and `retention` (`retentionTrigger`, once a day from 03:30). It writes the `heartbeat` row of `kv` for `npm run doctor`. Each `wake` tick, for the owner, every vouched group and every active friend:
 
-1. Damage notices (`noticeDamaged`); idle databases are closed. At start, a damaged ledger, an unreadable friends list and open registration requests become facts for the owner's next run (`holdStartupFact`, at most daily; the fixed line only if the store cannot keep the fact); no card is re-sent.
+1. Damage notices (`noticeDamaged`); idle databases are closed. At start, a damaged ledger, an unreadable friends list and open registration requests become facts for the owner's next run (`notify`, at most daily; the fixed line only if the store cannot keep the fact); no card is re-sent.
 2. Reminders (`fireReminders`): every conversation with tasks and a database, whatever its look switches say.
 3. Held posts of a conversation with no look are dropped (`dropUnreachable`).
 4. Quiet compaction of a grown, quiet session; meeting claims (`claimPreps`).
@@ -220,7 +220,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 | fact | built by | handed over |
 |---|---|---|
 | the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (2 or more in a row: count and last cause from the `looks` table) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
-| held posts (quiet hours, `/quiet`), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over; deleted only when the run ends well; each shows its age, the look judges; at most 30 are kept |
+| held posts (quiet hours, `/quiet`), and system status for the owner (`notify`) | `takeHeld`, `heldBlock` | when quiet is over; deleted only when the run ends well; each shows its age, the look judges; at most 30 are kept |
 | reminders due | `waitingReminders`, `reminderFacts` (and the trigger line, `reminderWhy`) | claimed by the tick; settled when a look ended well: told if it said something (or held it), only marked if it stayed silent; a failed or called-off look leaves them for the next |
 | meetings claimed for prep | `waitingMeetings`, `meetingFacts` (and the trigger line, `meetingWhy`) | `PREP_MINUTES` before the start; told when the run said something |
 | routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |
@@ -238,8 +238,8 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Quiet hours** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), or during `/quiet`, is held (`submitPost`) unless the run marked it `urgent`; a post of a look running a due routine ignores the window, not `/quiet`.
 
-- Code never rewrites a held post. There is no fixed text to the owner. Every system matter (the shared key, the spend warnings, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
-- People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `takeCapNotice` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`). A run that merely failed (timeout, connector, other) gets one line for a group or a friend, "⚠️ Something went wrong, try again." (no cause: the log and `npm run doctor` say it); the owner's own failure notices keep their text because they end with the one step she must take.
+- Code never rewrites a held post. There is no fixed text to the owner. Every system matter (the shared key, the spend warnings, a damaged database) is a fact for her next run (`notify`, `src/core/notify.ts`): the model says it in its own words, and its rule (once, per day, every N ms) throttles how often it is raised.
+- People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `notify` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`). A run that merely failed (timeout, connector, other) gets one line for a group or a friend, "⚠️ Something went wrong, try again." (no cause: the log and `npm run doctor` say it); the owner's own failure notices keep their text because they end with the one step she must take.
 
 **Routines** (`src/tasks/routines.ts`, `src/modules/tasks/routinelist.ts`). One mechanism for everything the assistant does at set times: a routine is a name, a repeat rule (`src/tasks/repeat.ts`, the grammar tasks use) and what to do. Code computes "is it due" and "was it done"; the model does the work. There is one source, the routine note; no skill schedules itself.
 
@@ -373,7 +373,7 @@ One instance, one messenger account, several people. Always on. A friend is a `t
 - **Routing** (`src/tenants/tenantroute.ts`): identity is the sender's account id. A tenant's message goes to her conversation; a suspended tenant's to nobody.
 - Anyone else is a registration request (`registration.ts`): one fixed reply with no model call, her messages held and read by no model, and a question to the owner in her own chat. Limits: one open request per sender, 10 open, 3 new an hour, 7-day expiry.
 - **Registry** (`src/tenants/tenants.ts`): `instance/tenants.json`, one record per person, never a key. Owner-chat tools: `list_tenants`, `invite_person`, `suspend_tenant`, `resume_tenant`, `remove_tenant`; `npm run tenants` is the terminal side (the admin role moves only through `set-admin`).
-- **Her run** (`src/conversation/tenantrun.ts`, then `runConversation`): gates without a model first (`mayRun`), then the same run path on the instance key, her spend rows and her cooldown. A refusal of the key pauses every friend and hands the owner a fact for her next run (`keynotice.ts`, `core/ownerfact.ts`).
+- **Her run** (`src/conversation/tenantrun.ts`, then `runConversation`): gates without a model first (`mayRun`), then the same run path on the instance key, her spend rows and her cooldown. A refusal of the key pauses every friend and hands the owner a fact for her next run (`keynotice.ts`, `core/notify.ts`).
 - She has no owner connectors, payment, saved details or Drive. Her look needs `heartbeat` and `wake`, her dream `dream`; her approvals go to her chat and her audit rows carry no words.
 - **Groups** have the same shape with a fixed capability set, no connectors, shared skills only and the gate for untagged messages.
 - **Google for friends.** With a Google OAuth client set, a friend connects her own Gmail and Calendar through the `google` purpose (PKCE, offline access; the refresh token goes to `tenants/<id>/google/oauth` through the write-only token).
@@ -712,10 +712,9 @@ src/core/audit.ts  the audit writer
 src/core/brief.ts  the clock line of unattended prompts
 src/core/budget.ts  spend ledger and spend warnings
 src/core/callkey.ts  identity of a tool call
-src/core/capnotice.ts  the instance-wide notice throttle (takeCapNotice, over told.ts) and the friends' cap fact
 src/core/loginwatch.ts  when the Claude login ends: read once a day, a fact under three days
 src/core/until.ts  the one "until" value of /pause and /quiet: parse, test, words
-src/core/ownerfact.ts  holdFact: a system matter as a fact for the owner's next run
+src/core/notify.ts  notify(key, rule, text): told once / per day / every N ms, and a system matter as a fact for the owner's next run
 src/core/contain.ts  `isInside`: path containment
 src/core/convdb.ts  assistant.db schema and accessors
 src/core/convpaths.ts  the one place that builds data paths

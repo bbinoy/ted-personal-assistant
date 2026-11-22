@@ -2,7 +2,7 @@ import type { Db } from "./db.ts";
 import { dayIn } from "./timezone.ts";
 
 // "Told X": the ONE record of a notice that goes out once, at most once a day, or at most once in a while. A `told` table (key, when, once) in the database the matter belongs to: instance.db for what
-// is about the whole install (core/capnotice.ts: the budget line, a friend's cap, a refusal), a conversation's assistant.db for what is about that conversation (tasks/grouptasks.ts: a member told once
+// is about the whole install (core/notify.ts: the budget line, a friend's cap, a refusal), a conversation's assistant.db for what is about that conversation (tasks/grouptasks.ts: a member told once
 // that a reminder said in a group is the group's). Code decides WHETHER to tell and records it; the run writes the words. A key is a name of the matter and, where it is about one conversation in
 // instance.db, ends with its convId (never a raw group id), so forgetting the conversation can find it.
 //

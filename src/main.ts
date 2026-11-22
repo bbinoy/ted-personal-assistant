@@ -49,10 +49,10 @@ import { welcomeStart } from "./core/welcome.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
-import { holdStartupFact } from "./core/ownerfact.ts";
+import { notify } from "./core/notify.ts";
 import { retentionTrigger, runRetention } from "./core/retention.ts";
 import { registerFileRules } from "./heartbeat/retentionrules.ts";
-import { instancePaths } from "./core/convpaths.ts";
+import { OWNER_CONV, instancePaths } from "./core/convpaths.ts";
 
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
@@ -235,14 +235,15 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 prepare(owner()); // (start-up: the owner's chat is the one conversation that is certainly there)
-// Start-up problems are a fact for the owner's next run (core/ownerfact.ts), told once a day while they last, not at every restart. The fixed line is only the fallback for "no model run is possible": the
+// Start-up problems are a fact for the owner's next run (core/notify.ts), told once a day while they last, not at every restart. The fixed line is only the fallback for "no model run is possible": the
 // store that would keep the fact is unusable (once per start).
-if (ledgerDamage() && !holdStartupFact("ledger", "The ledger database (instance/instance.db) is damaged, so background work and payments are off. Her data is untouched; she can see npm run doctor.")) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts)
-if (registryProblem() !== undefined && !holdStartupFact("registry", "The friends list (tenants.json in the instance folder) can't be read, so friends are paused. It is kept as is; she can repair or move it, then restart.")) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
+const startupFact = (key: string, text: string): boolean => notify(`startup:${key}`, { everyMs: 24 * 3_600_000 }, text, Date.now(), OWNER_CONV) !== undefined; // (told within the day already counts as kept)
+if (ledgerDamage() && !startupFact("ledger", "The ledger database (instance/instance.db) is damaged, so background work and payments are off. Her data is untouched; she can see npm run doctor.")) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts)
+if (registryProblem() !== undefined && !startupFact("registry", "The friends list (tenants.json in the instance folder) can't be read, so friends are paused. It is kept as is; she can repair or move it, then restart.")) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
 rehydrate(); // questions handed off before the stop are open again, with the time they had left (approvals/handoff.ts)
 replayUnanswered({ pipeline }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
-{ const open = openRequestsFact(); if (open) holdStartupFact("registrations", open); } // requests still open from before this start: a fact for the owner's next run, no second card
+{ const open = openRequestsFact(); if (open) startupFact("registrations", open); } // requests still open from before this start: a fact for the owner's next run, no second card
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) warmVoice();
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.

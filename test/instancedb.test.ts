@@ -4,13 +4,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// instance.db: the spend ledger (budget.ts), the told marks (capnotice.ts), the heartbeat looks, the intake marks and the kv rows, in the ONE database the agent and the intake page share.
+// instance.db: the spend ledger (budget.ts), the told marks (notify.ts), the heartbeat looks, the intake marks and the kv rows, in the ONE database the agent and the intake page share.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "instancedb-"));
 
 const { groupConvId, friendConvId, instancePaths } = await import("../src/core/convpaths.ts");
 const { instanceDb, kvGet, kvSet, kvDelete, openInstanceDbAt } = await import("../src/core/instancedb.ts");
 const B = await import("../src/core/budget.ts");
-const N = await import("../src/core/capnotice.ts");
 const { dayIn } = await import("../src/core/timezone.ts");
 const I = await import("../src/intake/intakelinks.ts");
 const R = await import("../src/core/looks.ts");
@@ -113,24 +112,6 @@ test("the budget check uses the covering indexes (smoke bound on speed) with a y
     const plan = db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, ...(sql.includes("conv") ? ["x", "key", day] : [day])).map((r) => r.detail).join(" | ");
     assert.match(plan, /USING COVERING INDEX spend_/, plan);
   }
-});
-
-test("notices: once a day per key or once per interval, forgetting by key, pruning what means nothing any more", () => {
-  reset();
-  const now = Date.now();
-  assert.equal(N.takeCapNotice("friend:mara", now), true);
-  assert.equal(N.takeCapNotice("friend:mara", now), false, "not again today");
-  assert.equal(N.takeCapNotice("friend:mara", now + DAY_MS), true, "tomorrow it is due again");
-  assert.equal(N.takeCapNotice("friend:bo", now), true, "marking is per key");
-  assert.equal(N.takeCapNotice("warn:g1", now, 60_000), true);
-  assert.equal(N.takeCapNotice("warn:g1", now + 30_000, 60_000), false, "within the interval");
-  assert.equal(N.takeCapNotice("warn:g1", now + 60_000, 60_000), true, "after it");
-  assert.equal(N.forgetNotices((k) => k.startsWith("warn:") || k.startsWith("friend:m")), 2, "friend:mara and warn:g1");
-  assert.equal(N.takeCapNotice("friend:mara", now), true);
-  N.takeCapNotice("today", now);
-  N.takeCapNotice("old", now - 3 * DAY_MS);
-  assert.equal(N.pruneNotices(now), 1, "the old mark");
-  assert.equal(N.takeCapNotice("today", now), false);
 });
 
 

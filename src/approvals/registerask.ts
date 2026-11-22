@@ -51,7 +51,7 @@ export function createRegistrar(deps: {
   return { ask };
 }
 
-/** The requests still open at a start, as a fact for the owner's next run (core/ownerfact.ts): only their ids and how many, never a name or a word of theirs. The question card was sent once, when the person first wrote, and is not sent again at a restart. undefined: none. */
+/** The requests still open at a start, as a fact for the owner's next run (core/notify.ts): only their ids and how many, never a name or a word of theirs. The question card was sent once, when the person first wrote, and is not sent again at a restart. undefined: none. */
 export function openRequestsFact(): string | undefined {
   const open = openRequests();
   return open.length ? `${open.length} person(s) who wrote to me are still waiting to be let in as friends (ids: ${open.map(shortId).join(", ")}). She can answer a question still open in this chat, or decide on the Mac with npm run tenants -- approve <id> or decline <id>; the requests expire after 7 days.` : undefined;

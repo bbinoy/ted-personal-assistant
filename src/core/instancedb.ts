@@ -6,7 +6,7 @@ import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 //
 //   spend      one row per charged run (budget.ts): who paid (the instance's login or the instance key), for which conversation, what kind of run, how many dollars, on which local day.
 //              "Owner today", "the key today", "a group today", "a friend today" are indexed sums of it. A LEDGER: never reset, pruned only by age (retention).
-//   told       when each notice was last told, by key: once, once a day or once in a while (core/told.ts; the instance-wide use is capnotice.ts)
+//   told       when each notice was last told, by key: once, once a day or once in a while (core/told.ts; the instance-wide use is notify.ts)
 //   looks      one row per heartbeat look of any conversation, counts and flags only (core/looks.ts)
 //   payments   the card payment ledger: one row per status change, never deleted (modules/browse/payments.ts). A LEDGER.
 //   intake     what the intake page stored for a friend (names and counts, never a value) and when a connection stopped working, by tenant and purpose (intake/intakelinks.ts)
