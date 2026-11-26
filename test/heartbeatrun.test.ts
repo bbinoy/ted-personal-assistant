@@ -207,6 +207,7 @@ test("a look's words are delivered as a chat turn's reply is: written text goes 
 });
 
 test("a look's words held for quiet hours keep no markers", async () => {
+  liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"); // (a routine seen earlier by another test is still due, however late: this one starts with a fresh record)
   const r = rig(() => ({ message: "Your code: [[whole]]AB-12[[/whole]]\n\n[[react: 👍]]\n\n[[silent]]" }));
   assert.equal(await r.w.look(r.conv, NIGHT), "silent");
   assert.deepEqual(heldPosts(r.conv).map((h) => h.text), ["Your code: AB-12"]);
@@ -246,6 +247,7 @@ test("the incident: a post held at 22:35 is not sent at 07:00; the morning look 
   const EVENING = new Date(2026, 9, 22, 22, 35, 0);
   const TEXT = "Evening, Alex. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";
   let message = TEXT;
+  liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"); // (fresh record: routines seen by other tests would be due)
   const { w, conv, seen, at } = rig(() => ({ message, nextCheckMinutes: 120 }));
   at(EVENING);
   assert.equal(await w.look(conv, EVENING), "silent", "held by quiet hours");
@@ -689,6 +691,7 @@ test("owner's look: browser steps leave no line of their own, so the look writes
 // Routines (tasks/routines.ts): what a look that handed the evening wrap to its expert leaves in the record.
 async function eveningLook(a: Answer, day = 14) { // (a day of its own for each look: the record is the conversation's, shared by the tests)
   const { readRecord } = await import("../src/tasks/routines.ts");
+  liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"); // (a routine seen earlier by another test is still due, however late: this one starts with a fresh record)
   const r = rig(() => a);
   await r.w.look(r.conv, new Date(2026, 9, day, 17, 0, 0)); // first sight of the routine: nothing is owed for a slot already gone
   const at = new Date(2026, 9, day, 18, 35, 0); // after 18:30

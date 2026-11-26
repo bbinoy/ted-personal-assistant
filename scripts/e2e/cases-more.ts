@@ -2595,4 +2595,26 @@ const e80: Case = {
   },
 };
 
-export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78, e79, e80];
+// ---- e81: a brief whose slot came 6 hours ago (the Mac slept): the run decides, and a short catch-up brief goes out once ----
+const e81: Case = {
+  id: "e81",
+  title: "the daily brief found 6 hours late (the Mac was asleep): a short catch-up brief for the rest of the day is delivered once",
+  turns: [],
+  look: true,
+  world: (t) => ({
+    calendar: [{ summary: "Budget review", start: t.local(t.today, "11:00"), end: t.local(t.today, "12:00"), zone: t.zone }],
+    tasks: [{ title: "Send the venue deposit", due: t.today }],
+    notes: { "routines/daily-brief.md": routineBrief(t).replace(/every day at \d\d:\d\d/, `every day at ${t.hhmm(t.now.getTime() - 6 * 3_600_000)}`) },
+  }),
+  maxQuestions: 0,
+  state: (o) => [check("the catch-up brief was delivered once", briefBodies(o).length === 1), ...lookOk(o)],
+  never: (o) => [...sends(o), ...deletes(o)],
+  reply: ["It is a short chat message (the brief itself went by mail) and asks no question."],
+  perfect: async (s) => {
+    s.turn(0);
+    await s.tool(`${MB}send_self_briefing`, { markdownBody: "## Rest of today\n- Send the venue deposit (due today)" });
+    s.say("Your brief is in your inbox: a short one for the rest of the day, as it ran late.");
+  },
+};
+
+export const moreCases: Case[] = [e2, e3, e4, e7, e8, e8b, e9, e10, e11, e11b, e12, e13, e14, e14b, e15, e15b, e16, e16b, e17, e19, e20, e20b, e21, e22, e23, e23b, e26, e27, e28, e29, e30, e30b, e31(false), e31(true), e32, e34, e35, e36, e37, e38, e39, e40, e41, e42, e44, e45, e46, e47, e48, e50, e51, e52, e53, e54, e55, e56, e57, e59, e60, e61, e62, e63, e64, e65, e66, e67, e68, e69, e71, e72, e73, e74, e75, e76, e77, e78, e79, e80, e81];

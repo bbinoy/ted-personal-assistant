@@ -28,8 +28,6 @@ import { loginExpiryFact } from "../core/loginwatch.ts";
 import { FIXES, type Cause } from "../tenants/errors.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
-// A routine (a routine note) the Mac slept through still runs on waking within this many hours of its time, else that period is skipped.
-const ROUTINE_CATCHUP_HOURS = 4;
 
 // THE FACTS CODE HANDS A RUN (CLAUDE.md §2: one agent, whatever started it). The heartbeat look and every chat turn (the owner's, a friend's, a group's) call `factsFor` and get the same
 // facts for their conversation: held posts, reminders due, meetings to prepare, the welcome, a due routine or routine note, and as information the own posts of the last days,
@@ -176,7 +174,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   const emailed = (r: { instruction: string }): boolean => !!emailTool && /daily-brief/.test(r.instruction);
   let selfMailed = 0; // routine emails sent to the owner: like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ notesDir: conv.notesDir, zone, now });
-  const routines = attended ? undefined : routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), });
+  const routines = attended ? undefined : routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { who: looker.who, approvals: openCount(conv.key), });
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
@@ -187,7 +185,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts].filter(Boolean);
-  const status = [heldFilesBlock(conv.key, zone), looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), settings.tasksPageUrl && capabilitiesOf(conv).has("login") ? `Your owner's task page (tasks grouped like /tasks, with tick-off): ${settings.tasksPageUrl}` : "", routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), looker.own ? loginExpiryFact(now, zone, FIXES.login.fix) : "", lapsed].filter(Boolean);
+  const status = [heldFilesBlock(conv.key, zone), looker.mail ? inboxBlock(conv.convId, t) : "", ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), settings.tasksPageUrl && capabilitiesOf(conv).has("login") ? `Your owner's task page (tasks grouped like /tasks, with tick-off): ${settings.tasksPageUrl}` : "", routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), looker.own ? loginExpiryFact(now, zone, FIXES.login.fix) : "", lapsed].filter(Boolean);
   let settled = false;
   return {
     blocks,
@@ -229,9 +227,9 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   };
 }
 
-// Is a routine due right now (inside its slot and catch-up window, not started)? Then the conversation's look is due at once, like a claimed reminder: the 5-minute tick asks, no timer of its own.
+// Is a routine due right now (its latest slot has begun, not started)? Then the conversation's look is due at once, like a claimed reminder: the 5-minute tick asks, no timer of its own.
 export function routinesWaiting(conv: Conversation, now: Date): boolean {
   const looker = lookerOf(conv);
   const { routines } = scheduledIn({ notesDir: conv.notesDir, zone: looker.zone, now });
-  return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), ROUTINE_CATCHUP_HOURS).state === "due");
+  return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name)).state === "due");
 }

@@ -38,7 +38,7 @@ const brief = skill("daily-brief", "daily-brief", "every day at 07:30");
 const evening = skill("evening-wrap", "evening-wrap", "every weekday at 18:30");
 const weekly = skill("weekly-review", "weekly-review", "every fri at 16:30");
 const all = [brief, evening, weekly];
-const opts = { catchUpHours: 4, who: "Alex" };
+const opts = { who: "Alex" };
 const anchor = "2026-10-01";
 
 test("no skill schedules itself (routine notes are the only schedule); the brief, the wrap and the review keep their experts", () => {
@@ -62,7 +62,7 @@ test("slots: a weekday rule skips the weekend, a weekly one finds its day, and t
 
 const rec = (o: Partial<import("../src/tasks/routines.ts").RoutineRecord> = {}): import("../src/tasks/routines.ts").RoutineRecord => ({ since: z("2026-10-01T00:00:00Z").getTime(), attempts: 0, told: true, ...o });
 const before = (date: string) => rec({ period: date, status: "delivered", at: 1, attempts: 1 }); // the previous period's slot was served
-const plan = (r: import("../src/tasks/routines.ts").Routine, iso: string, record = rec(), catchUp = 4) => S.planRoutine(r, z(iso), BERLIN, record, catchUp);
+const plan = (r: import("../src/tasks/routines.ts").Routine, iso: string, record = rec()) => S.planRoutine(r, z(iso), BERLIN, record);
 
 test("plan: waiting, then due at its time, then done, once per period", () => {
   assert.equal(plan(evening, "2026-10-22T16:29:00Z", before("2026-10-21")).state, "done", "18:29 local on Thursday: not yet; the last slot (Wednesday) was served, so nothing is due");
@@ -76,11 +76,10 @@ test("plan: waiting, then due at its time, then done, once per period", () => {
   assert.equal(plan(evening, "2026-10-23T16:31:00Z", done).state, "due", "Friday's slot is a new period");
 });
 
-test("plan: the brief is due at 07:30 and caught up on waking", () => {
+test("plan: the brief is due at 07:30 and still due when late", () => {
   assert.equal(plan(brief, "2026-10-22T05:29:00Z", before("2026-10-21")).state, "done", "07:29 local: not yet");
   assert.equal(plan(brief, "2026-10-22T05:31:00Z").state, "due");
-  assert.equal(plan(brief, "2026-10-22T09:00:00Z").state, "due", "11:00 local, 3.5 h late: still within the window");
-  assert.equal(plan(brief, "2026-10-22T10:00:00Z").state, "skipped", "12:00 local, 4.5 h late");
+  assert.equal(plan(brief, "2026-10-22T10:00:00Z").state, "due", "12:00 local, 4.5 h late: still due");
 });
 
 test("plan: the weekly one runs once in its week, on the day", () => {
@@ -97,22 +96,28 @@ test("plan: a run in progress waits, a dead one is retried once, two failures gi
   const dead = plan(evening, "2026-10-22T17:20:00Z", started());
   assert.deepEqual([dead.state, dead.state === "due" && dead.retry], ["due", true], "49 min: it died, redo");
   const second = plan(evening, "2026-10-22T17:40:00Z", started(2));
-  assert.deepEqual([second.state, second.state === "skipped" && second.why], ["skipped", "failed"], "a second dead attempt is the last");
+  assert.equal(second.state, "skipped", "a second dead attempt is the last");
   const failed = rec({ period: "2026-10-22", status: "failed", at: z("2026-10-22T16:40:00Z").getTime(), attempts: 1 });
   assert.equal(plan(evening, "2026-10-22T16:45:00Z", failed).state, "due");
 });
 
-test("plan: the Mac slept through the time: it runs on waking within the window, else the period is skipped", () => {
-  assert.equal(plan(evening, "2026-10-22T19:30:00Z").state, "due", "21:30 local, 3 h late: still within 4 h");
-  const late = plan(evening, "2026-10-22T20:45:00Z");
-  assert.deepEqual([late.state, late.state === "skipped" && late.why], ["skipped", "asleep"], "22:45 local, 4 h 15 late");
-  assert.equal(plan(evening, "2026-10-22T20:45:00Z", rec(), 6).state, "due", "the window is a setting");
-  assert.equal(plan(weekly, "2026-10-25T09:00:00Z").state, "skipped", "woken on Sunday: Friday's review is not redone");
+test("plan: the Mac slept through the time: the occurrence stays due until the next slot begins, whatever the period", () => {
+  const served = rec({ period: "2026-10-21", status: "delivered", attempts: 1 });
+  const dateOf = (p: ReturnType<typeof plan>): string | undefined => (p.state === "due" ? p.slot.date : undefined);
+  assert.equal(dateOf(plan(brief, "2026-10-22T12:07:00Z", served)), "2026-10-22", "14:07 local: the 07:30 brief is 6 h late and still due");
+  assert.equal(dateOf(plan(brief, "2026-10-23T05:29:00Z", served)), "2026-10-22", "still the old slot the minute before the next");
+  assert.equal(dateOf(plan(brief, "2026-10-23T05:31:00Z", served)), "2026-10-23", "the next day's slot supersedes it: one run, for the new slot");
+  assert.equal(dateOf(plan(weekly, "2026-10-25T09:00:00Z")), "2026-10-23", "a weekly review is due all weekend, until next Friday's slot");
+  assert.equal(dateOf(plan(weekly, "2026-10-30T14:00:00Z")), "2026-10-23", "just before the next Friday");
+  const monthly = skill("m", "m", "every month on the 1st at 09:00");
+  assert.equal(dateOf(plan(monthly, "2026-10-28T09:00:00Z")), "2026-10-01", "a monthly routine is due until the next 1st");
+  assert.equal(plan(monthly, "2026-10-28T09:00:00Z", rec({ period: "2026-10-01", status: "delivered", attempts: 1 })).state, "done");
+  assert.equal(dateOf(plan(monthly, "2026-11-01T08:30:00Z")), "2026-11-01", "superseded by the new month");
 });
 
 test("plan: a routine first seen after its slot owes nothing for it; the day the clocks go back the slot is 18:30 local", () => {
   assert.equal(plan(evening, "2026-10-22T18:30:00Z", rec({ since: z("2026-10-22T18:00:00Z").getTime() })).state, "waiting");
-  assert.equal(S.planRoutine(evening, z("2026-10-22T18:30:00Z"), BERLIN, undefined, 4).state, "waiting", "no record yet");
+  assert.equal(S.planRoutine(evening, z("2026-10-22T18:30:00Z"), BERLIN, undefined).state, "waiting", "no record yet");
   assert.equal(plan(skill("d", "d", "every day at 18:30"), "2026-10-25T17:29:00Z", before("2026-10-24")).state, "done");
   assert.equal(plan(skill("d", "d", "every day at 18:30"), "2026-10-25T17:31:00Z").state, "due");
 });
@@ -126,8 +131,8 @@ test("an interval counts from the day the routine was first seen; editing the ru
   const ranToday = rec({ period: "2026-10-22", status: "delivered", at: z("2026-10-22T07:05:00Z").getTime(), attempts: 1 });
   assert.match(S.nextText(at9, z("2026-10-22T07:30:00Z"), BERLIN, ranToday), /next tomorrow 09:00/);
   assert.match(S.nextText(at10, z("2026-10-22T07:30:00Z"), BERLIN, ranToday), /next today 10:00/, "the edit moved the next occurrence to 10:00 today");
-  assert.equal(S.planRoutine(at10, z("2026-10-22T08:30:00Z"), BERLIN, ranToday, 4).state, "done", "10:30 local: the 10:00 slot is today's, which was served at 09:05; the edit starts at the next occurrence");
-  assert.equal(S.planRoutine(at10, z("2026-10-23T08:30:00Z"), BERLIN, ranToday, 4).state, "due", "the next day it runs at the new time");
+  assert.equal(S.planRoutine(at10, z("2026-10-22T08:30:00Z"), BERLIN, ranToday).state, "done", "10:30 local: the 10:00 slot is today's, which was served at 09:05; the edit starts at the next occurrence");
+  assert.equal(S.planRoutine(at10, z("2026-10-23T08:30:00Z"), BERLIN, ranToday).state, "due", "the next day it runs at the new time");
 });
 
 test("the record: first sight, started, delivered; a retry counts; a skip is noted once and told once", () => {
@@ -136,8 +141,10 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   const f1 = S.routineFacts(conv, all, T, BERLIN, opts);
   assert.equal(f1.text, "", "the first sight starts the record: nothing is owed for a slot already gone");
   assert.ok(S.readRecord(conv, "evening-wrap"));
-  const T2 = z("2026-10-23T16:31:00Z"); // Friday: the evening wrap's slot and the weekly's (14:30Z) are both behind it; the brief's (05:30Z) is 11 h gone
-  assert.match(S.routineFacts(conv, all, T2, BERLIN, opts).text, /daily-brief did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone/, "the brief is past its window: skipped, and one line rides along with the routine that is due now");
+  const T2 = z("2026-10-23T16:31:00Z"); // Friday: the evening wrap's slot and the weekly's (14:30Z) are both behind it; the brief's (05:30Z) is 11 h gone and still due
+  const late = S.routineFacts(conv, all, T2, BERLIN, opts);
+  assert.equal(late.due?.routine.name, "daily-brief", "the brief is 11 h late and still due: it comes first");
+  assert.match(late.text, /daily-brief: due now .*It was due at 07:30, 11 h ago \(the Mac was asleep\): decide if it still helps/, "the lateness is a fact, the run decides");
   const f2c = S.routineFacts(conv, [evening, weekly], T2, BERLIN, { ...opts, approvals: 2 });
   assert.equal(f2c.due?.routine.name, "evening-wrap", "routines are in order; the weekly (2 h late) waits for the next look");
   assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
@@ -163,13 +170,14 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   S.markFinished(conv, "weekly-review", false, T2.getTime() + 180_000, true);
   assert.equal(S.readRecord(conv, "weekly-review")!.attempts, 1);
 
-  const asleep = z("2026-10-25T14:00:00Z"); // Sunday afternoon: the weekly (failed once) is past its window
+  S.markStarted(conv, "weekly-review", "2026-10-23", T2.getTime() + 240_000); // the second attempt died too: the weekly is given up
+  const asleep = z("2026-10-25T14:00:00Z");
   const f4 = S.routineFacts(conv, [weekly], asleep, BERLIN, opts);
   assert.equal(f4.text, "", "nothing is due: a missed routine is no message of its own (the status and the doctor show it)");
   assert.deepEqual(f4.told, []);
   const monday = z("2026-10-26T17:45:00Z"); // the evening wrap is due: the missed weekly review rides along as one line, once
   const f5 = S.routineFacts(conv, [weekly, evening], monday, BERLIN, opts);
-  assert.match(f5.text, /Missed, nothing for Alex to do: weekly-review did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone\. Put it as one short line in the message the expert writes now, if that message is a brief/);
+  assert.match(f5.text, /Missed, nothing for Alex to do: weekly-review did not run on 2026-10-23 \(two attempts failed\) and will not be redone\. Put it as one short line in the message the expert writes now, if that message is a brief/);
   assert.deepEqual(f5.told, ["weekly-review"]);
   S.markTold(conv, f5.told);
   assert.doesNotMatch(S.routineFacts(conv, [weekly, evening], new Date(monday.getTime() + 60_000), BERLIN, opts).text, /Missed/, "told once, then quiet");
@@ -235,6 +243,18 @@ test("a routine note in a group fires once at its time, is done when the look po
   next.done({ ended: true, said: true });
 });
 
+test("a look that finds a routine 6 h late is told so; one that chooses to skip it (the expert answers [[silent]]) is done, not retried", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const late = F.factsFor(conv, at("2026-10-22T12:10:00Z"), false);
+  assert.match(late.routines, /fun-fact: due now .*It was due at 08:00, 6 h ago \(the Mac was asleep\)/);
+  delegateNote(late);
+  late.done({ ended: true, said: false }); // the expert skipped it, with its reason in the log
+  assert.equal(readRecord(conv.convId, "fun-fact")?.status, "delivered");
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T12:20:00Z")), false, "not retried");
+  assert.equal(F.routinesWaiting(conv, at("2026-10-23T06:01:00Z")), true, "the next slot supersedes");
+});
+
 test("a routine note is done when its expert came back with a result and the look ended well, silent or not; an empty expert or a failed look leaves it for the retry, then it is given up", () => {
   const conv = groupWith("every day at 08:00");
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
@@ -280,7 +300,7 @@ test("a look the API refused (an expired login) is no attempt: the routine is st
   const back = F.factsFor(conv, at("2026-10-22T08:30:00Z"), false);
   assert.match(back.routines, /r: due now/, "three refused runs used no attempt");
   assert.equal(readRecord(conv.convId, "r")?.attempts, 0);
-  assert.match(F.factsFor(conv, at("2026-10-22T11:00:00Z"), false).status.join("\n"), /r: did not run on 2026-10-22 \(the Mac was asleep|r: skipped/);
+  assert.match(F.factsFor(conv, at("2026-10-22T11:00:00Z"), false).status.join("\n"), /r: (due now|skipped)/);
 });
 
 test("a due routine makes the conversation's look due on the next tick: at its time, until handed over, and not once done", () => {
@@ -437,10 +457,10 @@ test("a rule may end with an IANA zone: it runs on that clock, across the clock 
   // before the change to summer time (Sun 29 Mar 2026): 08:00 Zurich is 07:00 UTC; after it 06:00 UTC
   assert.equal(S.slotsAround(r, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T07:00:00.000Z");
   assert.equal(S.slotsAround(r, z("2026-03-28T10:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-29T06:00:00.000Z");
-  assert.equal(S.planRoutine(r, z("2026-03-30T06:30:00Z"), LONDON, rec, 4).state, "due", "08:30 in Zurich: its 08:00 slot is due");
-  assert.equal(S.planRoutine(r, z("2026-03-30T05:30:00Z"), LONDON, { ...rec, since: z("2026-03-30T00:00:00Z").getTime() }, 4).state, "waiting", "07:30 in Zurich (06:30 in London): not yet");
+  assert.equal(S.planRoutine(r, z("2026-03-30T06:30:00Z"), LONDON, rec).state, "due", "08:30 in Zurich: its 08:00 slot is due");
+  assert.equal(S.planRoutine(r, z("2026-03-30T05:30:00Z"), LONDON, { ...rec, since: z("2026-03-30T00:00:00Z").getTime() }).state, "waiting", "07:30 in Zurich (06:30 in London): not yet");
   assert.match(S.nextText(r, z("2026-03-30T05:30:00Z"), LONDON), /every day at 08:00 Europe\/Zurich, next today 08:00/);
-  assert.match(S.routineStatus(owner().convId, [r], z("2026-03-30T06:30:00Z"), LONDON, 4), /x: /);
+  assert.match(S.routineStatus(owner().convId, [r], z("2026-03-30T06:30:00Z"), LONDON), /x: /);
   // without a zone: the conversation's clock, as before
   const plain = { name: "y", rule: rule("every day at 08:00"), instruction: "y" };
   assert.equal(S.slotsAround(plain, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T08:00:00.000Z");
