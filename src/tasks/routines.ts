@@ -6,7 +6,7 @@ import { addDays, localOf, showInstant } from "./when.ts";
 // ONE schedule mechanism: a routine is something the assistant does at set times, declared as DATA by a repeat rule (repeat.ts, the grammar tasks use): a `when:` line in a `routines/` page of a conversation (a person asked "every morning at 8 send
 // Mara a pep talk", or set up the daily brief, which is a note that says to run that skill: the look hands what the note says to an expert). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
 // record (assistant.db routine_runs, one row per routine, keyed by the note's file name); the model only does the work. At most one run per occurrence (the slot's date); a run that
-// died is retried once; if the Mac slept through the time the routine still runs once when it wakes, within `catchUpHours` of its time, else that occurrence is skipped (no chat message: the log and the doctor show it) and the next brief says so in one line, once.
+// died is retried once; if the Mac slept through the time the routine stays due until its NEXT slot begins (a newer slot supersedes the old one), and the run decides whether a late run still helps. A run that gave up after two failures is skipped (no chat message: the log and the doctor show it) and the next brief says so in one line, once.
 // An edited `when:` changes nothing already done: the new rule is read from the next occurrence on (the record is per date, so what ran today does not run again today).
 
 export interface Routine {
@@ -30,13 +30,13 @@ const whenText = (r: Pick<Routine, "rule">): string => formatRepeat(r.rule.time 
 // An interval ("every 2 weeks") counts from the day the planner first saw the routine.
 const anchorOf = (rec: { since: number } | undefined, now: Date, zone: string): string => localOf(rec?.since ?? now.getTime(), zone).date;
 
-// The latest slot at or before `now` (looking back eight days) and the first one after it, from `nextInstant` (DST-safe: 18:30 is 18:30 on the wall clock all year).
+// The latest slot at or before `now` (looking back 32 days: a monthly routine stays due until its next slot) and the first one after it, from `nextInstant` (DST-safe: 18:30 is 18:30 on the wall clock all year).
 export function slotsAround(r: Pick<Routine, "rule">, now: Date, conversationZone: string, anchor: string): { last?: Slot; next?: Slot } {
   const zone = zoneFor(r, conversationZone);
   const t = now.getTime();
   const slot = (ms: number): Slot => ({ date: localOf(ms, zone).date, at: new Date(ms) });
   let last: Slot | undefined;
-  let after = t - 8 * DAY_MS;
+  let after = t - 32 * DAY_MS;
   try {
     for (let i = 0; i < 400; i++) {
       const n = nextInstant(r.rule, after, zone, anchor, DEFAULT_TIME);
@@ -71,21 +71,19 @@ export type Plan =
   | { state: "due"; slot: Slot; retry: boolean }
   | { state: "running"; since: Date }
   | { state: "done"; at: Date }
-  | { state: "skipped"; slot: Slot; why: "asleep" | "failed" }; // asleep: past the catch-up window without a run; failed: gave up after MAX_ATTEMPTS
+  | { state: "skipped"; slot: Slot }; // gave up after MAX_ATTEMPTS
 
-export function planRoutine(r: Routine, now: Date, conversationZone: string, rec: RoutineRecord | undefined, catchUpHours: number): Plan {
+export function planRoutine(r: Routine, now: Date, conversationZone: string, rec: RoutineRecord | undefined): Plan {
   const zone = zoneFor(r, conversationZone);
   const { last, next } = slotsAround(r, now, zone, anchorOf(rec, now, zone));
   if (!last || !rec || last.at.getTime() < rec.since) return { state: "waiting", ...(next ? { next } : {}) };
   const mine = rec.period === last.date ? rec : undefined;
-  const late = now.getTime() - last.at.getTime() > catchUpHours * 3_600_000;
   if (mine?.status === "delivered") return { state: "done", at: new Date(mine.at ?? last.at.getTime()) };
-  if (mine?.status === "skipped") return { state: "skipped", slot: last, why: mine.attempts >= MAX_ATTEMPTS ? "failed" : "asleep" };
+  if (mine?.status === "skipped") return { state: "skipped", slot: last };
   const stale = mine?.status === "started" && now.getTime() - (mine.at ?? 0) > STALE_MINUTES * 60_000;
   if (mine?.status === "started" && !stale) return { state: "running", since: new Date(mine.at!) };
   const attempts = mine?.attempts ?? 0;
-  if (attempts >= MAX_ATTEMPTS) return { state: "skipped", slot: last, why: "failed" };
-  if (late) return { state: "skipped", slot: last, why: "asleep" };
+  if (attempts >= MAX_ATTEMPTS) return { state: "skipped", slot: last };
   return { state: "due", slot: last, retry: attempts > 0 };
 }
 
@@ -130,10 +128,10 @@ function ensure(conv: ConvRef, name: string, now: number): RoutineRecord | undef
 interface Planned { readonly routine: Routine; readonly plan: Plan }
 
 // The plan of every routine at `now`. A skip is noted in the record (once), so it can be told once.
-function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): Planned[] {
+function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string): Planned[] {
   return routines.map((routine) => {
     const rec = ensure(conv, routine.name, now.getTime());
-    const plan = planRoutine(routine, now, zone, rec, catchUpHours);
+    const plan = planRoutine(routine, now, zone, rec);
     if (plan.state === "skipped" && (rec?.status !== "skipped" || rec.period !== plan.slot.date)) liveConvDb(conv)?.run("UPDATE routine_runs SET period = ?, status = 'skipped', at = ?, told = 0 WHERE name = ?", plan.slot.date, now.getTime(), routine.name);
     return { routine, plan };
   });
@@ -180,8 +178,8 @@ export interface RoutineFacts {
 }
 
 // The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look.
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; approvals?: number }): RoutineFacts {
-  const planned = planAll(conv, routines, now, zone, o.catchUpHours);
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { who: string; approvals?: number }): RoutineFacts {
+  const planned = planAll(conv, routines, now, zone);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
   const told: string[] = [];
@@ -192,14 +190,16 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
       const rec = plan.retry ? readRecord(conv, r.name) : undefined;
+      const lateMs = now.getTime() - plan.slot.at.getTime();
+      const late = !plan.retry && lateMs >= 3_600_000 ? ` It was due at ${localOf(plan.slot.at.getTime(), zoneFor(r, zone)).time}, ${Math.round(lateMs / 3_600_000)} h ago (the Mac was asleep): decide if it still helps; if yes, brief the expert to do a version that fits the time (say so in its brief); if not, skip it: the expert is not needed, answer [[silent]] after delegating with a brief that says to skip and why (the reason goes to the log).` : "";
       const when = `${whenText(r)}${plan.retry ? (rec?.owes ? `, the earlier attempt finished without its ${rec.owes}` : ", the earlier attempt died") : ""}`;
       const owed = rec?.owes ? ` Code saw no ${rec.owes} sent by the earlier attempt, and the ${rec.owes} is a required part of this routine, not an option: ${rec.chatSent ? `the chat message has already gone to ${o.who}, so ONLY the ${rec.owes} is owed: deliver it as your brief says and send nothing else; the final answer is [[silent]]` : `deliver the ${rec.owes} as your brief says; it is not complete without it`}.` : "";
       const what = `holds the note's instruction word for word (${clean(r.instruction)}), who it is for and the voice or format it asks for`;
-      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${owed}${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}`);
+      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${late}${owed}${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
-      if (row && !row.told) missed.push({ name: r.name, line: `${r.name} did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"}) and will not be redone` });
+      if (row && !row.told) missed.push({ name: r.name, line: `${r.name} did not run on ${plan.slot.date} (two attempts failed) and will not be redone` });
     }
   }
   // A missed routine is system status: the person has nothing to do, so it is no message of its own (the log and the doctor show it, routineStatus). It rides along, as ONE line, with the next routine message
@@ -212,7 +212,7 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
 }
 
 // The routines as STATUS for any run (a chat turn, a look, an expert): due, running, delivered at, skipped, or when next. Read-only: only the look starts, records and settles a routine.
-export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): string {
+export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string): string {
   const lines = routines.map((r) => {
     const z = zoneFor(r, zone); // (times in the rule's own zone are named: "today 08:05 Europe/Zurich")
     const at = (d: Date): string => {
@@ -220,8 +220,8 @@ export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: 
       return `${l.date === localOf(now.getTime(), z).date ? "today" : l.date} ${l.time}${r.rule.zone ? ` ${z}` : ""}`;
     };
     const rec = readRecord(conv, r.name);
-    const plan = planRoutine(r, now, zone, rec, catchUpHours);
-    const what = plan.state === "due" ? `due now${plan.retry ? (rec?.owes ? ` (the earlier attempt sent no ${rec.owes})` : " (the earlier attempt died)") : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : `two attempts failed${rec?.owes ? `, the ${rec.owes} was never sent` : ""}`})` : `next: ${nextText(r, now, zone, rec)}`;
+    const plan = planRoutine(r, now, zone, rec);
+    const what = plan.state === "due" ? `due now${plan.retry ? (rec?.owes ? ` (the earlier attempt sent no ${rec.owes})` : " (the earlier attempt died)") : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (two attempts failed${rec?.owes ? `, the ${rec.owes} was never sent` : ""})` : `next: ${nextText(r, now, zone, rec)}`;
     return `${r.name}: ${what}`;
   });
   return lines.length ? `Routines, status only (code schedules them; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
